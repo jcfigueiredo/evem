@@ -1,0 +1,1 @@
+export { EvEm, type IEventEmitter, type EventCallback } from './eventEmitter';
