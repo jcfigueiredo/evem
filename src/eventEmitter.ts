@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid";
+import { v4 as uuid } from "uuid";
 type EventCallback<T = unknown> = (args: T) => void | Promise<void>;
 
 interface IEventEmitter {
@@ -36,7 +36,7 @@ class EvEm implements IEventEmitter {
     if (!event) throw new Error("Event name cannot be empty.");
 
     const callbacks = this.events.get(event) ?? new Map();
-    const id = uuidv4(); // Generate a UUID for the subscription
+    const id = uuid();
     callbacks.set(id, callback as EventCallback);
     this.events.set(event, callbacks);
 
