@@ -10,6 +10,7 @@ interface IEventEmitter {
 
 class EvEm implements IEventEmitter {
   private events = new Map<string, Map<string, EventCallback>>();
+  private eventMatchCache = new Map<string, Set<string>>();
 
   private recursionDepth = new Map<string, number>();
   private maxRecursionDepth: number;
@@ -40,6 +41,8 @@ class EvEm implements IEventEmitter {
     callbacks.set(id, callback as EventCallback);
     this.events.set(event, callbacks);
 
+    this.eventMatchCache.delete(event);
+
     return id;
   }
 
@@ -65,51 +68,76 @@ class EvEm implements IEventEmitter {
       if (callbacks) {
         callbacks.delete(id);
       }
-    } else {
-      // Unsubscribe from all events if event name is not provided
-      for (const [eventName, callbacks] of this.events) {
-        if (callbacks.has(id)) {
-          callbacks.delete(id);
-          break; // Assuming UUIDs are unique across all events
-        }
+      return;
+    }
+    // Unsubscribe from all events if event name is not provided
+    for (const [eventName, callbacks] of this.events) {
+      if (callbacks.has(id)) {
+        callbacks.delete(id);
+        break; // Assuming UUIDs are unique across all events
       }
     }
   }
 
-  async publish<T = unknown>(event: string, args?: T): Promise<void> {
+  async publish<T = unknown>(
+    event: string,
+    args?: T,
+    timeout: number = 5000
+  ): Promise<void> {
     if (!event) {
       return Promise.reject(new Error("Event name cannot be empty."));
     }
 
     this.incrementRecursionDepth(event);
 
-    const eventParts = event.split(".");
     const asyncCallbacks: Promise<void>[] = [];
 
-    this.events.forEach((callbacks, key) => {
-      const keyParts = key.split(".");
-      if (keyParts.length !== eventParts.length) return;
-
-      let match = true;
-      for (let i = 0; i < keyParts.length; i++) {
-        if (keyParts[i] !== "*" && keyParts[i] !== eventParts[i]) {
-          match = false;
-          break;
+    for (const [registeredEvent, callbacks] of this.events) {
+      if (this.isEventMatch(event, registeredEvent)) {
+        for (const callback of callbacks.values()) {
+          const callbackPromise = callback(args ?? ({} as T));
+          const promise =
+            callbackPromise instanceof Promise
+              ? callbackPromise
+              : Promise.resolve();
+          asyncCallbacks.push(this.handlePromiseWithTimeout(promise, timeout));
         }
       }
-
-      if (match) {
-        callbacks.forEach(callback => {
-          const result = (callback as EventCallback<T>)(args ?? ({} as T));
-          if (result instanceof Promise) {
-            asyncCallbacks.push(result);
-          }
-        });
-      }
-    });
+    }
 
     await Promise.all(asyncCallbacks);
+
     this.resetRecursionDepth(event);
+  }
+
+  private async handlePromiseWithTimeout<T>(
+    promise: Promise<T>,
+    timeout: number
+  ): Promise<T | undefined> {
+    let timeoutHandle: NodeJS.Timeout;
+    const timeoutPromise = new Promise<undefined>(resolve => {
+      timeoutHandle = setTimeout(() => resolve(undefined), timeout);
+    });
+
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+      clearTimeout(timeoutHandle);
+    });
+  }
+
+  private isEventMatch(event: string, registeredEvent: string): boolean {
+    const eventParts = event.split(".");
+    const registeredParts = registeredEvent.split(".");
+
+    for (
+      let i = 0;
+      i < Math.max(eventParts.length, registeredParts.length);
+      i++
+    ) {
+      if (eventParts[i] !== registeredParts[i] && registeredParts[i] !== "*") {
+        return false;
+      }
+    }
+    return true;
   }
 }
 
