@@ -18,6 +18,14 @@ describe('EvEm - Subscription Tests', () => {
     expect(callback).toHaveBeenCalledWith(eventData);
   });
 
+  test('subscribe method should return a valid UUID', () => {
+    
+    const subscriptionId = emitter.subscribe('test.event', () => {});
+    
+    expect(subscriptionId).toBeDefined();
+    expect(subscriptionId).toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
+  });
+
   test('should throw error when subscribing with an empty event name', () => {
     const callback = vi.fn();
     expect(() => emitter.subscribe('', callback)).toThrow("Event name cannot be empty.");

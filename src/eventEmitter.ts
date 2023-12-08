@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 type EventCallback<T = unknown> = (args: T) => void | Promise<void>;
 
 interface IEventEmitter {
@@ -7,7 +8,8 @@ interface IEventEmitter {
 }
 
 class EvEm implements IEventEmitter {
-    private events = new Map<string, EventCallback[]>();
+    private events = new Map<string, Map<string, EventCallback>>();
+
     private recursionDepth = new Map<string, number>();
     private maxRecursionDepth: number;
 
@@ -27,11 +29,15 @@ class EvEm implements IEventEmitter {
         this.recursionDepth.set(event, 0);
     }
 
-    subscribe<T = unknown>(event: string, callback: EventCallback<T>): void {
+    subscribe<T = unknown>(event: string, callback: EventCallback<T>): string {
         if (!event) throw new Error("Event name cannot be empty.");
-        const callbacks = this.events.get(event) ?? [];
-        callbacks.push(callback as EventCallback);
+        
+        const callbacks = this.events.get(event) ?? new Map();
+        const id = uuidv4(); // Generate a UUID for the subscription
+        callbacks.set(id, callback as EventCallback);
         this.events.set(event, callbacks);
+
+        return id;
     }
 
     unsubscribe<T = unknown>(event: string, callback: EventCallback<T>): void {
@@ -40,9 +46,31 @@ class EvEm implements IEventEmitter {
         const callbacks = this.events.get(event);
         if (!callbacks) return;
 
-        const index = callbacks.indexOf(callback as EventCallback);
-        if (index !== -1) callbacks.splice(index, 1);
+        for (const [id, cb] of callbacks) {
+            if (cb === callback) {
+                callbacks.delete(id);
+                break;
+            }
+        }
     }
+
+    unsubscribeById(id: string, event?: string): void {
+        if (event) {
+            // Unsubscribe from a specific event
+            const callbacks = this.events.get(event);
+            if (callbacks) {
+                callbacks.delete(id);
+            }
+        } else {
+            // Unsubscribe from all events if event name is not provided
+            for (const [eventName, callbacks] of this.events) {
+                if (callbacks.has(id)) {
+                    callbacks.delete(id);
+                    break; // Assuming UUIDs are unique across all events
+                }
+            }
+        }
+    }    
 
     async publish<T = unknown>(event: string, args?: T): Promise<void> {
         if (!event) {

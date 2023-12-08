@@ -19,5 +19,8 @@
   "ct3aMetadata": {
     "initVersion": "7.24.0"
   },
-  "packageManager": "pnpm@8.7.6"
+  "packageManager": "pnpm@8.7.6",
+  "dependencies": {
+    "uuid": "^9.0.1"
+  }
 }
