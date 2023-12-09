@@ -10,7 +10,6 @@ interface IEventEmitter {
 
 class EvEm implements IEventEmitter {
   private events = new Map<string, Map<string, EventCallback>>();
-  private eventMatchCache = new Map<string, Set<string>>();
 
   private recursionDepth = new Map<string, number>();
   private maxRecursionDepth: number;
@@ -38,8 +37,6 @@ class EvEm implements IEventEmitter {
     const id = uuid();
     callbacks.set(id, callback as EventCallback);
     this.events.set(event, callbacks);
-
-    this.eventMatchCache.delete(event);
 
     return id;
   }
