@@ -42,7 +42,7 @@ class EvEm implements IEventEmitter {
   }
 
   unsubscribe<T = unknown>(event: string, callback: EventCallback<T>): void {
-    if (!event) throw new Error("You can't subscribe to an event with an empty name.");
+    if (!event) throw new Error("You can't unsubscribe to an event with an empty name.");
 
     const callbacks = this.events.get(event);
     if (!callbacks) return;
