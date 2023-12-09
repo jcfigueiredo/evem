@@ -22,9 +22,7 @@ class EvEm implements IEventEmitter {
   private incrementRecursionDepth(event: string): void {
     const depth = (this.recursionDepth.get(event) || 0) + 1;
     if (depth > this.maxRecursionDepth) {
-      throw new Error(
-        `Max recursion depth of ${this.maxRecursionDepth} exceeded for event '${event}'`
-      );
+      throw new Error(`Max recursion depth of ${this.maxRecursionDepth} exceeded for event '${event}'`);
     }
     this.recursionDepth.set(event, depth);
   }
@@ -47,8 +45,7 @@ class EvEm implements IEventEmitter {
   }
 
   unsubscribe<T = unknown>(event: string, callback: EventCallback<T>): void {
-    if (!event)
-      throw new Error("You can't subscribe to an event with an empty name.");
+    if (!event) throw new Error("You can't subscribe to an event with an empty name.");
 
     const callbacks = this.events.get(event);
     if (!callbacks) return;
@@ -79,11 +76,7 @@ class EvEm implements IEventEmitter {
     }
   }
 
-  async publish<T = unknown>(
-    event: string,
-    args?: T,
-    timeout: number = 5000
-  ): Promise<void> {
+  async publish<T = unknown>(event: string, args?: T, timeout: number = 5000): Promise<void> {
     if (!event) {
       return Promise.reject(new Error("Event name cannot be empty."));
     }
@@ -96,10 +89,7 @@ class EvEm implements IEventEmitter {
       if (this.isEventMatch(event, registeredEvent)) {
         for (const callback of callbacks.values()) {
           const callbackPromise = callback(args ?? ({} as T));
-          const promise =
-            callbackPromise instanceof Promise
-              ? callbackPromise
-              : Promise.resolve();
+          const promise = callbackPromise instanceof Promise ? callbackPromise : Promise.resolve();
           asyncCallbacks.push(this.handlePromiseWithTimeout(promise, timeout));
         }
       }
@@ -110,10 +100,7 @@ class EvEm implements IEventEmitter {
     this.resetRecursionDepth(event);
   }
 
-  private async handlePromiseWithTimeout<T>(
-    promise: Promise<T>,
-    timeout: number
-  ): Promise<T | undefined> {
+  private async handlePromiseWithTimeout<T>(promise: Promise<T>, timeout: number): Promise<T | undefined> {
     let timeoutHandle: NodeJS.Timeout;
     const timeoutPromise = new Promise<undefined>(resolve => {
       timeoutHandle = setTimeout(() => resolve(undefined), timeout);
@@ -128,11 +115,7 @@ class EvEm implements IEventEmitter {
     const eventParts = event.split(".");
     const registeredParts = registeredEvent.split(".");
 
-    for (
-      let i = 0;
-      i < Math.max(eventParts.length, registeredParts.length);
-      i++
-    ) {
+    for (let i = 0; i < Math.max(eventParts.length, registeredParts.length); i++) {
       if (eventParts[i] !== registeredParts[i] && registeredParts[i] !== "*") {
         return false;
       }

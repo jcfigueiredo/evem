@@ -22,16 +22,12 @@ describe("EvEm - Subscription Tests", () => {
     const subscriptionId = emitter.subscribe("test.event", () => {});
 
     expect(subscriptionId).toBeDefined();
-    expect(subscriptionId).toMatch(
-      /[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i
-    );
+    expect(subscriptionId).toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
   });
 
   test("should throw error when subscribing with an empty event name", () => {
     const callback = vi.fn();
-    expect(() => emitter.subscribe("", callback)).toThrow(
-      "Event name cannot be empty."
-    );
+    expect(() => emitter.subscribe("", callback)).toThrow("Event name cannot be empty.");
   });
 
   test("should handle exceptions thrown in event callbacks", async () => {
@@ -41,9 +37,7 @@ describe("EvEm - Subscription Tests", () => {
 
     emitter.subscribe("error.event", erroringCallback);
 
-    await expect(emitter.publish("error.event")).rejects.toThrow(
-      "Error in callback"
-    );
+    await expect(emitter.publish("error.event")).rejects.toThrow("Error in callback");
   });
 
   test("should subscribe to an event with an asynchronous callback", async () => {
@@ -86,5 +80,15 @@ describe("EvEm - Subscription Tests", () => {
 
     expect(callback1).toHaveBeenCalledWith(eventData);
     expect(callback2).toHaveBeenCalledWith(eventData);
+  });
+
+  test("should handle exceptions thrown in event callbacks", async () => {
+    const erroringCallback = vi.fn(() => {
+      throw new Error("Error in callback");
+    });
+
+    emitter.subscribe("error.event", erroringCallback);
+
+    await expect(emitter.publish("error.event")).rejects.toThrow("Error in callback");
   });
 });

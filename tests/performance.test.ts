@@ -49,21 +49,9 @@ describe("SimpleEventEmitter Load Test", () => {
     const endUnsubscribe = performance.now();
 
     // Log the times
-    console.log(
-      `Time to subscribe ${numSubscriptions} events: ${
-        endSubscribe - startSubscribe
-      } ms`
-    );
-    console.log(
-      `Time to publish to ${numSubscriptions} events: ${
-        endPublish - startPublish
-      } ms`
-    );
-    console.log(
-      `Time to unsubscribe ${numSubscriptions} events: ${
-        endUnsubscribe - startUnsubscribe
-      } ms`
-    );
+    console.log(`Time to subscribe ${numSubscriptions} events: ${endSubscribe - startSubscribe} ms`);
+    console.log(`Time to publish to ${numSubscriptions} events: ${endPublish - startPublish} ms`);
+    console.log(`Time to unsubscribe ${numSubscriptions} events: ${endUnsubscribe - startUnsubscribe} ms`);
 
     // Assertions (example: ensuring the operations don't take too long)
     expect(endSubscribe - startSubscribe).toBeLessThan(1000); // Adjust the threshold as needed
