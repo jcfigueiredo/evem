@@ -37,7 +37,7 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
 
 - **🌟 Wildcard Event Names**: Support for wildcard event names, allowing for flexible event listening.
 
-  - Subscribe to events using patterns like `*.eventName` or `eventName.*`.
+  - Subscribe to events using patterns like `eventName.*`.
 
 - **📚 Namespace Support**: Organize events using a namespace pattern.
   - Facilitates categorizing and managing events based on their namespace.
@@ -54,7 +54,7 @@ Pick your favorite package manager and get going:
 pnpm add evem
 ```
 
-### Quick Start
+## Quick Start
 
 Jump right in!
 
@@ -88,31 +88,6 @@ const musicSubId = evem.subscribe("party.music", () => console.log("Music is pla
 evem.unsubscribe("party.dance", danceCallback);
 evem.unsubscribeById(musicSubId);
 ```
-
-For a comprehensive set of examples, check out the [examples](docs/examples.md) page.
-
-## API at Your Fingertips
-
-- `subscribe(event: string, callback: EventCallback<T>): string`
-- `unsubscribe(event: string, callback: EventCallback<T>): void`
-- `unsubscribeById(id: string, event?: string): void`
-- `publish(event: string, args?: T, timeout?: number): Promise<void>`
-
-## Join the Party - Contribute!
-
-Got awesome ideas? Want to make **evem** even better? Jump in and contribute! Open an issue or submit a pull request to get started.
-
-## Test It Out
-
-Run the tests and watch the magic:
-
-```bash
-pnpm test
-```
-
-## License
-
-**evem** is open-source and free, distributed under the MIT License. See [LICENSE](LICENSE.md) for more information.
 
 ## Managing Timeouts in Callbacks
 
@@ -186,3 +161,28 @@ evem.subscribe("system.*.error", error => {
 ```
 
 These wildcard capabilities make EvEm an ideal choice for applications requiring complex event handling strategies.
+
+For a comprehensive set of examples, check out the [examples](docs/examples.md) page.
+
+## API at Your Fingertips
+
+- `subscribe(event: string, callback: EventCallback<T>): string`
+- `unsubscribe(event: string, callback: EventCallback<T>): void`
+- `unsubscribeById(id: string, event?: string): void`
+- `publish(event: string, args?: T, timeout?: number): Promise<void>`
+
+## Join the Party - Contribute!
+
+Got awesome ideas? Want to make **evem** even better? Jump in and contribute! Open an issue or submit a pull request to get started.
+
+## Test It Out
+
+Run the tests and watch the magic:
+
+```bash
+pnpm test
+```
+
+## License
+
+**evem** is open-source and free, distributed under the MIT License. See [LICENSE](LICENSE.md) for more information.
