@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "test": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest --coverage"
   },
   "devDependencies": {
     "@types/eslint": "^8.44.7",
