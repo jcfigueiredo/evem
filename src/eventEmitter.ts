@@ -98,7 +98,8 @@ class EvEm implements IEventEmitter {
   }
 
   private async handlePromiseWithTimeout<T>(promise: Promise<T>, timeout: number): Promise<T | undefined> {
-    let timeoutHandle: NodeJS.Timeout;
+    let timeoutHandle: ReturnType<typeof setTimeout>;
+
     const timeoutPromise = new Promise<undefined>(resolve => {
       timeoutHandle = setTimeout(() => resolve(undefined), timeout);
     });
