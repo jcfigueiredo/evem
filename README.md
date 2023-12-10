@@ -13,14 +13,24 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
   - `unsubscribe(event: string, callback: EventCallback<T>): void`
   - `unsubscribeById(id: string, event?: string): void` - Unsubscribe using the unique ID returned by `subscribe`.
 
-- **⏱️ Timeout Management for Asynchronous Callbacks**: Ensures that asynchronous callbacks do not hang indefinitely.
-
-  - A default timeout is set for each callback, but can be overridden per event in the `publish` method.
-  - Gracefully handles timeout exceedance.
-
 - **📣 Event Publishing**: Publish events with optional data.
 
   - `publish<T = unknown>(event: string, args?: T): Promise<void>`
+
+- **📚 Namespace Support**: Organize events using a namespace pattern.
+
+  - `subscribe("namespace.eventName", callback)`
+  - Facilitates categorizing and managing events based on their namespace.
+
+- **🌟 Wildcard Event Names**: Support for wildcard event names, allowing for flexible event listening.
+
+  - Subscribe to events using patterns like `eventName.*`, `*.eventName`, or `namespace.*.events`.
+
+- **⏱️ Timeout Management for Asynchronous Callbacks**: Ensures that asynchronous callbacks do not hang indefinitely.
+
+  - `subscribe(event: string, callback: EventCallback<T>, timeout?: number): string`
+  - A default timeout is set for each callback, but can be overridden per event in the `publish` method.
+  - Gracefully handles timeout exceedance.
 
 - **⏱️ Asynchronous and Synchronous Callbacks**: Support for both synchronous and asynchronous callbacks.
 
@@ -34,13 +44,6 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
 
   - Throws an error if the event name is empty during subscription, unsubscription, or publishing.
   - Handles exceptions thrown in event callbacks gracefully.
-
-- **🌟 Wildcard Event Names**: Support for wildcard event names, allowing for flexible event listening.
-
-  - Subscribe to events using patterns like `eventName.*`, `*.eventName`, or `namespace.*.events`.
-
-- **📚 Namespace Support**: Organize events using a namespace pattern.
-  - Facilitates categorizing and managing events based on their namespace.
 
 ## Getting on Board
 
