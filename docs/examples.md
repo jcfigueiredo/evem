@@ -1,4 +1,3 @@
-
 # EvEm Library - Comprehensive Examples
 
 This document provides a comprehensive list of examples for all the features of the EvEm library, illustrating its capabilities and usage in various scenarios.
@@ -6,7 +5,7 @@ This document provides a comprehensive list of examples for all the features of 
 ## Importing and Initializing EvEm
 
 ```typescript
-import { EvEm } from 'evem';
+import { EvEm } from "evem";
 const evem = new EvEm();
 ```
 
@@ -15,35 +14,45 @@ const evem = new EvEm();
 ### Subscribing to an Event
 
 ```typescript
-evem.subscribe('event.name', (data) => {
-    console.log(`Event received with data: ${data}`);
+const subId = evem.subscribe("event.name", data => {
+  console.log(`Event received with data: ${data}`);
 });
 ```
 
 ### Publishing an Event
 
 ```typescript
-async evem.publish('event.name', 'Hello World!');
+async function publishEvent() {
+  await evem.publish("event.name", "Hello World!");
+}
+publishEvent();
 // or
-void evem.publish('event.name', 'Hello World!');
+void evem.publish("event.name", "Hello World!");
 ```
 
-## Asynchronous Callbacks
+## Asynchronous Callbacks and Timeout Management
 
 ### Subscribing with an Asynchronous Callback
 
 ```typescript
-evem.subscribe('async.event', async (data) => {
+evem.subscribe(
+  "async.event",
+  async data => {
     console.log(`Received data: ${data}`);
     await new Promise(resolve => setTimeout(resolve, 1000));
-    console.log('Async operation completed.');
-});
+    console.log("Async operation completed.");
+  },
+  5000
+); // 5000 ms timeout for this callback
 ```
 
 ### Publishing to Asynchronous Subscribers
 
 ```typescript
-evem.publish('async.event', 'Async Data');
+async function publishAsyncEvent() {
+  await evem.publish("async.event", "Async Data", 3000); // 3000 ms timeout for all callbacks
+}
+publishAsyncEvent();
 ```
 
 ## Unsubscribing from Events
@@ -51,12 +60,14 @@ evem.publish('async.event', 'Async Data');
 ### Subscribing and then Unsubscribing
 
 ```typescript
-const callback = (data) => console.log(`Data: ${data}`);
+const callback = data => console.log(`Data: ${data}`);
 
-evem.subscribe('event.unsubscribe', callback);
+const subId = evem.subscribe("event.unsubscribe", callback);
 
 // To unsubscribe later
-evem.unsubscribe('event.unsubscribe', callback);
+evem.unsubscribeById(subId);
+// Or unsubscribe by event name and callback
+evem.unsubscribe("event.unsubscribe", callback);
 ```
 
 ## Wildcard Event Names
@@ -64,12 +75,12 @@ evem.unsubscribe('event.unsubscribe', callback);
 ### Subscribing to a Wildcard Event
 
 ```typescript
-evem.subscribe('user.*', (data) => {
-    console.log(`User event occurred: ${data}`);
+evem.subscribe("user.*", data => {
+  console.log(`User event occurred: ${data}`);
 });
 
-evem.publish('user.login', { username: 'john_doe' });
-evem.publish('user.logout');
+evem.publish("user.login", { username: "john_doe" });
+evem.publish("user.logout");
 ```
 
 ## Namespace Support
@@ -77,11 +88,11 @@ evem.publish('user.logout');
 ### Using Namespaces for Event Organization
 
 ```typescript
-evem.subscribe('namespace.eventName', (data) => {
-    console.log(`Namespace event: ${data}`);
+evem.subscribe("namespace.eventName", data => {
+  console.log(`Namespace event: ${data}`);
 });
 
-evem.publish('namespace.eventName', 'Namespace Data');
+evem.publish("namespace.eventName", "Namespace Data");
 ```
 
 ## Customizable Recursion Depth
@@ -91,13 +102,13 @@ evem.publish('namespace.eventName', 'Namespace Data');
 ```typescript
 const customEvem = new EvEm(5); // Custom max recursion depth
 
-customEvem.subscribe('event.recursive', () => {
-    console.log('Recursive event triggered');
-    // Recursive event logic
+customEvem.subscribe("event.recursive", () => {
+  console.log("Recursive event triggered");
+  // Recursive event logic
 });
 
 // Publish the event that triggers recursion
-customEvem.publish('event.recursive');
+customEvem.publish("event.recursive");
 ```
 
 ## Error Handling
@@ -107,16 +118,16 @@ customEvem.publish('event.recursive');
 ```typescript
 // Attempting to subscribe with an empty event name
 try {
-    evem.subscribe('', () => {});
+  evem.subscribe("", () => {});
 } catch (error) {
-    console.error(error);
+  console.error(error);
 }
 
 // Attempting to publish with an empty event name
 try {
-    evem.publish('');
+  evem.publish("");
 } catch (error) {
-    console.error(error);
+  console.error(error);
 }
 ```
 

@@ -5,7 +5,7 @@ interface IEventEmitter {
   subscribe<T = unknown>(event: string, callback: EventCallback<T>): void;
   unsubscribe<T = unknown>(event: string, callback: EventCallback<T>): void;
   unsubscribeById(id: string, event?: string): void;
-  publish<T = unknown>(event: string, args?: T): Promise<void>;
+  publish<T = unknown>(event: string, args?: T, timeout?: number): Promise<void>;
 }
 
 class EvEm implements IEventEmitter {
