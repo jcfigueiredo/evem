@@ -4,7 +4,7 @@ type EventCallback<T = unknown> = (args: T) => void | Promise<void>;
 interface IEventEmitter {
   subscribe<T = unknown>(event: string, callback: EventCallback<T>): void;
   unsubscribe<T = unknown>(event: string, callback: EventCallback<T>): void;
-  unsubscribeById(id: string, event?: string): void;
+  unsubscribeById(id: string): void;
   publish<T = unknown>(event: string, args?: T, timeout?: number): Promise<void>;
 }
 
@@ -55,20 +55,11 @@ class EvEm implements IEventEmitter {
     }
   }
 
-  unsubscribeById(id: string, event?: string): void {
-    if (event) {
-      // Unsubscribe from a specific event
-      const callbacks = this.events.get(event);
-      if (callbacks) {
-        callbacks.delete(id);
-      }
-      return;
-    }
-    // Unsubscribe from all events if event name is not provided
-    for (const [eventName, callbacks] of this.events) {
+  unsubscribeById(id: string): void {
+    for (const [_, callbacks] of this.events) {
       if (callbacks.has(id)) {
         callbacks.delete(id);
-        break; // Assuming UUIDs are unique across all events
+        break;
       }
     }
   }

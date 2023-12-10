@@ -55,18 +55,6 @@ describe("EvEm - Unsubscription Tests", () => {
   test("should unsubscribe from an event using a UUID", () => {
     const emitter = new EvEm();
     const callback = vi.fn();
-    const subscriptionId = emitter.subscribe("test.event", callback);
-
-    emitter.publish("test.event");
-    emitter.unsubscribeById(subscriptionId, "test.event");
-    emitter.publish("test.event");
-
-    expect(callback).toHaveBeenCalledTimes(1);
-  });
-
-  test("should unsubscribe from all events by UUID without specifying the event name", () => {
-    const emitter = new EvEm();
-    const callback = vi.fn();
 
     const subscriptionId1 = emitter.subscribe("event1", callback);
     emitter.subscribe("event2", callback);
@@ -86,7 +74,7 @@ describe("EvEm - Unsubscription Tests", () => {
 
     const subscriptionId = emitter.subscribe("event1", callback);
     emitter.publish("event1");
-    emitter.unsubscribeById(subscriptionId, "event1");
+    emitter.unsubscribeById(subscriptionId);
     emitter.publish("event1");
 
     expect(callback).toHaveBeenCalledTimes(1);

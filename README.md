@@ -11,7 +11,7 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
 - **❌ Event Unsubscription**: Unsubscribe from events to stop receiving notifications.
 
   - `unsubscribe(event: string, callback: EventCallback<T>): void`
-  - `unsubscribeById(id: string, event?: string): void` - Unsubscribe using the unique ID returned by `subscribe`.
+  - `unsubscribeById(id: string): void` - Unsubscribe using the unique ID returned by `subscribe`.
 
 - **📣 Event Publishing**: Publish events with optional data.
 
@@ -171,7 +171,7 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
 
 - `subscribe(event: string, callback: EventCallback<T>): string`
 - `unsubscribe(event: string, callback: EventCallback<T>): void`
-- `unsubscribeById(id: string, event?: string): void`
+- `unsubscribeById(id: string): void`
 - `publish(event: string, args?: T, timeout?: number): Promise<void>`
 
 ## Join the Party - Contribute!
