@@ -37,7 +37,7 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
 
 - **🌟 Wildcard Event Names**: Support for wildcard event names, allowing for flexible event listening.
 
-  - Subscribe to events using patterns like `eventName.*`.
+  - Subscribe to events using patterns like `eventName.*` or `*.eventName`.
 
 - **📚 Namespace Support**: Organize events using a namespace pattern.
   - Facilitates categorizing and managing events based on their namespace.
