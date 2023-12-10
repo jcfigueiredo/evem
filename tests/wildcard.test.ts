@@ -57,4 +57,14 @@ describe("EvEm - Wildcard Subscription Tests", () => {
     expect(wildcardCallback2).toHaveBeenCalledWith(eventData1);
     expect(wildcardCallback2).not.toHaveBeenCalledWith(eventData2);
   });
+
+  test("should handle wildcard in between (e.g., system.*.error) events", () => {
+    const callback = vi.fn();
+    emitter.subscribe("system.*.error", callback);
+
+    const eventData = { message: "Test Error" };
+    emitter.publish("system.test.error", eventData);
+
+    expect(callback).toHaveBeenCalledWith(eventData);
+  });
 });
