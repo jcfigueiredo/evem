@@ -2,7 +2,7 @@ import { v4 as uuid } from "uuid";
 type EventCallback<T = unknown> = (args: T) => void | Promise<void>;
 
 interface IEventEmitter {
-  subscribe<T = unknown>(event: string, callback: EventCallback<T>): void;
+  subscribe<T = unknown>(event: string, callback: EventCallback<T>): string;
   unsubscribe<T = unknown>(event: string, callback: EventCallback<T>): void;
   unsubscribeById(id: string): void;
   publish<T = unknown>(event: string, args?: T, timeout?: number): Promise<void>;
