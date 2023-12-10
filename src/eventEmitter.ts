@@ -45,7 +45,10 @@ class EvEm implements IEventEmitter {
     if (!event) throw new Error("You can't unsubscribe to an event with an empty name.");
 
     const callbacks = this.events.get(event);
-    if (!callbacks) return;
+    if (!callbacks) {
+      console.warn(`Warning: Attempting to unsubscribe from a non-existent event: ${event}`);
+      return;
+    }
 
     for (const [id, cb] of callbacks) {
       if (cb === callback) {
@@ -56,6 +59,8 @@ class EvEm implements IEventEmitter {
   }
 
   unsubscribeById(id: string): void {
+    if (!id) throw new Error("You can't unsubscribe to an event with an empty id.");
+
     for (const [_, callbacks] of this.events) {
       if (callbacks.has(id)) {
         callbacks.delete(id);

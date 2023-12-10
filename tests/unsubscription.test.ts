@@ -1,37 +1,42 @@
 import { EvEm } from "~/eventEmitter";
-import { describe, test, expect, beforeEach, vi } from "vitest";
+import { describe, test, expect, beforeEach, afterEach, vi, SpyInstance } from "vitest";
 
 describe("EvEm - Unsubscription Tests", () => {
-  let emitter: EvEm;
+  let evem: EvEm;
 
   beforeEach(() => {
-    emitter = new EvEm();
+    evem = new EvEm();
   });
 
   test("should unsubscribe a previously subscribed callback and stop receiving events", () => {
     const callback = vi.fn();
-    emitter.subscribe("test.event", callback);
+    evem.subscribe("test.event", callback);
 
-    emitter.unsubscribe("test.event", callback);
+    evem.unsubscribe("test.event", callback);
 
     const eventData = { message: "Test Data" };
-    emitter.publish("test.event", eventData);
+    evem.publish("test.event", eventData);
 
     expect(callback).not.toHaveBeenCalled();
   });
 
   test("should throw error when unsubscribing with an empty event name", () => {
     const callback = vi.fn();
-    expect(() => emitter.unsubscribe("", callback)).toThrow("You can't unsubscribe to an event with an empty name.");
+    expect(() => evem.unsubscribe("", callback)).toThrow("You can't unsubscribe to an event with an empty name.");
+  });
+
+  test("should throw error when unsubscribing with an empty id", () => {
+    const callback = vi.fn();
+    expect(() => evem.unsubscribeById("")).toThrow("You can't unsubscribe to an event with an empty id.");
   });
 
   test("should handle unsubscribing a callback that was never subscribed", () => {
     const callback = vi.fn();
 
-    emitter.unsubscribe("test.event", callback);
+    evem.unsubscribe("test.event", callback);
 
     const eventData = { message: "Test Data" };
-    emitter.publish("test.event", eventData);
+    evem.publish("test.event", eventData);
 
     expect(callback).not.toHaveBeenCalled();
   });
@@ -40,13 +45,13 @@ describe("EvEm - Unsubscription Tests", () => {
     const callback1 = vi.fn();
     const callback2 = vi.fn();
 
-    emitter.subscribe("multi.event", callback1);
-    emitter.subscribe("multi.event", callback2);
+    evem.subscribe("multi.event", callback1);
+    evem.subscribe("multi.event", callback2);
 
-    emitter.unsubscribe("multi.event", callback1);
+    evem.unsubscribe("multi.event", callback1);
 
     const eventData = { data: "Event Data" };
-    emitter.publish("multi.event", eventData);
+    evem.publish("multi.event", eventData);
 
     expect(callback1).not.toHaveBeenCalled();
     expect(callback2).toHaveBeenCalledWith(eventData);
@@ -89,5 +94,30 @@ describe("EvEm - Unsubscription Tests", () => {
     emitter.publish("event1");
 
     expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  describe("EvEm - Unsubscription Tests for nonexistent events ", () => {
+    let evem: EvEm;
+    let consoleWarnSpy: SpyInstance;
+
+    beforeEach(() => {
+      evem = new EvEm();
+      consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      consoleWarnSpy.mockRestore();
+    });
+
+    test("should warn when trying to unsubscribe from a non-existent event", () => {
+      const nonExistentEvent = "non.existent.event";
+      const callback = () => {};
+
+      evem.unsubscribe(nonExistentEvent, callback);
+
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        `Warning: Attempting to unsubscribe from a non-existent event: ${nonExistentEvent}`
+      );
+    });
   });
 });
