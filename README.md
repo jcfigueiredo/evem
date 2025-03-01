@@ -13,6 +13,11 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
   - `unsubscribe(event: string, callback: EventCallback<T>): void`
   - `unsubscribeById(id: string): void` - Unsubscribe using the unique ID returned by `subscribe`.
 
+- **🔄 Once-only Events**: Subscribe to events that will automatically unsubscribe after the first occurrence.
+
+  - `subscribeOnce(event: string, callback: EventCallback<T>): string`
+  - Or use `subscribe(event, callback, { once: true })`
+
 - **📣 Event Publishing**: Publish events with optional data.
 
   - `publish<T = unknown>(event: string, args?: T, timeout?: number): Promise<void>`
@@ -301,6 +306,41 @@ This combination is particularly useful for handling scenarios like:
 - Infinite scrolling - load immediately on first scroll, then wait for scrolling to stop
 - Progress updates - show first update right away, then only show updates after activity pauses
 
+## Using Once-Only Events
+
+EvEm provides once-only events that automatically unsubscribe after being triggered once, perfect for one-time operations.
+
+### Basic Once-Only Subscription
+
+```typescript
+// Using the dedicated method
+evem.subscribeOnce('user.initial-login', userData => {
+  console.log('Welcome to the app!', userData.name);
+  showOnboardingTutorial();
+});
+
+// Or using the once option
+evem.subscribe('app.ready', initializeApp, { once: true });
+```
+
+### Combining Once with Other Options
+
+Once-only events can be combined with filters, throttling and debouncing:
+
+```typescript
+// Only execute once for the first important notification
+evem.subscribeOnce('notification', showWelcomeDialog, {
+  filter: notification => notification.type === 'important',
+  debounceTime: 100 // In case multiple notifications arrive simultaneously
+});
+```
+
+This is ideal for:
+- One-time initialization
+- Welcome messages or onboarding flows
+- Alert dialogs that should only appear once
+- Feature highlights that should only be shown on first encounter
+
 ## Filtering Events
 
 EvEm provides powerful filtering capabilities that let you filter events based on their data. This allows you to subscribe only to the specific events you care about.
@@ -362,6 +402,8 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
   - `options.filter`: A predicate function or array of predicate functions that determine if the callback should be executed
   - `options.debounceTime`: Number of milliseconds to debounce the event (only process the last event within this time window)
   - `options.throttleTime`: Number of milliseconds to throttle the event (limit to at most one execution per time window)
+  - `options.once`: When true, automatically unsubscribes after the callback is invoked for the first time
+- `subscribeOnce(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T>, 'once'>): string`
 - `unsubscribe(event: string, callback: EventCallback<T>): void`
 - `unsubscribeById(id: string): void`
 - `publish(event: string, args?: T, timeout?: number): Promise<void>`
@@ -464,24 +506,22 @@ Here's how EvEm compares to other popular event emitter libraries:
 
 These are planned features for future releases:
 
-2. **Once-only Events**: A convenient way to subscribe to an event that will automatically unsubscribe after the first occurrence (via `subscribeOnce()` or `{ once: true }` option).
+1. **Event Priority**: Allow subscribers to set a priority level so that critical handlers are executed before less important ones.
 
-3. **Event Priority**: Allow subscribers to set a priority level so that critical handlers are executed before less important ones.
+2. **Event History/Replay**: Keep a history of recent events and allow new subscribers to optionally receive the most recent event immediately upon subscription.
 
-4. **Event History/Replay**: Keep a history of recent events and allow new subscribers to optionally receive the most recent event immediately upon subscription.
+3. **Middleware Support**: Allow registration of middleware functions that can intercept, modify, or cancel all events before they reach subscribers.
 
-5. **Middleware Support**: Allow registration of middleware functions that can intercept, modify, or cancel all events before they reach subscribers.
+4. **Error Policies**: Add configurable policies for how errors in callbacks are handled (e.g., fail silently, cancel event propagation, etc.).
 
-6. **Error Policies**: Add configurable policies for how errors in callbacks are handled (e.g., fail silently, cancel event propagation, etc.).
+5. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
 
-7. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
+6. **Memory Leak Detection**: Add optional warnings when subscriptions might be leaking (e.g., too many subscriptions to the same event).
 
-8. **Memory Leak Detection**: Add optional warnings when subscriptions might be leaking (e.g., too many subscriptions to the same event).
+7. **Event Schema Validation**: Add optional runtime validation of event data against schemas.
 
-9. **Event Schema Validation**: Add optional runtime validation of event data against schemas.
+8. **Cancelable Events**: Allow events to be canceled by subscribers to prevent further processing.
 
-10. **Cancelable Events**: Allow events to be canceled by subscribers to prevent further processing.
+9. **Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.
 
-11. **Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.
-
-12. **Performance Metrics/Telemetry**: Built-in instrumentation for measuring event processing performance.
+10. **Performance Metrics/Telemetry**: Built-in instrumentation for measuring event processing performance.
