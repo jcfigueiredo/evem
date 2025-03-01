@@ -22,6 +22,12 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
 
   - `publish<T = unknown>(event: string, args?: T, timeout?: number): Promise<void>`
 
+- **🥇 Event Priority**: Set priority levels for handlers to control execution order.
+
+  - Use `subscribe(event, callback, { priority: 'high' | 'normal' | 'low' | number })` 
+  - Higher priority handlers execute before lower priority ones
+  - Numeric priorities allow for fine-grained control (higher numbers = higher priority)
+
 - **📚 Namespace Support**: Organize events using a namespace pattern.
 
   - `subscribe("namespace.eventName", callback)`
@@ -153,6 +159,22 @@ evem.subscribe("document.created",
     }
   }
 );
+
+// Using priority to control execution order
+evem.subscribe("app.startup", () => {
+  console.log("Initialize UI components");
+}, { priority: 'normal' });
+
+evem.subscribe("app.startup", () => {
+  console.log("Load critical services FIRST");
+}, { priority: 'high' });
+
+evem.subscribe("app.startup", () => {
+  console.log("Load non-essential resources LAST");
+}, { priority: 'low' });
+
+// The handlers will execute in order of priority: high, normal, low
+await evem.publish("app.startup");
 ```
 
 ## Managing Timeouts in Callbacks
@@ -341,6 +363,79 @@ This is ideal for:
 - Alert dialogs that should only appear once
 - Feature highlights that should only be shown on first encounter
 
+## Prioritizing Events
+
+EvEm allows you to assign priorities to event handlers, giving you control over the execution order when multiple callbacks are triggered by the same event.
+
+### Basic Priority Levels
+
+```typescript
+// Subscribe with different priority levels
+evem.subscribe('system.startup', () => {
+  console.log('Database connection established');
+}, { priority: 'high' }); // Executes first
+
+evem.subscribe('system.startup', () => {
+  console.log('Middleware initialized');
+}, { priority: 'normal' }); // Executes second
+
+evem.subscribe('system.startup', () => {
+  console.log('Analytics tracking started');
+}, { priority: 'low' }); // Executes last
+
+// Publish the event
+await evem.publish('system.startup');
+```
+
+### Fine-Grained Control with Numeric Priorities
+
+For more granular control, you can use numeric priorities:
+
+```typescript
+// More precise control with numeric priorities
+evem.subscribe('render', () => {
+  console.log('Draw background');
+}, { priority: 100 });  // Highest priority - executes first
+
+evem.subscribe('render', () => {
+  console.log('Draw main content');
+}, { priority: 50 });   // Medium priority - executes second
+
+evem.subscribe('render', () => {
+  console.log('Draw UI overlay');
+}, { priority: 20 });   // Low priority - executes third 
+
+evem.subscribe('render', () => {
+  console.log('Draw debug information');
+}, { priority: -10 });  // Negative priority - executes last
+
+await evem.publish('render');
+```
+
+### Combining Priority with Other Features
+
+Priority can be combined with other features like filters, throttling, or debouncing:
+
+```typescript
+// Priority with filter
+evem.subscribe('user.action', (user) => {
+  console.log('Critical admin action detected:', user.action);
+}, {
+  priority: 'high',
+  filter: user => user.role === 'admin' && user.actionType === 'critical'
+});
+
+// Priority with once
+evem.subscribe('app.initialize', () => {
+  console.log('Core services initialized');
+}, {
+  priority: 'high',
+  once: true  // High priority and only executes once
+});
+```
+
+The priority system ensures that your most critical handlers execute first, providing predictable ordering when needed.
+
 ## Filtering Events
 
 EvEm provides powerful filtering capabilities that let you filter events based on their data. This allows you to subscribe only to the specific events you care about.
@@ -403,6 +498,7 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
   - `options.debounceTime`: Number of milliseconds to debounce the event (only process the last event within this time window)
   - `options.throttleTime`: Number of milliseconds to throttle the event (limit to at most one execution per time window)
   - `options.once`: When true, automatically unsubscribes after the callback is invoked for the first time
+  - `options.priority`: Priority level ('high', 'normal', 'low') or number to control execution order (higher values execute first)
 - `subscribeOnce(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T>, 'once'>): string`
 - `unsubscribe(event: string, callback: EventCallback<T>): void`
 - `unsubscribeById(id: string): void`
@@ -470,9 +566,8 @@ Here's how EvEm compares to other popular event emitter libraries:
 
 **Cons of EvEm:**
 - Lacks advanced reactive programming features
-- No operators for transforming event streams
 - Less powerful for complex async workflows
-- Smaller ecosystem of extensions
+- No oob extension support 
 
 ### EvEm vs tiny-emitter
 
@@ -506,22 +601,20 @@ Here's how EvEm compares to other popular event emitter libraries:
 
 These are planned features for future releases:
 
-1. **Event Priority**: Allow subscribers to set a priority level so that critical handlers are executed before less important ones.
+1. **Event History/Replay**: Keep a history of recent events and allow new subscribers to optionally receive the most recent event immediately upon subscription.
 
-2. **Event History/Replay**: Keep a history of recent events and allow new subscribers to optionally receive the most recent event immediately upon subscription.
+2. **Middleware Support**: Allow registration of middleware functions that can intercept, modify, or cancel all events before they reach subscribers.
 
-3. **Middleware Support**: Allow registration of middleware functions that can intercept, modify, or cancel all events before they reach subscribers.
+3. **Error Policies**: Add configurable policies for how errors in callbacks are handled (e.g., fail silently, cancel event propagation, etc.).
 
-4. **Error Policies**: Add configurable policies for how errors in callbacks are handled (e.g., fail silently, cancel event propagation, etc.).
+4. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
 
-5. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
+5. **Memory Leak Detection**: Add optional warnings when subscriptions might be leaking (e.g., too many subscriptions to the same event).
 
-6. **Memory Leak Detection**: Add optional warnings when subscriptions might be leaking (e.g., too many subscriptions to the same event).
+6. **Event Schema Validation**: Add optional runtime validation of event data against schemas.
 
-7. **Event Schema Validation**: Add optional runtime validation of event data against schemas.
+7. **Cancelable Events**: Allow events to be canceled by subscribers to prevent further processing.
 
-8. **Cancelable Events**: Allow events to be canceled by subscribers to prevent further processing.
+8. **Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.
 
-9. **Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.
-
-10. **Performance Metrics/Telemetry**: Built-in instrumentation for measuring event processing performance.
+9. **Performance Metrics/Telemetry**: Built-in instrumentation for measuring event processing performance.

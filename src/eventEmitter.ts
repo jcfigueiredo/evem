@@ -1,11 +1,13 @@
 import { v4 as uuid } from "uuid";
 type EventCallback<T = unknown> = (args: T) => void | Promise<void>;
 type FilterPredicate<T = unknown> = (args: T) => boolean | Promise<boolean>;
+type PriorityLevel = 'high' | 'normal' | 'low';
 type SubscriptionOptions<T = unknown> = {
   filter?: FilterPredicate<T> | FilterPredicate<T>[];
   debounceTime?: number;
   throttleTime?: number;
   once?: boolean;
+  priority?: number | PriorityLevel; // Higher numbers or 'high' = higher priority
 };
 
 interface IEventEmitter {
@@ -16,8 +18,13 @@ interface IEventEmitter {
   publish<T = unknown>(event: string, args?: T, timeout?: number): Promise<void>;
 }
 
+interface CallbackInfo<T = unknown> {
+  callback: EventCallback<T>;
+  priority: number;
+}
+
 class EvEm implements IEventEmitter {
-  private events = new Map<string, Map<string, EventCallback>>();
+  private events = new Map<string, Map<string, CallbackInfo>>();
   private recursionDepth = new Map<string, number>();
   private debounceTimers = new Map<string, NodeJS.Timeout>();
   private throttleTimers = new Map<string, { timer: NodeJS.Timeout, expiresAt: number }>();
@@ -268,9 +275,35 @@ class EvEm implements IEventEmitter {
       };
     }
 
-    // Register the final wrapped callback
+    // Convert priority option to a numeric value
+    let priority = 0; // Default priority (normal)
+    
+    if (options?.priority !== undefined) {
+      if (typeof options.priority === 'number') {
+        priority = options.priority;
+      } else {
+        // Convert string priority levels to numbers
+        switch (options.priority) {
+          case 'high':
+            priority = 100;
+            break;
+          case 'low':
+            priority = -100;
+            break;
+          case 'normal':
+          default:
+            priority = 0;
+            break;
+        }
+      }
+    }
+    
+    // Register the final wrapped callback with its priority
     const callbacks = this.events.get(event) ?? new Map();
-    callbacks.set(subscriptionId, finalCallback as EventCallback);
+    callbacks.set(subscriptionId, {
+      callback: finalCallback as EventCallback,
+      priority
+    });
     this.events.set(event, callbacks);
     return subscriptionId;
   }
@@ -300,8 +333,8 @@ class EvEm implements IEventEmitter {
       return;
     }
 
-    for (const [id, cb] of callbacks) {
-      if (cb === callback) {
+    for (const [id, cbInfo] of callbacks) {
+      if (cbInfo.callback === callback) {
         callbacks.delete(id);
         break;
       }
@@ -350,15 +383,28 @@ class EvEm implements IEventEmitter {
     this.incrementRecursionDepth(event);
 
     const asyncCallbacks: Promise<void>[] = [];
+    const matchingCallbacks: { callback: EventCallback, priority: number }[] = [];
 
+    // First, collect all matching callbacks with their priorities
     for (const [registeredEvent, callbacks] of this.events) {
       if (this.isEventMatch(event, registeredEvent)) {
-        for (const callback of callbacks.values()) {
-          const callbackPromise = callback(args ?? ({} as T));
-          const promise = callbackPromise instanceof Promise ? callbackPromise : Promise.resolve();
-          asyncCallbacks.push(this.handlePromiseWithTimeout(promise, timeout));
+        for (const [_, cbInfo] of callbacks) {
+          matchingCallbacks.push({
+            callback: cbInfo.callback,
+            priority: cbInfo.priority
+          });
         }
       }
+    }
+
+    // Sort callbacks by priority (highest first)
+    matchingCallbacks.sort((a, b) => b.priority - a.priority);
+
+    // Execute callbacks in priority order
+    for (const { callback } of matchingCallbacks) {
+      const callbackPromise = callback(args ?? ({} as T));
+      const promise = callbackPromise instanceof Promise ? callbackPromise : Promise.resolve();
+      asyncCallbacks.push(this.handlePromiseWithTimeout(promise, timeout));
     }
 
     await Promise.all(asyncCallbacks);
@@ -396,5 +442,6 @@ export {
   type IEventEmitter, 
   type EventCallback, 
   type FilterPredicate,
-  type SubscriptionOptions
+  type SubscriptionOptions,
+  type PriorityLevel
 };
