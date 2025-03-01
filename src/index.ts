@@ -1,2 +1,8 @@
 /* c8 ignore next */
-export { EvEm, type IEventEmitter, type EventCallback } from "./eventEmitter";
+export { 
+  EvEm, 
+  type IEventEmitter, 
+  type EventCallback,
+  type FilterPredicate,
+  type SubscriptionOptions
+} from "./eventEmitter";

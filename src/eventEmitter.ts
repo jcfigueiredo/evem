@@ -1,8 +1,12 @@
 import { v4 as uuid } from "uuid";
 type EventCallback<T = unknown> = (args: T) => void | Promise<void>;
+type FilterPredicate<T = unknown> = (args: T) => boolean | Promise<boolean>;
+type SubscriptionOptions<T = unknown> = {
+  filter?: FilterPredicate<T> | FilterPredicate<T>[];
+};
 
 interface IEventEmitter {
-  subscribe<T = unknown>(event: string, callback: EventCallback<T>): string;
+  subscribe<T = unknown>(event: string, callback: EventCallback<T>, options?: SubscriptionOptions<T>): string;
   unsubscribe<T = unknown>(event: string, callback: EventCallback<T>): void;
   unsubscribeById(id: string): void;
   publish<T = unknown>(event: string, args?: T, timeout?: number): Promise<void>;
@@ -10,7 +14,6 @@ interface IEventEmitter {
 
 class EvEm implements IEventEmitter {
   private events = new Map<string, Map<string, EventCallback>>();
-
   private recursionDepth = new Map<string, number>();
   private maxRecursionDepth: number;
 
@@ -30,14 +33,49 @@ class EvEm implements IEventEmitter {
     this.recursionDepth.set(event, 0);
   }
 
-  subscribe<T = unknown>(event: string, callback: EventCallback<T>): string {
+  /**
+   * Subscribe to an event with optional filters
+   * @param event - The event name to subscribe to
+   * @param callback - The callback to invoke when the event is published
+   * @param options - Optional subscription options including filters
+   * @returns A subscription ID that can be used to unsubscribe
+   */
+  subscribe<T = unknown>(
+    event: string, 
+    callback: EventCallback<T>, 
+    options?: SubscriptionOptions<T>
+  ): string {
     if (!event) throw new Error("Event name cannot be empty.");
 
+    // If there are no filters, register the callback directly
+    if (!options?.filter) {
+      const callbacks = this.events.get(event) ?? new Map();
+      const id = uuid();
+      callbacks.set(id, callback as EventCallback);
+      this.events.set(event, callbacks);
+      return id;
+    }
+
+    // Convert single filter to array for consistent handling
+    const filters = Array.isArray(options.filter) ? options.filter : [options.filter];
+
+    // Create a wrapper callback that applies all filters
+    const wrappedCallback: EventCallback<T> = async (args: T) => {
+      // Apply each filter in series (short-circuiting on first false)
+      for (const filter of filters) {
+        const result = filter(args);
+        const passes = result instanceof Promise ? await result : result;
+        if (!passes) return; // If any filter fails, don't call the callback
+      }
+      // All filters passed, call the actual callback
+      return callback(args);
+    };
+
+    // Register the wrapped callback
     const callbacks = this.events.get(event) ?? new Map();
     const id = uuid();
-    callbacks.set(id, callback as EventCallback);
+    callbacks.set(id, wrappedCallback as EventCallback);
     this.events.set(event, callbacks);
-
     return id;
   }
 
@@ -118,4 +156,10 @@ class EvEm implements IEventEmitter {
   }
 }
 
-export { EvEm, type IEventEmitter, type EventCallback };
+export { 
+  EvEm, 
+  type IEventEmitter, 
+  type EventCallback, 
+  type FilterPredicate,
+  type SubscriptionOptions
+};
