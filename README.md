@@ -33,6 +33,12 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
   - Chain multiple filters together to create complex filtering logic
   - Fully integrated with the existing subscription system
 
+- **⏲️ Event Debouncing**: Prevent excessive event handling using debounce.
+
+  - Set a debounce time to ensure callbacks are only invoked once within a specified time period
+  - Useful for handling rapid-fire events like window resize, keyboard input, or API updates
+  - Combine with filtering for powerful event stream control
+
 - **⏱️ Timeout Management for Asynchronous Callbacks**: Ensures that asynchronous callbacks do not hang indefinitely.
 
   - A default timeout of 5000ms (5 seconds) is set for each callback, but can be overridden per event in the `publish` method.
@@ -204,6 +210,40 @@ evem.subscribe("system.*.error", error => {
 
 These wildcard capabilities make EvEm an ideal choice for applications requiring complex event handling strategies.
 
+## Debouncing Events
+
+EvEm provides built-in debouncing, which is useful when you need to limit how often a callback is triggered in response to rapidly occurring events.
+
+### Basic Debouncing
+
+```typescript
+// Only handle the last resize event in each 300ms window
+evem.subscribe('window.resize', updateLayout, {
+  debounceTime: 300
+});
+
+// These will all be collapsed into one call to updateLayout
+evem.publish('window.resize', { width: 800, height: 600 });
+evem.publish('window.resize', { width: 810, height: 600 });
+evem.publish('window.resize', { width: 820, height: 610 });
+```
+
+### Combining Debounce with Filters
+
+Debouncing can be combined with filtering for powerful control over event processing:
+
+```typescript
+// Debounce important notifications from a specific user
+evem.subscribe('notification.received', showNotification, {
+  debounceTime: 500,
+  filter: notification => 
+    notification.importance === 'high' && 
+    notification.from === 'system'
+});
+```
+
+This combination is particularly useful for handling things like form input validation, search-as-you-type, or any scenario where you want to process only the most recent event after a period of inactivity.
+
 ## Filtering Events
 
 EvEm provides powerful filtering capabilities that let you filter events based on their data. This allows you to subscribe only to the specific events you care about.
@@ -263,6 +303,7 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
 
 - `subscribe(event: string, callback: EventCallback<T>, options?: SubscriptionOptions<T>): string`
   - `options.filter`: A predicate function or array of predicate functions that determine if the callback should be executed
+  - `options.debounceTime`: Number of milliseconds to debounce the event (only process the last event within this time window)
 - `unsubscribe(event: string, callback: EventCallback<T>): void`
 - `unsubscribeById(id: string): void`
 - `publish(event: string, args?: T, timeout?: number): Promise<void>`

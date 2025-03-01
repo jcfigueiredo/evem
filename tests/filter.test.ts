@@ -129,4 +129,35 @@ describe('Event filtering', () => {
     expect(handler).toHaveBeenCalledWith(8);
     expect(handler).toHaveBeenCalledWith(10);
   });
+
+
+  test('debounceTime should work with filters', async () => {
+    const handler = vi.fn();
+    
+    // Subscribe with both debounce and filter
+    emitter.subscribe(
+      'filtered.debounced', 
+      handler,
+      { 
+        debounceTime: 100,
+        filter: (n: number) => n > 5
+      }
+    );
+    
+    // These should be filtered out
+    await emitter.publish('filtered.debounced', 1);
+    await emitter.publish('filtered.debounced', 3);
+    await emitter.publish('filtered.debounced', 5);
+    
+    // These should pass the filter
+    await emitter.publish('filtered.debounced', 6);
+    await emitter.publish('filtered.debounced', 8); // This one should win due to debounce
+    
+    // Wait for debounce to complete (use a longer timeout to be safe)
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    // Only the last event that passed the filter should be processed
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(8);
+  });
 });
