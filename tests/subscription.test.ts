@@ -91,4 +91,27 @@ describe("EvEm - Subscription Tests", () => {
 
     await expect(emitter.publish("error.event")).rejects.toThrow("Error in callback");
   });
+
+  test("should handle typed event data with type safety", async () => {
+    interface UserEvent {
+      userId: number;
+      action: string;
+    }
+
+    const callback = vi.fn((data: UserEvent) => {
+      // TypeScript should recognize these properties
+      expect(data.userId).toBe(123);
+      expect(data.action).toBe("login");
+    });
+
+    emitter.subscribe<UserEvent>("user.event", callback);
+
+    const eventData: UserEvent = {
+      userId: 123,
+      action: "login"
+    };
+
+    await emitter.publish("user.event", eventData);
+    expect(callback).toHaveBeenCalledWith(eventData);
+  });
 });
