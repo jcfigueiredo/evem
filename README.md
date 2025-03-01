@@ -39,6 +39,12 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
   - Useful for handling rapid-fire events like window resize, keyboard input, or API updates
   - Combine with filtering for powerful event stream control
 
+- **🔄 Event Throttling**: Limit the frequency of event handler execution.
+
+  - Set a throttle time to ensure callbacks are executed at most once per time window
+  - First event in a throttle window is processed immediately, subsequent events are ignored until the window expires
+  - Perfect for rate-limiting high-frequency events like scrolling, mouse movements, or API calls
+
 - **⏱️ Timeout Management for Asynchronous Callbacks**: Ensures that asynchronous callbacks do not hang indefinitely.
 
   - A default timeout of 5000ms (5 seconds) is set for each callback, but can be overridden per event in the `publish` method.
@@ -210,6 +216,42 @@ evem.subscribe("system.*.error", error => {
 
 These wildcard capabilities make EvEm an ideal choice for applications requiring complex event handling strategies.
 
+## Throttling Events
+
+EvEm provides built-in throttling, which is useful when you need to limit the rate at which events are processed.
+
+### Basic Throttling
+
+```typescript
+// Handle scroll events at most once every 200ms
+evem.subscribe('window.scroll', updateScrollIndicator, {
+  throttleTime: 200
+});
+
+// Only the first event and events after the throttle window will be processed
+evem.publish('window.scroll', { position: 100 }); // Processed immediately
+evem.publish('window.scroll', { position: 120 }); // Ignored (within throttle window)
+evem.publish('window.scroll', { position: 150 }); // Ignored (within throttle window)
+
+// ... 200ms later ...
+
+evem.publish('window.scroll', { position: 300 }); // Processed (new throttle window)
+```
+
+### Combining Throttle with Filters
+
+Throttling can be combined with filters to control both the rate and conditions of event handling:
+
+```typescript
+// Process large value changes at most once every 500ms
+evem.subscribe('sensor.reading', updateDisplay, {
+  throttleTime: 500,
+  filter: reading => Math.abs(reading.value - lastValue) > 5
+});
+```
+
+Throttling is ideal for scenarios where you need to limit the frequency of potentially expensive operations while still ensuring responsive handling of the first event in a sequence.
+
 ## Debouncing Events
 
 EvEm provides built-in debouncing, which is useful when you need to limit how often a callback is triggered in response to rapidly occurring events.
@@ -242,7 +284,22 @@ evem.subscribe('notification.received', showNotification, {
 });
 ```
 
-This combination is particularly useful for handling things like form input validation, search-as-you-type, or any scenario where you want to process only the most recent event after a period of inactivity.
+### Combining Throttle and Debounce
+
+For advanced control, you can combine both throttling and debouncing:
+
+```typescript
+// Process the first event immediately, then wait for a pause in events
+evem.subscribe('user.typing', suggestCompletions, {
+  throttleTime: 100,  // Process immediately, then throttle
+  debounceTime: 500   // Wait for typing to pause before suggesting again
+});
+```
+
+This combination is particularly useful for handling scenarios like:
+- Autocomplete suggestions - show immediate results then wait for typing to pause
+- Infinite scrolling - load immediately on first scroll, then wait for scrolling to stop
+- Progress updates - show first update right away, then only show updates after activity pauses
 
 ## Filtering Events
 
@@ -304,6 +361,7 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
 - `subscribe(event: string, callback: EventCallback<T>, options?: SubscriptionOptions<T>): string`
   - `options.filter`: A predicate function or array of predicate functions that determine if the callback should be executed
   - `options.debounceTime`: Number of milliseconds to debounce the event (only process the last event within this time window)
+  - `options.throttleTime`: Number of milliseconds to throttle the event (limit to at most one execution per time window)
 - `unsubscribe(event: string, callback: EventCallback<T>): void`
 - `unsubscribeById(id: string): void`
 - `publish(event: string, args?: T, timeout?: number): Promise<void>`
@@ -401,3 +459,29 @@ Here's how EvEm compares to other popular event emitter libraries:
 ## License
 
 **evem** is open-source and free, distributed under the MIT License. See [LICENSE](LICENSE.md) for more information.
+
+## TODO Features
+
+These are planned features for future releases:
+
+2. **Once-only Events**: A convenient way to subscribe to an event that will automatically unsubscribe after the first occurrence (via `subscribeOnce()` or `{ once: true }` option).
+
+3. **Event Priority**: Allow subscribers to set a priority level so that critical handlers are executed before less important ones.
+
+4. **Event History/Replay**: Keep a history of recent events and allow new subscribers to optionally receive the most recent event immediately upon subscription.
+
+5. **Middleware Support**: Allow registration of middleware functions that can intercept, modify, or cancel all events before they reach subscribers.
+
+6. **Error Policies**: Add configurable policies for how errors in callbacks are handled (e.g., fail silently, cancel event propagation, etc.).
+
+7. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
+
+8. **Memory Leak Detection**: Add optional warnings when subscriptions might be leaking (e.g., too many subscriptions to the same event).
+
+9. **Event Schema Validation**: Add optional runtime validation of event data against schemas.
+
+10. **Cancelable Events**: Allow events to be canceled by subscribers to prevent further processing.
+
+11. **Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.
+
+12. **Performance Metrics/Telemetry**: Built-in instrumentation for measuring event processing performance.
