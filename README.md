@@ -15,7 +15,7 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
 
 - **📣 Event Publishing**: Publish events with optional data.
 
-  - `publish<T = unknown>(event: string, args?: T): Promise<void>`
+  - `publish<T = unknown>(event: string, args?: T, timeout?: number): Promise<void>`
 
 - **📚 Namespace Support**: Organize events using a namespace pattern.
 
@@ -28,8 +28,7 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
 
 - **⏱️ Timeout Management for Asynchronous Callbacks**: Ensures that asynchronous callbacks do not hang indefinitely.
 
-  - `subscribe(event: string, callback: EventCallback<T>, timeout?: number): string`
-  - A default timeout is set for each callback, but can be overridden per event in the `publish` method.
+  - A default timeout of 5000ms (5 seconds) is set for each callback, but can be overridden per event in the `publish` method.
   - Gracefully handles timeout exceedance.
 
 - **⏱️ Asynchronous and Synchronous Callbacks**: Support for both synchronous and asynchronous callbacks.
@@ -67,7 +66,7 @@ const evem = new EvEm();
 
 // Subscribe to a party start event
 evem.subscribe("party.start", () => {
-  console.log("Let’s get this party started!");
+  console.log("Let's get this party started!");
 });
 
 // Publish the party start event
@@ -105,20 +104,13 @@ When publishing an event, you can set a default timeout for all its callbacks. T
 await evem.publish("network.request", requestData, 3000);
 ```
 
-### Individual Callback Timeout
+### Default Timeout Value
 
-You can also manage timeouts on a per-callback basis, giving you finer control over each callback's execution time.
+If no timeout is specified when publishing an event, a default timeout of 5000ms (5 seconds) is used.
 
 ```typescript
-// Subscribe to an event with a specific timeout for this callback
-evem.subscribe(
-  "data.process",
-  async data => {
-    // Process data
-    await processData(data);
-  },
-  2000
-); // 2000 ms timeout for this particular callback
+// Uses the default 5000ms timeout
+await evem.publish("data.process", processData);
 ```
 
 ### Handling Timeout Exceedance
