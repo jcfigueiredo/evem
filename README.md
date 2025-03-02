@@ -18,9 +18,11 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
   - `subscribeOnce(event: string, callback: EventCallback<T>): string`
   - Or use `subscribe(event, callback, { once: true })`
 
-- **📣 Event Publishing**: Publish events with optional data.
+- **📣 Event Publishing**: Publish events with optional data and configuration.
 
-  - `publish<T = unknown>(event: string, args?: T, timeout?: number): Promise<void>`
+  - `publish<T = unknown>(event: string, args?: T, options?: PublishOptions | number): Promise<boolean>`
+  - Returns a boolean indicating whether the event completed (true) or was canceled (false)
+  - Configure timeouts, error policies, and cancelable behavior
 
 - **🥇 Event Priority**: Set priority levels for handlers to control execution order.
 
@@ -87,6 +89,7 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
 - **⏱️ Asynchronous and Synchronous Callbacks**: Support for both synchronous and asynchronous callbacks.
 
   - Callbacks can be either a simple function or an `async` function.
+  - Promises from async callbacks are properly awaited in the event chain
 
 - **🌀 Customizable Recursion Depth**: Set a custom maximum recursion depth for event publishing to prevent stack overflow errors and infinite loops.
 
@@ -96,6 +99,13 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
 
   - Throws an error if the event name is empty during subscription, unsubscription, or publishing.
   - Handles exceptions thrown in event callbacks gracefully.
+
+- **🔍 Debugging Support**: Inspect and monitor the event system with the info method.
+
+  - Get information about all registered subscriptions and middleware
+  - Filter results by event pattern to focus on specific event types
+  - See priorities, subscription IDs, and middleware patterns
+  - Useful for debugging complex event setups and visualizing the event system state
 
 ## Getting on Board
 
