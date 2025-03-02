@@ -73,10 +73,11 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
   
 - **🔄 Middleware Support**: Process and transform events before they reach subscribers.
 
-  - Register middleware functions that can intercept and modify all events
+  - Register middleware functions that can intercept and modify events
+  - Apply middleware to specific event patterns using wildcards (e.g., "user.*", "*.created")
   - Transform event data or redirect events to different event names
   - Cancel events based on custom conditions
-  - Apply global processing logic across your entire application
+  - Apply global or targeted processing logic across your application
 
 - **⏱️ Timeout Management for Asynchronous Callbacks**: Ensures that asynchronous callbacks do not hang indefinitely.
 
@@ -322,6 +323,57 @@ await evem.publish('user.login', { username: 'alice' });
 // User logged in at 2023-05-20T15:30:45.123Z
 // Event: user.login
 // Username: alice
+```
+
+### Pattern-Based Middleware
+
+You can apply middleware to specific event patterns, allowing for more targeted event processing:
+
+```typescript
+import { EvEm, MiddlewareConfig } from "evem";
+const evem = new EvEm();
+
+// Middleware that only applies to user events
+const userEventsMiddleware: MiddlewareConfig = {
+  pattern: 'user.*',
+  handler: (event, data) => {
+    console.log(`Processing user event: ${event}`);
+    return {
+      ...data,
+      audit: {
+        processedAt: new Date(),
+        eventType: 'user'
+      }
+    };
+  }
+};
+
+// Middleware that only applies to creation events
+const creationEventsMiddleware: MiddlewareConfig = {
+  pattern: '*.created',
+  handler: (event, data) => {
+    console.log(`Processing creation event: ${event}`);
+    return {
+      ...data,
+      isNew: true
+    };
+  }
+};
+
+// Register both middleware with their patterns
+evem.use(userEventsMiddleware);
+evem.use(creationEventsMiddleware);
+
+// These events will trigger different middleware
+await evem.publish('user.login', { id: 1 });  // Only triggers user middleware
+await evem.publish('product.created', { id: 2 });  // Only triggers creation middleware
+await evem.publish('user.created', { id: 3 });  // Triggers both middleware
+
+// Subscribe to see the results
+evem.subscribe('user.created', (data) => {
+  console.log('User created:', data);
+  // Output: User created: { id: 3, isNew: true, audit: { processedAt: "...", eventType: "user" } }
+});
 ```
 
 ### Event Transformation and Redirection
@@ -862,8 +914,10 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
   - `options.timeout`: Number of milliseconds before timing out async callbacks (default: 5000)
   - `options.cancelable`: Whether the event can be canceled by handlers (default: false)
   - `options.errorPolicy`: How to handle errors in callbacks (default: ErrorPolicy.LOG_AND_CONTINUE)
-- `use(middleware: MiddlewareFunction)`: Register a middleware function to process events
-- `removeMiddleware(middleware: MiddlewareFunction)`: Remove a previously registered middleware function
+- `use(middleware: MiddlewareFunction | MiddlewareConfig)`: Register a middleware function to process events
+  - Can provide a simple function that processes all events
+  - Or a config object with `pattern` and `handler` to process only matching events
+- `removeMiddleware(middleware: MiddlewareFunction | MiddlewareConfig)`: Remove a previously registered middleware function
 
 ## Join the Party - Contribute!
 
@@ -964,7 +1018,7 @@ These are planned features for future releases:
 
 1. **Event History/Replay**: Keep a history of recent events and allow new subscribers to optionally receive the most recent event immediately upon subscription.
 
-✅ **Middleware Support**: Allow registration of middleware functions that can intercept, modify, or cancel all events before they reach subscribers.
+✅ **Middleware Support**: Allow registration of middleware functions that can intercept, modify, or cancel events before they reach subscribers, with support for event pattern matching.
 
 3. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
 

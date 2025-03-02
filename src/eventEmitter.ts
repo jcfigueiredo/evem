@@ -78,14 +78,24 @@ export type MiddlewareResult<T = any> = null | T | { event: string; data: T };
 export type MiddlewareFunction<T = any> = 
   (event: string, data: T) => MiddlewareResult<T> | Promise<MiddlewareResult<T>>;
 
+/**
+ * Middleware configuration
+ */
+export interface MiddlewareConfig<T = any> {
+  /** The event pattern this middleware should apply to (e.g., "user.*", "*.created") */
+  pattern?: string;
+  /** The middleware function */
+  handler: MiddlewareFunction<T>;
+}
+
 interface IEventEmitter {
   subscribe<T = unknown>(event: string, callback: EventCallback<T>, options?: SubscriptionOptions<T>): string;
   subscribeOnce<T = unknown>(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T>, 'once'>): string;
   unsubscribe<T = unknown>(event: string, callback: EventCallback<T>): void;
   unsubscribeById(id: string): void;
   publish<T = unknown>(event: string, args?: T, options?: PublishOptions | number): Promise<boolean>;
-  use<T = unknown>(middleware: MiddlewareFunction<T>): void;
-  removeMiddleware<T = unknown>(middleware: MiddlewareFunction<T>): void;
+  use<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void;
+  removeMiddleware<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void;
 }
 
 interface CallbackInfo<T = unknown> {
@@ -98,7 +108,7 @@ class EvEm implements IEventEmitter {
   private recursionDepth = new Map<string, number>();
   private debounceTimers = new Map<string, NodeJS.Timeout>();
   private throttleTimers = new Map<string, { timer: NodeJS.Timeout, expiresAt: number }>();
-  private middleware: MiddlewareFunction[] = [];
+  private middleware: Array<{ pattern?: string; handler: MiddlewareFunction }> = [];
   private maxRecursionDepth: number;
 
   constructor(maxRecursionDepth: number = 3) {
@@ -107,20 +117,41 @@ class EvEm implements IEventEmitter {
   
   /**
    * Register a middleware function to process events before they reach subscribers
-   * @param middleware - The middleware function to add
+   * @param middleware - The middleware function or config to add
    */
-  use<T = unknown>(middleware: MiddlewareFunction<T>): void {
-    this.middleware.push(middleware as MiddlewareFunction);
+  use<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void {
+    if (typeof middleware === 'function') {
+      // If just a function is provided, apply it to all events (no pattern)
+      this.middleware.push({ handler: middleware as MiddlewareFunction });
+    } else {
+      // If a config object is provided, use its pattern and handler
+      this.middleware.push({
+        pattern: middleware.pattern,
+        handler: middleware.handler as MiddlewareFunction
+      });
+    }
   }
   
   /**
    * Remove a previously registered middleware function
-   * @param middleware - The middleware function to remove
+   * @param middleware - The middleware function or config to remove
    */
-  removeMiddleware<T = unknown>(middleware: MiddlewareFunction<T>): void {
-    const index = this.middleware.indexOf(middleware as MiddlewareFunction);
-    if (index !== -1) {
-      this.middleware.splice(index, 1);
+  removeMiddleware<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void {
+    if (typeof middleware === 'function') {
+      // Find and remove by handler function
+      const index = this.middleware.findIndex(m => m.handler === middleware);
+      if (index !== -1) {
+        this.middleware.splice(index, 1);
+      }
+    } else {
+      // Find and remove by handler and pattern
+      const index = this.middleware.findIndex(m => 
+        m.handler === middleware.handler && 
+        m.pattern === middleware.pattern
+      );
+      if (index !== -1) {
+        this.middleware.splice(index, 1);
+      }
     }
   }
 
@@ -475,10 +506,15 @@ class EvEm implements IEventEmitter {
     let currentEvent = event;
     let currentData = data;
     
-    // Apply each middleware in order
-    for (const middleware of this.middleware) {
+    // Apply each matching middleware in order
+    for (const { pattern, handler } of this.middleware) {
+      // Skip middleware that doesn't match the event pattern
+      if (pattern && !this.isEventMatch(currentEvent, pattern)) {
+        continue;
+      }
+      
       try {
-        const result = middleware(currentEvent, currentData);
+        const result = handler(currentEvent, currentData);
         const processedResult = result instanceof Promise ? await result : result;
         
         // If middleware returns null, cancel the event
@@ -644,15 +680,49 @@ class EvEm implements IEventEmitter {
     // to the publish method where they will be handled according to the error policy
   }
 
-  private isEventMatch(event: string, registeredEvent: string): boolean {
+  /**
+   * Checks if an event name matches a pattern
+   * @param event - The actual event name
+   * @param pattern - The pattern to match against (can include wildcards)
+   * @returns true if the event matches the pattern
+   */
+  private isEventMatch(event: string, pattern: string): boolean {
+    // If pattern is a single wildcard, it matches everything
+    if (pattern === '*') {
+      return true;
+    }
+    
     const eventParts = event.split(".");
-    const registeredParts = registeredEvent.split(".");
-
-    for (let i = 0; i < Math.max(eventParts.length, registeredParts.length); i++) {
-      if (eventParts[i] !== registeredParts[i] && registeredParts[i] !== "*") {
+    const patternParts = pattern.split(".");
+    
+    // If pattern has more parts than the event, it can't match
+    if (patternParts.length > eventParts.length) {
+      return false;
+    }
+    
+    // Special case for wildcard at end (e.g. "user.*")
+    if (patternParts.length < eventParts.length && patternParts[patternParts.length - 1] === '*') {
+      // Check all parts before the last one
+      for (let i = 0; i < patternParts.length - 1; i++) {
+        if (patternParts[i] !== '*' && patternParts[i] !== eventParts[i]) {
+          return false;
+        }
+      }
+      return true;
+    }
+    
+    // If parts length is different but the last part isn't a wildcard, it can't match
+    if (patternParts.length !== eventParts.length) {
+      return false;
+    }
+    
+    // Check each part
+    for (let i = 0; i < patternParts.length; i++) {
+      if (patternParts[i] !== '*' && patternParts[i] !== eventParts[i]) {
         return false;
       }
     }
+    
     return true;
   }
 }
@@ -664,6 +734,7 @@ export {
   type FilterPredicate,
   type MiddlewareFunction,
   type MiddlewareResult,
+  type MiddlewareConfig,
   type SubscriptionOptions,
   type PriorityLevel
 };

@@ -8,6 +8,7 @@ export {
   type FilterPredicate,
   type MiddlewareFunction,
   type MiddlewareResult,
+  type MiddlewareConfig,
   type SubscriptionOptions,
   type PriorityLevel,
   type CancelableEvent,
