@@ -88,6 +88,22 @@ export interface MiddlewareConfig<T = any> {
   handler: MiddlewareFunction<T>;
 }
 
+/**
+ * Information about an event subscription or middleware
+ */
+export interface EventInfo {
+  /** The event name or pattern */
+  event: string;
+  /** Whether this is a middleware entry */
+  isMiddleware: boolean;
+  /** For subscriptions: subscriber ID */
+  id?: string;
+  /** For subscriptions: callback priority */
+  priority?: number;
+  /** For middleware: event pattern it matches */
+  pattern?: string;
+}
+
 interface IEventEmitter {
   subscribe<T = unknown>(event: string, callback: EventCallback<T>, options?: SubscriptionOptions<T>): string;
   subscribeOnce<T = unknown>(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T>, 'once'>): string;
@@ -96,6 +112,7 @@ interface IEventEmitter {
   publish<T = unknown>(event: string, args?: T, options?: PublishOptions | number): Promise<boolean>;
   use<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void;
   removeMiddleware<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void;
+  info(pattern?: string): EventInfo[];
 }
 
 interface CallbackInfo<T = unknown> {
@@ -725,6 +742,57 @@ class EvEm implements IEventEmitter {
     
     return true;
   }
+  
+  /**
+   * Get information about event subscriptions and middleware
+   * @param pattern - Optional pattern to filter events and middleware
+   * @returns Array of EventInfo objects describing subscriptions and middleware
+   */
+  info(pattern?: string): EventInfo[] {
+    const result: EventInfo[] = [];
+    
+    // Add subscriptions matching the pattern
+    for (const [event, callbacks] of this.events) {
+      // If pattern is provided, check if the event matches
+      if (pattern && !this.isEventMatch(event, pattern)) {
+        continue;
+      }
+      
+      // Add each subscription for this event
+      for (const [id, callbackInfo] of callbacks) {
+        result.push({
+          event,
+          isMiddleware: false,
+          id,
+          priority: callbackInfo.priority
+        });
+      }
+    }
+    
+    // Add middleware matching the pattern
+    for (const mw of this.middleware) {
+      const middlewarePattern = mw.pattern || '*';
+      
+      // For middleware, we include it if:
+      // 1. No pattern was provided (showing everything)
+      // 2. The middleware's pattern matches the provided pattern
+      // 3. The middleware has no pattern (matches all events) and a pattern was provided
+      const shouldInclude = 
+        !pattern || 
+        this.isEventMatch(pattern, middlewarePattern) || 
+        middlewarePattern === '*';
+      
+      if (shouldInclude) {
+        result.push({
+          event: middlewarePattern,
+          isMiddleware: true,
+          pattern: mw.pattern
+        });
+      }
+    }
+    
+    return result;
+  }
 }
 
 export { 
@@ -735,6 +803,7 @@ export {
   type MiddlewareFunction,
   type MiddlewareResult,
   type MiddlewareConfig,
+  type EventInfo,
   type SubscriptionOptions,
   type PriorityLevel
 };

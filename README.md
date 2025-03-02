@@ -896,6 +896,49 @@ emitter.subscribe('document.updated', handleDocUpdate, {
 
 Filtering provides a clean and declarative way to handle complex event processing logic without cluttering your event handlers.
 
+## Using the Info Method for Debugging
+
+The `info` method provides a convenient way to inspect the current state of the event emitter, which is useful for debugging and monitoring.
+
+```typescript
+import { EvEm } from "evem";
+const evem = new EvEm();
+
+// Set up some subscriptions and middleware
+evem.subscribe('user.login', () => console.log('User logged in'));
+evem.subscribe('user.logout', () => console.log('User logged out'));
+evem.subscribe('system.error', () => console.log('System error occurred'), { priority: 'high' });
+
+evem.use((event, data) => {
+  console.log(`Global middleware handling: ${event}`);
+  return data;
+});
+
+evem.use({
+  pattern: 'user.*',
+  handler: (event, data) => {
+    console.log(`User event middleware: ${event}`);
+    return data;
+  }
+});
+
+// Get info about all events and middleware
+const allInfo = evem.info();
+console.log('All events and middleware:', allInfo);
+// Shows all subscriptions and middleware
+
+// Get info about only user-related events and middleware
+const userInfo = evem.info('user.*');
+console.log('User-related events and middleware:', userInfo);
+// Shows only user.login, user.logout subscriptions and relevant middleware
+```
+
+This feature is particularly useful for:
+1. Debugging complex event setups
+2. Visualizing the current state of the event system
+3. Checking which middleware will be applied to specific events
+4. Inspecting the priority order of event handlers
+
 For a comprehensive set of examples, check out the [examples](docs/examples.md) page.
 
 ## API at Your Fingertips
@@ -918,6 +961,10 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
   - Can provide a simple function that processes all events
   - Or a config object with `pattern` and `handler` to process only matching events
 - `removeMiddleware(middleware: MiddlewareFunction | MiddlewareConfig)`: Remove a previously registered middleware function
+- `info(pattern?: string): EventInfo[]`: Get information about subscriptions and middleware
+  - Returns an array of EventInfo objects containing details about events and middleware
+  - Can be filtered by providing an optional pattern parameter
+  - Useful for debugging and inspecting the current state of the event emitter
 
 ## Join the Party - Contribute!
 

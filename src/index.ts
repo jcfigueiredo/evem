@@ -9,6 +9,7 @@ export {
   type MiddlewareFunction,
   type MiddlewareResult,
   type MiddlewareConfig,
+  type EventInfo,
   type SubscriptionOptions,
   type PriorityLevel,
   type CancelableEvent,
