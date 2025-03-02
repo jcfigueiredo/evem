@@ -965,6 +965,92 @@ emitter.subscribe('document.upload', (doc) => {
 
 Transformations provide a powerful way to process event data sequentially, letting each subscriber focus on a specific aspect of data enhancement or modification.
 
+### When to Use Transformations vs. Middleware
+
+Both transformations and middleware can modify event data, but they serve different purposes:
+
+**Use Transformations When:**
+- You want the modification to be tied to a specific subscriber
+- You need to modify data between subscribers in a chain
+- You want sequential processing where each step can see previous modifications
+- You're implementing a custom transformation pipeline for a specific event flow
+- You want to maintain a clear data flow within a specific feature
+
+**Use Middleware When:**
+- You need global preprocessing that applies to many events
+- You want to apply a consistent transformation across your entire application
+- You need to potentially change the event name (redirecting events)
+- You want to implement cross-cutting concerns like logging or authentication
+- You need to potentially cancel events before they reach any subscribers
+
+**Examples:**
+
+```typescript
+// MIDDLEWARE: Application-wide timestamp enrichment
+evem.use((event, data) => {
+  // Add timestamp to ALL events
+  return { ...data, timestamp: Date.now() };
+});
+
+// TRANSFORMATION: Feature-specific data normalization
+evem.subscribe('user.input', (data) => {
+  console.log('Processing user input:', data.value);
+}, {
+  transform: (data) => {
+    // Normalize this specific input stream
+    return {
+      ...data,
+      value: data.value.trim().toLowerCase()
+    };
+  }
+});
+```
+
+In general, middleware is better for application-wide concerns while transformations are better for feature-specific data processing.
+
+**Combining Both:**
+
+You can use both approaches together for more complex scenarios:
+
+```typescript
+// Middleware handles global concerns
+evem.use((event, data) => {
+  // Add request context to all events
+  return { ...data, context: getCurrentRequestContext() };
+});
+
+// First subscriber does basic validation and enrichment
+evem.subscribe('order.submit', validateOrder, {
+  priority: 'high',
+  transform: (order) => {
+    // Normalize and enrich order data
+    return {
+      ...order,
+      total: calculateTotal(order.items),
+      normalizedItems: normalizeItems(order.items)
+    };
+  }
+});
+
+// Second subscriber processes the validated and enriched data
+evem.subscribe('order.submit', processOrder, {
+  priority: 'normal',
+  transform: async (order) => {
+    // Add payment processing results
+    const paymentResult = await processPayment(order);
+    return {
+      ...order,
+      payment: paymentResult
+    };
+  }
+});
+
+// Final subscriber receives fully processed data with all transformations
+evem.subscribe('order.submit', finalizeOrder, { priority: 'low' });
+```
+
+This approach gives you flexibility to handle both global and specific concerns in a clean, modular way.
+
 ## Filtering Events
 
 EvEm provides powerful filtering capabilities that let you filter events based on their data. This allows you to subscribe only to the specific events you care about.
