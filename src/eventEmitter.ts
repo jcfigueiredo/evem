@@ -53,12 +53,18 @@ export enum Priority {
   HIGH = 100
 }
 
-type SubscriptionOptions<T = unknown> = {
+/**
+ * Function to transform event data before it's passed to the next subscriber
+ */
+type TransformFunction<T = unknown, R = any> = (data: T) => R | Promise<R>;
+
+type SubscriptionOptions<T = unknown, R = any> = {
   filter?: FilterPredicate<T> | FilterPredicate<T>[];
   debounceTime?: number;
   throttleTime?: number;
   once?: boolean;
   priority?: number | PriorityLevel | Priority; // Can use numbers, strings, or Priority enum
+  transform?: TransformFunction<T, R>; // Transform event data before passing to next subscriber
 };
 
 /**
@@ -105,8 +111,8 @@ export interface EventInfo {
 }
 
 interface IEventEmitter {
-  subscribe<T = unknown>(event: string, callback: EventCallback<T>, options?: SubscriptionOptions<T>): string;
-  subscribeOnce<T = unknown>(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T>, 'once'>): string;
+  subscribe<T = unknown, R = any>(event: string, callback: EventCallback<T>, options?: SubscriptionOptions<T, R>): string;
+  subscribeOnce<T = unknown, R = any>(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T, R>, 'once'>): string;
   unsubscribe<T = unknown>(event: string, callback: EventCallback<T>): void;
   unsubscribeById(id: string): void;
   publish<T = unknown>(event: string, args?: T, options?: PublishOptions | number): Promise<boolean>;
@@ -115,9 +121,10 @@ interface IEventEmitter {
   info(pattern?: string): EventInfo[];
 }
 
-interface CallbackInfo<T = unknown> {
+interface CallbackInfo<T = unknown, R = any> {
   callback: EventCallback<T>;
   priority: number;
+  transform?: TransformFunction<T, R>;
 }
 
 class EvEm implements IEventEmitter {
@@ -191,10 +198,10 @@ class EvEm implements IEventEmitter {
    * @param options - Optional subscription options including filters
    * @returns A subscription ID that can be used to unsubscribe
    */
-  subscribe<T = unknown>(
+  subscribe<T = unknown, R = any>(
     event: string, 
     callback: EventCallback<T>, 
-    options?: SubscriptionOptions<T>
+    options?: SubscriptionOptions<T, R>
   ): string {
     if (!event) throw new Error("Event name cannot be empty.");
 
@@ -436,11 +443,15 @@ class EvEm implements IEventEmitter {
       }
     }
     
-    // Register the final wrapped callback with its priority
+    // Capture the transform function if provided
+    const transform = options?.transform;
+    
+    // Register the final wrapped callback with its priority and transform function
     const callbacks = this.events.get(event) ?? new Map();
     callbacks.set(subscriptionId, {
       callback: finalCallback as EventCallback,
-      priority
+      priority,
+      transform
     });
     this.events.set(event, callbacks);
     return subscriptionId;
@@ -453,10 +464,10 @@ class EvEm implements IEventEmitter {
    * @param options - Optional subscription options including filters, throttle, and debounce (except 'once')
    * @returns A subscription ID that can be used to unsubscribe before the event occurs
    */
-  subscribeOnce<T = unknown>(
+  subscribeOnce<T = unknown, R = any>(
     event: string, 
     callback: EventCallback<T>, 
-    options?: Omit<SubscriptionOptions<T>, 'once'>
+    options?: Omit<SubscriptionOptions<T, R>, 'once'>
   ): string {
     // Simply uses the subscribe method with once:true added to the options
     return this.subscribe(event, callback, { ...options, once: true });
@@ -612,15 +623,16 @@ class EvEm implements IEventEmitter {
       };
     }
 
-    const matchingCallbacks: { callback: EventCallback, priority: number }[] = [];
+    const matchingCallbacks: { callback: EventCallback, priority: number, transform?: TransformFunction }[] = [];
 
-    // First, collect all matching callbacks with their priorities
+    // First, collect all matching callbacks with their priorities and transform functions
     for (const [registeredEvent, callbacks] of this.events) {
       if (this.isEventMatch(event, registeredEvent)) {
         for (const [_, cbInfo] of callbacks) {
           matchingCallbacks.push({
             callback: cbInfo.callback,
-            priority: cbInfo.priority
+            priority: cbInfo.priority,
+            transform: cbInfo.transform
           });
         }
       }
@@ -630,14 +642,17 @@ class EvEm implements IEventEmitter {
     matchingCallbacks.sort((a, b) => b.priority - a.priority);
 
     // Execute callbacks in priority order - we need to handle them sequentially for cancellation
-    for (const { callback } of matchingCallbacks) {
+    let currentEventData = eventData; // Start with the initial event data
+    
+    for (const { callback, transform } of matchingCallbacks) {
       // Skip remaining callbacks if the event was canceled
       if (isCanceled) {
         break;
       }
       
       try {
-        const callbackPromise = callback(eventData);
+        // Call the current callback with the current event data
+        const callbackPromise = callback(currentEventData);
         if (callbackPromise instanceof Promise) {
           // For async callbacks, wait for them to complete before proceeding to the next one
           await this.handlePromiseWithTimeout(callbackPromise, timeout);
@@ -647,8 +662,45 @@ class EvEm implements IEventEmitter {
         if (isCanceled) {
           break;
         }
+        
+        // Apply transformations if this callback has a transform function
+        if (transform) {
+          try {
+            const transformResult = transform(currentEventData);
+            if (transformResult instanceof Promise) {
+              // For async transformations, wait for them to complete
+              currentEventData = await this.handlePromiseWithTimeout(transformResult, timeout);
+            } else {
+              currentEventData = transformResult;
+            }
+          } catch (transformError) {
+            // Handle transform error based on the error policy
+            switch (errorPolicy) {
+              case ErrorPolicy.SILENT:
+                // Silently ignore the error - use original data for next callback
+                break;
+                
+              case ErrorPolicy.CANCEL_ON_ERROR:
+                // Log the error and cancel event propagation
+                console.error(`Error in transform function for "${event}":`, transformError);
+                isCanceled = true;
+                break;
+                
+              case ErrorPolicy.THROW:
+                // Rethrow the error to the caller
+                this.resetRecursionDepth(event);
+                throw transformError;
+                
+              case ErrorPolicy.LOG_AND_CONTINUE:
+              default:
+                // Log the error and continue with the next callback with original data
+                console.error(`Error in transform function for "${event}":`, transformError);
+                break;
+            }
+          }
+        }
       } catch (error) {
-        // Handle error based on the error policy
+        // Handle callback error based on the error policy
         switch (errorPolicy) {
           case ErrorPolicy.SILENT:
             // Silently ignore the error
@@ -800,6 +852,7 @@ export {
   type IEventEmitter, 
   type EventCallback, 
   type FilterPredicate,
+  type TransformFunction,
   type MiddlewareFunction,
   type MiddlewareResult,
   type MiddlewareConfig,

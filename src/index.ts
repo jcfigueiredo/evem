@@ -6,6 +6,7 @@ export {
   type IEventEmitter, 
   type EventCallback,
   type FilterPredicate,
+  type TransformFunction,
   type MiddlewareFunction,
   type MiddlewareResult,
   type MiddlewareConfig,

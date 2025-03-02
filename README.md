@@ -106,6 +106,13 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
   - Filter results by event pattern to focus on specific event types
   - See priorities, subscription IDs, and middleware patterns
   - Useful for debugging complex event setups and visualizing the event system state
+  
+- **🔄 Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers.
+
+  - Add additional data or modify existing data between handlers
+  - Build data processing pipelines with multiple transform steps
+  - Support for both synchronous and asynchronous transformations
+  - Chain with other features like filtering and priorities for complex workflows
 
 ## Getting on Board
 
@@ -853,6 +860,111 @@ evem.subscribe('app.initialize', () => {
 
 The priority system ensures that your most critical handlers execute first, providing predictable ordering when needed.
 
+## Event Transformation
+
+EvEm allows you to transform event data before it's passed to the next subscriber in the chain. This is useful for enriching, modifying, or adapting event data in sequence.
+
+### Basic Transformation
+
+```typescript
+// Create a subscriber that transforms event data
+emitter.subscribe('user.login', (user) => {
+  console.log(`User logged in: ${user.name}`);
+}, {
+  transform: (user) => {
+    // Add timestamp and client info to the event
+    return {
+      ...user,
+      timestamp: Date.now(),
+      clientInfo: detectClientInfo()
+    };
+  }
+});
+
+// Next subscriber receives the transformed data
+emitter.subscribe('user.login', (userData) => {
+  console.log(`Login recorded at ${new Date(userData.timestamp).toISOString()}`);
+  console.log(`Client: ${userData.clientInfo.browser} on ${userData.clientInfo.os}`);
+});
+
+// Publish with original data
+await emitter.publish('user.login', { name: 'Alice', id: 123 });
+```
+
+### Transformation Chain
+
+Multiple subscribers can transform the data in sequence, creating a data processing pipeline:
+
+```typescript
+// First subscriber normalizes the data
+emitter.subscribe('message.received', (msg) => {
+  console.log('Processing message...');
+}, {
+  priority: 'high',
+  transform: (msg) => ({
+    ...msg,
+    content: msg.content.trim().toLowerCase()
+  })
+});
+
+// Second subscriber enriches the data
+emitter.subscribe('message.received', (msg) => {
+  console.log('Enriching message...');
+}, {
+  priority: 'normal',
+  transform: (msg) => ({
+    ...msg,
+    wordCount: msg.content.split(/\s+/).length,
+    sentiment: analyzeSentiment(msg.content)
+  })
+});
+
+// Final subscriber receives fully transformed data
+emitter.subscribe('message.received', (msg) => {
+  console.log(`Message: "${msg.content}"`);
+  console.log(`Word count: ${msg.wordCount}`);
+  console.log(`Sentiment: ${msg.sentiment}`);
+}, { priority: 'low' });
+
+// Original data is simple
+await emitter.publish('message.received', { 
+  content: '  Hello World!  ',
+  sender: 'user1'
+});
+```
+
+### Async Transformations
+
+Transformations can be asynchronous, automatically waiting for completion before proceeding:
+
+```typescript
+emitter.subscribe('document.upload', (doc) => {
+  console.log('Document received');
+}, {
+  transform: async (doc) => {
+    // Perform async enrichment
+    const metadata = await extractMetadata(doc.content);
+    const tags = await autoTagDocument(doc.content);
+    
+    return {
+      ...doc,
+      metadata,
+      tags,
+      processedAt: new Date()
+    };
+  }
+});
+
+// Next subscriber gets the enriched document
+emitter.subscribe('document.upload', (doc) => {
+  console.log(`Document processed at ${doc.processedAt}`);
+  console.log(`Tags: ${doc.tags.join(', ')}`);
+  console.log(`Author: ${doc.metadata.author}`);
+});
+```
+
+Transformations provide a powerful way to process event data sequentially, letting each subscriber focus on a specific aspect of data enhancement or modification.
+
 ## Filtering Events
 
 EvEm provides powerful filtering capabilities that let you filter events based on their data. This allows you to subscribe only to the specific events you care about.
@@ -959,6 +1071,7 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
   - `options.throttleTime`: Number of milliseconds to throttle the event (limit to at most one execution per time window)
   - `options.once`: When true, automatically unsubscribes after the callback is invoked for the first time
   - `options.priority`: Priority level ('high', 'normal', 'low'), number, or Priority enum value (Priority.HIGH) to control execution order (higher values execute first)
+  - `options.transform`: A function that transforms the event data before it's passed to the next subscriber
 - `subscribeOnce(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T>, 'once'>): string`
 - `unsubscribe(event: string, callback: EventCallback<T>): void`
 - `unsubscribeById(id: string): void`
@@ -1081,6 +1194,6 @@ These are planned features for future releases:
 
 4. **Event Schema Validation**: Add optional runtime validation of event data against schemas.
 
-5. **Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.
+5. ~~**Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.~~ ✅ Implemented in latest version!
 
 6. **Performance Metrics/Telemetry**: Built-in instrumentation for measuring event processing performance.
