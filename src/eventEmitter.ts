@@ -2,12 +2,26 @@ import { v4 as uuid } from "uuid";
 type EventCallback<T = unknown> = (args: T) => void | Promise<void>;
 type FilterPredicate<T = unknown> = (args: T) => boolean | Promise<boolean>;
 type PriorityLevel = 'high' | 'normal' | 'low';
+
+/**
+ * Enum defining standard priority levels.
+ * Can be used for better type safety when specifying priorities.
+ */
+export enum Priority {
+  /** Low priority handlers execute after normal and high priority handlers (-100) */
+  LOW = -100,
+  /** Default priority level (0) */
+  NORMAL = 0,
+  /** High priority handlers execute before normal and high priority handlers (100) */
+  HIGH = 100
+}
+
 type SubscriptionOptions<T = unknown> = {
   filter?: FilterPredicate<T> | FilterPredicate<T>[];
   debounceTime?: number;
   throttleTime?: number;
   once?: boolean;
-  priority?: number | PriorityLevel; // Higher numbers or 'high' = higher priority
+  priority?: number | PriorityLevel | Priority; // Can use numbers, strings, or Priority enum
 };
 
 interface IEventEmitter {
@@ -438,7 +452,7 @@ class EvEm implements IEventEmitter {
 }
 
 export { 
-  EvEm, 
+  EvEm,
   type IEventEmitter, 
   type EventCallback, 
   type FilterPredicate,
