@@ -9,7 +9,7 @@ describe('EvEm - Publishing Tests', () => {
   });
 
   test('should handle publishing an event with no subscribers', async () => {
-    await expect(emitter.publish('no.subscribers', { data: 'Test' })).resolves.toBeUndefined();
+    await expect(emitter.publish('no.subscribers', { data: 'Test' })).resolves.toBe(true);
   });
 
   test('should throw error when publishing with an empty event name', async () => {

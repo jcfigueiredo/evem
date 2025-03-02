@@ -131,4 +131,104 @@ try {
 }
 ```
 
+## Cancelable Events
+
+### Basic Cancelable Event
+
+```typescript
+// Subscribe with a handler that might cancel the event
+evem.subscribe("payment.process", (event) => {
+  // Check if there are sufficient funds
+  if (event.amount > event.availableBalance) {
+    console.log("Insufficient funds, canceling payment");
+    event.cancel();
+    return;
+  }
+  console.log("Payment approved");
+});
+
+// Another handler that will only run if the payment wasn't canceled
+evem.subscribe("payment.process", (event) => {
+  console.log(`Processing payment of $${event.amount}`);
+  // Process the payment...
+});
+
+// Publish a cancelable event
+const paymentData = { amount: 100, availableBalance: 50 };
+const result = await evem.publish("payment.process", paymentData, { cancelable: true });
+
+if (!result) {
+  console.log("Payment was canceled");
+} else {
+  console.log("Payment was processed successfully");
+}
+```
+
+### Multi-step Validation with Cancelable Events
+
+```typescript
+// Step 1: Data validation
+evem.subscribe("user.register", (event) => {
+  if (!event.email || !event.password) {
+    console.log("Missing required fields");
+    event.cancel();
+    return;
+  }
+}, { priority: 'high' });
+
+// Step 2: Business rules
+evem.subscribe("user.register", (event) => {
+  if (event.password.length < 8) {
+    console.log("Password too short");
+    event.cancel();
+    return;
+  }
+}, { priority: 'normal' });
+
+// Step 3: The actual registration process
+evem.subscribe("user.register", (event) => {
+  console.log("Registering user:", event.email);
+  // Save user to database...
+}, { priority: 'low' });
+
+// Publish with cancelable option
+const userData = { email: "user@example.com", password: "short" };
+const registrationComplete = await evem.publish("user.register", userData, { cancelable: true });
+
+console.log(registrationComplete ? "User registered" : "Registration canceled");
+```
+
+### Timeout with Cancelable Events
+
+```typescript
+// This example shows using both timeout and cancelable options
+evem.subscribe("api.request", async (event) => {
+  try {
+    const response = await fetch(event.url);
+    if (!response.ok) {
+      console.log(`API request failed with status ${response.status}`);
+      event.cancel();
+      return;
+    }
+    event.data = await response.json();
+  } catch (error) {
+    console.error("Error fetching API:", error);
+    event.cancel();
+  }
+});
+
+// Process the API response if the request was successful
+evem.subscribe("api.request", (event) => {
+  console.log("Processing API response:", event.data);
+});
+
+// Publish with both cancelable and timeout options
+const apiResult = await evem.publish("api.request", 
+  { url: "https://api.example.com/data" }, 
+  { cancelable: true, timeout: 5000 }
+);
+
+console.log(apiResult ? "API request succeeded" : "API request failed or was canceled");
+```
+
 These examples cover all the major features of the EvEm library, demonstrating its versatility and ease of use in different scenarios.

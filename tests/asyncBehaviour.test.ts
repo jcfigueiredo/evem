@@ -24,7 +24,7 @@ describe("EvEm - Asynchronous Behavior Tests", () => {
     expect(endTime - startTime).toBeGreaterThanOrEqual(200);
   });
 
-  test("should maintain order of execution for mixed synchronous and asynchronous callbacks", async () => {
+  test("should execute callbacks sequentially with cancelable events support", async () => {
     const callOrder: string[] = [];
 
     const syncCallback = vi.fn<void[]>(() => callOrder.push("sync"));
@@ -39,10 +39,11 @@ describe("EvEm - Asynchronous Behavior Tests", () => {
 
     await emitter.publish("mixed.event");
 
+    // This still works the same way since the sync callback finishes before the async one starts
     expect(callOrder).toEqual(["sync", "before async", "after async"]);
   });
 
-  test("should execute synchronous callbacks before the continuation of asynchronous callbacks", async () => {
+  test("should now execute callbacks sequentially with cancelable events support", async () => {
     const callOrder: string[] = [];
 
     const syncCallback1 = vi.fn<void[]>(() => {
@@ -65,6 +66,8 @@ describe("EvEm - Asynchronous Behavior Tests", () => {
 
     await emitter.publish("mixed.event");
 
-    expect(callOrder).toEqual(["sync1", "before async", "sync2", "after async"]);
+    // Now with sequential execution for cancelable events support, 
+    // each callback completes before the next one starts
+    expect(callOrder).toEqual(["sync1", "before async", "after async", "sync2"]);
   });
 });

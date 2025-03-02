@@ -24,9 +24,10 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
 
 - **🥇 Event Priority**: Set priority levels for handlers to control execution order.
 
-  - Use `subscribe(event, callback, { priority: 'high' | 'normal' | 'low' | number })` 
+  - Use `subscribe(event, callback, { priority: 'high' | 'normal' | 'low' | number | Priority.HIGH })` 
   - Higher priority handlers execute before lower priority ones
   - Numeric priorities allow for fine-grained control (higher numbers = higher priority)
+  - Built-in Priority enum provides better type safety (Priority.HIGH, Priority.NORMAL, Priority.LOW)
 
 - **📚 Namespace Support**: Organize events using a namespace pattern.
 
@@ -55,6 +56,13 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
   - Set a throttle time to ensure callbacks are executed at most once per time window
   - First event in a throttle window is processed immediately, subsequent events are ignored until the window expires
   - Perfect for rate-limiting high-frequency events like scrolling, mouse movements, or API calls
+
+- **🛑 Cancelable Events**: Allow events to be canceled by subscribers to prevent further processing.
+
+  - Publish events with the `cancelable: true` option 
+  - Event handlers can call `event.cancel()` to stop propagation to remaining handlers
+  - Returns a boolean indicating whether the event completed (true) or was canceled (false)
+  - Useful for validation chains, permission checks, or early termination of event processing
 
 - **⏱️ Timeout Management for Asynchronous Callbacks**: Ensures that asynchronous callbacks do not hang indefinitely.
 
@@ -175,6 +183,28 @@ evem.subscribe("app.startup", () => {
 
 // The handlers will execute in order of priority: high, normal, low
 await evem.publish("app.startup");
+
+// Using cancelable events
+evem.subscribe("form.submit", (event) => {
+  console.log("Validating form...");
+  if (!event.data.isValid) {
+    console.log("Form validation failed, canceling submission.");
+    event.cancel(); // Stop further processing
+    return;
+  }
+  console.log("Form validation passed.");
+});
+
+evem.subscribe("form.submit", (event) => {
+  console.log("Submitting form to server...");
+  // This won't execute if the event is canceled by the first handler
+});
+
+// Publish a cancelable event
+const formData = { isValid: false };
+const eventCompleted = await evem.publish("form.submit", formData, { cancelable: true });
+
+console.log(eventCompleted ? "Form submitted successfully" : "Form submission was canceled");
 ```
 
 ## Managing Timeouts in Callbacks
@@ -328,6 +358,73 @@ This combination is particularly useful for handling scenarios like:
 - Infinite scrolling - load immediately on first scroll, then wait for scrolling to stop
 - Progress updates - show first update right away, then only show updates after activity pauses
 
+## Using Cancelable Events
+
+EvEm provides support for cancelable events, allowing event handlers to stop the propagation of events to other handlers.
+
+### Publishing Cancelable Events
+
+```typescript
+// Publish an event with the cancelable option
+const result = await evem.publish('user.login', userData, { cancelable: true });
+
+// Check if the event completed or was canceled
+if (!result) {
+  console.log('Login was canceled by one of the handlers');
+}
+```
+
+### Canceling Events in Handlers
+
+Event handlers receive an object with a `cancel()` method that can be called to prevent further handlers from executing:
+
+```typescript
+// Permission check handler
+evem.subscribe('user.delete', (event) => {
+  if (event.user.role !== 'admin') {
+    console.log('Permission denied: Only admins can delete users');
+    event.cancel(); // Stop propagation
+    return;
+  }
+  console.log('Permission granted');
+});
+
+// Action handler - will only execute if the event wasn't canceled
+evem.subscribe('user.delete', (event) => {
+  console.log('Deleting user:', event.user.id);
+  deleteUser(event.user.id);
+});
+```
+
+### Use Cases for Cancelable Events
+
+Cancelable events are ideal for:
+
+- **Validation Chains**: Cancel if data fails validation
+- **Permission Systems**: Stop operations if user lacks permissions
+- **Multi-step Processes**: Halt a process if any step fails
+- **Confirmation Flows**: Allow user to reject an action
+- **Interceptors**: Let monitoring systems block actions under certain conditions
+
+### Combining with Priority
+
+Cancelable events work well with priorities to ensure critical checks happen before resource-intensive operations:
+
+```typescript
+// High priority security check runs first
+evem.subscribe('document.save', (event) => {
+  if (!isAuthenticated()) {
+    event.cancel();
+    return;
+  }
+}, { priority: 'high' });
+
+// Normal priority business logic only runs if security check passes
+evem.subscribe('document.save', (event) => {
+  // Process document
+}, { priority: 'normal' });
+```
+
 ## Using Once-Only Events
 
 EvEm provides once-only events that automatically unsubscribe after being triggered once, perfect for one-time operations.
@@ -385,6 +482,30 @@ evem.subscribe('system.startup', () => {
 
 // Publish the event
 await evem.publish('system.startup');
+```
+
+### Using the Priority Enum
+
+For better type safety and code readability, you can use the built-in Priority enum:
+
+```typescript
+import { EvEm, Priority } from 'evem';
+const evem = new EvEm();
+
+// Subscribe with Priority enum values
+evem.subscribe('app.init', () => {
+  console.log('Load core services');
+}, { priority: Priority.HIGH });  // Same as 100
+
+evem.subscribe('app.init', () => {
+  console.log('Initialize UI components');
+}, { priority: Priority.NORMAL }); // Same as 0
+
+evem.subscribe('app.init', () => {
+  console.log('Start analytics');
+}, { priority: Priority.LOW });  // Same as -100
+
+await evem.publish('app.init');
 ```
 
 ### Fine-Grained Control with Numeric Priorities
@@ -498,11 +619,14 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
   - `options.debounceTime`: Number of milliseconds to debounce the event (only process the last event within this time window)
   - `options.throttleTime`: Number of milliseconds to throttle the event (limit to at most one execution per time window)
   - `options.once`: When true, automatically unsubscribes after the callback is invoked for the first time
-  - `options.priority`: Priority level ('high', 'normal', 'low') or number to control execution order (higher values execute first)
+  - `options.priority`: Priority level ('high', 'normal', 'low'), number, or Priority enum value (Priority.HIGH) to control execution order (higher values execute first)
 - `subscribeOnce(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T>, 'once'>): string`
 - `unsubscribe(event: string, callback: EventCallback<T>): void`
 - `unsubscribeById(id: string): void`
-- `publish(event: string, args?: T, timeout?: number): Promise<void>`
+- `publish(event: string, args?: T, options?: PublishOptions | number): Promise<boolean>`
+  - Returns `true` if the event completed without being canceled, `false` if it was canceled
+  - `options.timeout`: Number of milliseconds before timing out async callbacks (default: 5000)
+  - `options.cancelable`: Whether the event can be canceled by handlers (default: false)
 
 ## Join the Party - Contribute!
 
@@ -613,7 +737,7 @@ These are planned features for future releases:
 
 6. **Event Schema Validation**: Add optional runtime validation of event data against schemas.
 
-7. **Cancelable Events**: Allow events to be canceled by subscribers to prevent further processing.
+✅ ~~7. **Cancelable Events**: Allow events to be canceled by subscribers to prevent further processing.~~
 
 8. **Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.
 

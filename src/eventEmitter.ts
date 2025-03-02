@@ -1,7 +1,28 @@
 import { v4 as uuid } from "uuid";
+
+/**
+ * Interface for cancelable events that can be canceled by subscribers
+ */
+export interface CancelableEvent {
+  /** Flag to indicate whether the event is canceled */
+  canceled: boolean;
+  /** Method to cancel the event */
+  cancel(): void;
+}
+
 type EventCallback<T = unknown> = (args: T) => void | Promise<void>;
 type FilterPredicate<T = unknown> = (args: T) => boolean | Promise<boolean>;
 type PriorityLevel = 'high' | 'normal' | 'low';
+
+/**
+ * Options for publishing an event
+ */
+export interface PublishOptions {
+  /** Optional timeout in milliseconds (default: 5000) */
+  timeout?: number;
+  /** Whether the event can be canceled by subscribers (default: false) */
+  cancelable?: boolean;
+}
 
 /**
  * Enum defining standard priority levels.
@@ -29,7 +50,7 @@ interface IEventEmitter {
   subscribeOnce<T = unknown>(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T>, 'once'>): string;
   unsubscribe<T = unknown>(event: string, callback: EventCallback<T>): void;
   unsubscribeById(id: string): void;
-  publish<T = unknown>(event: string, args?: T, timeout?: number): Promise<void>;
+  publish<T = unknown>(event: string, args?: T, options?: PublishOptions | number): Promise<boolean>;
 }
 
 interface CallbackInfo<T = unknown> {
@@ -389,12 +410,43 @@ class EvEm implements IEventEmitter {
     }
   }
 
-  async publish<T = unknown>(event: string, args?: T, timeout: number = 5000): Promise<void> {
+  async publish<T = unknown>(
+    event: string, 
+    args?: T, 
+    options?: PublishOptions | number
+  ): Promise<boolean> {
     if (!event) {
       return Promise.reject(new Error("Event name cannot be empty."));
     }
 
+    // Handle different forms of options
+    let timeout = 5000;
+    let cancelable = false;
+    
+    if (typeof options === 'number') {
+      timeout = options;
+    } else if (options) {
+      timeout = options.timeout ?? 5000;
+      cancelable = options.cancelable ?? false;
+    }
+
     this.incrementRecursionDepth(event);
+
+    // Create a cancelable event wrapper if needed
+    let eventData: any;
+    let isCanceled = false;
+    
+    if (cancelable) {
+      // Create a wrapper that includes the cancel functionality
+      eventData = {
+        ...(args ?? {}),
+        cancel: function() {
+          isCanceled = true;
+        }
+      };
+    } else {
+      eventData = args ?? ({} as T);
+    }
 
     const asyncCallbacks: Promise<void>[] = [];
     const matchingCallbacks: { callback: EventCallback, priority: number }[] = [];
@@ -414,16 +466,33 @@ class EvEm implements IEventEmitter {
     // Sort callbacks by priority (highest first)
     matchingCallbacks.sort((a, b) => b.priority - a.priority);
 
-    // Execute callbacks in priority order
+    // Execute callbacks in priority order - we need to handle them sequentially for cancellation
     for (const { callback } of matchingCallbacks) {
-      const callbackPromise = callback(args ?? ({} as T));
-      const promise = callbackPromise instanceof Promise ? callbackPromise : Promise.resolve();
-      asyncCallbacks.push(this.handlePromiseWithTimeout(promise, timeout));
+      // Skip remaining callbacks if the event was canceled
+      if (isCanceled) {
+        break;
+      }
+      
+      try {
+        const callbackPromise = callback(eventData);
+        if (callbackPromise instanceof Promise) {
+          // For async callbacks, wait for them to complete before proceeding to the next one
+          await this.handlePromiseWithTimeout(callbackPromise, timeout);
+        }
+        
+        // Check if the event was canceled by the callback
+        if (isCanceled) {
+          break;
+        }
+      } catch (error) {
+        console.error(`Error in event handler for "${event}":`, error);
+      }
     }
 
-    await Promise.all(asyncCallbacks);
-
     this.resetRecursionDepth(event);
+    
+    // Return whether the event completed without being canceled
+    return !isCanceled;
   }
 
   private async handlePromiseWithTimeout<T>(promise: Promise<T>, timeout: number): Promise<T | undefined> {

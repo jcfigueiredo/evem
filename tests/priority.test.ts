@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
-import { EvEm } from '../src';
+import { EvEm, Priority } from '../src';
 
 describe('Event Priority Tests', () => {
   let emitter: EvEm;
@@ -202,5 +202,69 @@ describe('Event Priority Tests', () => {
     
     // Despite different execution times, high priority should still be first in the results
     expect(executed).toEqual(['high-async', 'low-async']);
+  });
+
+  test('should support Priority enum values', async () => {
+    const executed: string[] = [];
+    
+    // Subscribe with Priority enum values
+    emitter.subscribe('enum.priority', () => {
+      executed.push('low');
+    }, { priority: Priority.LOW });
+    
+    emitter.subscribe('enum.priority', () => {
+      executed.push('normal');
+    }, { priority: Priority.NORMAL });
+    
+    emitter.subscribe('enum.priority', () => {
+      executed.push('high');
+    }, { priority: Priority.HIGH });
+    
+    // Publish the event
+    await emitter.publish('enum.priority');
+    
+    // Check execution order - should follow enum values
+    expect(executed).toEqual(['high', 'normal', 'low']);
+  });
+  
+  test('should allow mixing Priority enum with string and numeric values', async () => {
+    const executed: string[] = [];
+    
+    // Mix of different priority specifications
+    emitter.subscribe('mixed.priority', () => {
+      executed.push('enum-high');
+    }, { priority: Priority.HIGH });
+    
+    emitter.subscribe('mixed.priority', () => {
+      executed.push('string-high');
+    }, { priority: 'high' });
+    
+    emitter.subscribe('mixed.priority', () => {
+      executed.push('numeric-50');
+    }, { priority: 50 });
+    
+    emitter.subscribe('mixed.priority', () => {
+      executed.push('string-low');
+    }, { priority: 'low' });
+    
+    emitter.subscribe('mixed.priority', () => {
+      executed.push('enum-low');
+    }, { priority: Priority.LOW });
+    
+    // Publish the event
+    await emitter.publish('mixed.priority');
+    
+    // Both HIGH values should come first (order between them doesn't matter)
+    // Then the numeric 50
+    // Then both LOW values at the end (order between them doesn't matter)
+    const highValues = executed.slice(0, 2);
+    expect(highValues).toContain('enum-high');
+    expect(highValues).toContain('string-high');
+    
+    expect(executed[2]).toBe('numeric-50');
+    
+    const lowValues = executed.slice(3);
+    expect(lowValues).toContain('string-low');
+    expect(lowValues).toContain('enum-low');
   });
 });

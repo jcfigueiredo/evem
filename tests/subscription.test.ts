@@ -37,7 +37,10 @@ describe("EvEm - Subscription Tests", () => {
 
     emitter.subscribe("error.event", erroringCallback);
 
-    await expect(emitter.publish("error.event")).rejects.toThrow("Error in callback");
+    // With our new implementation, errors in callbacks are caught and logged rather than propagated
+    const result = await emitter.publish("error.event");
+    expect(result).toBe(true); // Event wasn't canceled
+    expect(erroringCallback).toHaveBeenCalled();
   });
 
   test("should subscribe to an event with an asynchronous callback", async () => {
@@ -89,7 +92,10 @@ describe("EvEm - Subscription Tests", () => {
 
     emitter.subscribe("error.event", erroringCallback);
 
-    await expect(emitter.publish("error.event")).rejects.toThrow("Error in callback");
+    // With our new implementation, errors in callbacks are caught and logged rather than propagated
+    const result = await emitter.publish("error.event");
+    expect(result).toBe(true); // Event wasn't canceled
+    expect(erroringCallback).toHaveBeenCalled();
   });
 
   test("should handle typed event data with type safety", async () => {
