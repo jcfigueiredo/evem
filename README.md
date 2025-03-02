@@ -335,6 +335,61 @@ Different error policies are useful in different scenarios:
 - **CANCEL_ON_ERROR**: Good for validation chains where any failure should halt the process
 - **THROW**: Useful when the caller needs to handle errors from event handlers directly
 
+## Error Policy Configuration
+
+EvEm allows you to configure how errors in event callbacks are handled through different error policies.
+
+### Using Different Error Policies
+
+```typescript
+import { EvEm, ErrorPolicy } from "evem";
+const evem = new EvEm();
+
+// Register handlers
+evem.subscribe('process.data', data => {
+  // This handler might throw
+  if (!data.isValid) {
+    throw new Error('Invalid data format');
+  }
+  console.log('Processing data:', data);
+});
+
+// Default behavior: Log errors and continue
+await evem.publish('process.data', { isValid: false });
+// Error is logged to console, but execution continues
+
+// Silent policy: Ignore errors completely
+await evem.publish('process.data', { isValid: false }, {
+  errorPolicy: ErrorPolicy.SILENT
+});
+// No error logging, silently continues
+
+// Cancel policy: Stop event propagation when an error occurs
+await evem.publish('process.data', { isValid: false }, {
+  errorPolicy: ErrorPolicy.CANCEL_ON_ERROR
+});
+// Error is logged, but propagation stops and returns false
+
+// Throw policy: Rethrow the error to the caller
+try {
+  await evem.publish('process.data', { isValid: false }, {
+    errorPolicy: ErrorPolicy.THROW
+  });
+} catch (error) {
+  console.error('Caught error from event handler:', error);
+  // Handle the error at the caller level
+}
+```
+
+### Use Cases for Different Error Policies
+
+Different error policies are useful in different scenarios:
+
+- **LOG_AND_CONTINUE**: Good for non-critical handlers where failures should be noted but not impact other handlers
+- **SILENT**: Useful for optional features where errors shouldn't clutter logs
+- **CANCEL_ON_ERROR**: Good for validation chains where any failure should halt the process
+- **THROW**: Useful when the caller needs to handle errors from event handlers directly
+
 ## Throttling Events
 
 EvEm provides built-in throttling, which is useful when you need to limit the rate at which events are processed.
@@ -690,6 +745,7 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
   - `options.timeout`: Number of milliseconds before timing out async callbacks (default: 5000)
   - `options.cancelable`: Whether the event can be canceled by handlers (default: false)
   - `options.errorPolicy`: How to handle errors in callbacks (default: ErrorPolicy.LOG_AND_CONTINUE)
+  - `options.errorPolicy`: How to handle errors in callbacks (default: ErrorPolicy.LOG_AND_CONTINUE)
 
 ## Join the Party - Contribute!
 
@@ -792,14 +848,12 @@ These are planned features for future releases:
 
 2. **Middleware Support**: Allow registration of middleware functions that can intercept, modify, or cancel all events before they reach subscribers.
 
-✅ **Error Policies**: Add configurable policies for how errors in callbacks are handled (e.g., fail silently, cancel event propagation, etc.).
+3. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
 
-4. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
+4. **Memory Leak Detection**: Add optional warnings when subscriptions might be leaking (e.g., too many subscriptions to the same event).
 
-5. **Memory Leak Detection**: Add optional warnings when subscriptions might be leaking (e.g., too many subscriptions to the same event).
+5. **Event Schema Validation**: Add optional runtime validation of event data against schemas.
 
-6. **Event Schema Validation**: Add optional runtime validation of event data against schemas.
+6. **Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.
 
-7. **Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.
-
-8. **Performance Metrics/Telemetry**: Built-in instrumentation for measuring event processing performance.
+7. **Performance Metrics/Telemetry**: Built-in instrumentation for measuring event processing performance.

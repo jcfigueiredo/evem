@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "test": "vitest",
+    "test:nowatch": "vitest --watch=false",
     "test:coverage": "vitest --coverage"
   },
   "devDependencies": {
