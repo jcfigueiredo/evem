@@ -1075,14 +1075,12 @@ These are planned features for future releases:
 
 1. **Event History/Replay**: Keep a history of recent events and allow new subscribers to optionally receive the most recent event immediately upon subscription.
 
-✅ **Middleware Support**: Allow registration of middleware functions that can intercept, modify, or cancel events before they reach subscribers, with support for event pattern matching.
+2. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
 
-3. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
+3. **Memory Leak Detection**: Add optional warnings when subscriptions might be leaking (e.g., too many subscriptions to the same event).
 
-4. **Memory Leak Detection**: Add optional warnings when subscriptions might be leaking (e.g., too many subscriptions to the same event).
+4. **Event Schema Validation**: Add optional runtime validation of event data against schemas.
 
-5. **Event Schema Validation**: Add optional runtime validation of event data against schemas.
+5. **Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.
 
-6. **Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.
-
-7. **Performance Metrics/Telemetry**: Built-in instrumentation for measuring event processing performance.
+6. **Performance Metrics/Telemetry**: Built-in instrumentation for measuring event processing performance.
