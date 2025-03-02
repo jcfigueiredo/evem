@@ -63,6 +63,13 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
   - Event handlers can call `event.cancel()` to stop propagation to remaining handlers
   - Returns a boolean indicating whether the event completed (true) or was canceled (false)
   - Useful for validation chains, permission checks, or early termination of event processing
+  
+- **⚠️ Error Policies**: Configure how errors in event callbacks are handled.
+
+  - Set different policies when publishing events using `errorPolicy: ErrorPolicy.OPTION`
+  - Supports four policy modes: LOG_AND_CONTINUE (default), SILENT, CANCEL_ON_ERROR, and THROW
+  - Control whether errors are logged, ignored, stop event propagation, or are rethrown
+  - Provides flexibility in error handling strategies for different use cases
 
 - **⏱️ Timeout Management for Asynchronous Callbacks**: Ensures that asynchronous callbacks do not hang indefinitely.
 
@@ -272,6 +279,61 @@ evem.subscribe("system.*.error", error => {
 ```
 
 These wildcard capabilities make EvEm an ideal choice for applications requiring complex event handling strategies.
+
+## Error Policy Configuration
+
+EvEm allows you to configure how errors in event callbacks are handled through different error policies.
+
+### Using Different Error Policies
+
+```typescript
+import { EvEm, ErrorPolicy } from "evem";
+const evem = new EvEm();
+
+// Register handlers
+evem.subscribe('process.data', data => {
+  // This handler might throw
+  if (!data.isValid) {
+    throw new Error('Invalid data format');
+  }
+  console.log('Processing data:', data);
+});
+
+// Default behavior: Log errors and continue
+await evem.publish('process.data', { isValid: false });
+// Error is logged to console, but execution continues
+
+// Silent policy: Ignore errors completely
+await evem.publish('process.data', { isValid: false }, {
+  errorPolicy: ErrorPolicy.SILENT
+});
+// No error logging, silently continues
+
+// Cancel policy: Stop event propagation when an error occurs
+await evem.publish('process.data', { isValid: false }, {
+  errorPolicy: ErrorPolicy.CANCEL_ON_ERROR
+});
+// Error is logged, but propagation stops and returns false
+
+// Throw policy: Rethrow the error to the caller
+try {
+  await evem.publish('process.data', { isValid: false }, {
+    errorPolicy: ErrorPolicy.THROW
+  });
+} catch (error) {
+  console.error('Caught error from event handler:', error);
+  // Handle the error at the caller level
+}
+```
+
+### Use Cases for Different Error Policies
+
+Different error policies are useful in different scenarios:
+
+- **LOG_AND_CONTINUE**: Good for non-critical handlers where failures should be noted but not impact other handlers
+- **SILENT**: Useful for optional features where errors shouldn't clutter logs
+- **CANCEL_ON_ERROR**: Good for validation chains where any failure should halt the process
+- **THROW**: Useful when the caller needs to handle errors from event handlers directly
 
 ## Throttling Events
 
@@ -627,6 +689,7 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
   - Returns `true` if the event completed without being canceled, `false` if it was canceled
   - `options.timeout`: Number of milliseconds before timing out async callbacks (default: 5000)
   - `options.cancelable`: Whether the event can be canceled by handlers (default: false)
+  - `options.errorPolicy`: How to handle errors in callbacks (default: ErrorPolicy.LOG_AND_CONTINUE)
 
 ## Join the Party - Contribute!
 
@@ -729,7 +792,7 @@ These are planned features for future releases:
 
 2. **Middleware Support**: Allow registration of middleware functions that can intercept, modify, or cancel all events before they reach subscribers.
 
-3. **Error Policies**: Add configurable policies for how errors in callbacks are handled (e.g., fail silently, cancel event propagation, etc.).
+✅ **Error Policies**: Add configurable policies for how errors in callbacks are handled (e.g., fail silently, cancel event propagation, etc.).
 
 4. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
 
@@ -737,8 +800,6 @@ These are planned features for future releases:
 
 6. **Event Schema Validation**: Add optional runtime validation of event data against schemas.
 
-✅ ~~7. **Cancelable Events**: Allow events to be canceled by subscribers to prevent further processing.~~
+7. **Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.
 
-8. **Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.
-
-9. **Performance Metrics/Telemetry**: Built-in instrumentation for measuring event processing performance.
+8. **Performance Metrics/Telemetry**: Built-in instrumentation for measuring event processing performance.

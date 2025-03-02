@@ -2,6 +2,7 @@
 export { 
   EvEm, 
   Priority,
+  ErrorPolicy,
   type IEventEmitter, 
   type EventCallback,
   type FilterPredicate,

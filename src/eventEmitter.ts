@@ -15,6 +15,20 @@ type FilterPredicate<T = unknown> = (args: T) => boolean | Promise<boolean>;
 type PriorityLevel = 'high' | 'normal' | 'low';
 
 /**
+ * Defines how errors in event callbacks are handled
+ */
+export enum ErrorPolicy {
+  /** Log the error and continue with the next callback (default) */
+  LOG_AND_CONTINUE = 'log-and-continue',
+  /** Silently ignore errors and continue with the next callback */
+  SILENT = 'silent',
+  /** Stop event propagation when an error occurs */
+  CANCEL_ON_ERROR = 'cancel-on-error',
+  /** Rethrow the error, stopping event propagation and passing the error to the caller */
+  THROW = 'throw'
+}
+
+/**
  * Options for publishing an event
  */
 export interface PublishOptions {
@@ -22,6 +36,8 @@ export interface PublishOptions {
   timeout?: number;
   /** Whether the event can be canceled by subscribers (default: false) */
   cancelable?: boolean;
+  /** How errors in callbacks should be handled (default: ErrorPolicy.LOG_AND_CONTINUE) */
+  errorPolicy?: ErrorPolicy;
 }
 
 /**
@@ -422,12 +438,14 @@ class EvEm implements IEventEmitter {
     // Handle different forms of options
     let timeout = 5000;
     let cancelable = false;
+    let errorPolicy = ErrorPolicy.LOG_AND_CONTINUE;
     
     if (typeof options === 'number') {
       timeout = options;
     } else if (options) {
       timeout = options.timeout ?? 5000;
       cancelable = options.cancelable ?? false;
+      errorPolicy = options.errorPolicy ?? ErrorPolicy.LOG_AND_CONTINUE;
     }
 
     this.incrementRecursionDepth(event);
@@ -485,7 +503,29 @@ class EvEm implements IEventEmitter {
           break;
         }
       } catch (error) {
-        console.error(`Error in event handler for "${event}":`, error);
+        // Handle error based on the error policy
+        switch (errorPolicy) {
+          case ErrorPolicy.SILENT:
+            // Silently ignore the error
+            break;
+            
+          case ErrorPolicy.CANCEL_ON_ERROR:
+            // Log the error and cancel event propagation
+            console.error(`Error in event handler for "${event}":`, error);
+            isCanceled = true;
+            break;
+            
+          case ErrorPolicy.THROW:
+            // Rethrow the error to the caller
+            this.resetRecursionDepth(event);
+            throw error;
+            
+          case ErrorPolicy.LOG_AND_CONTINUE:
+          default:
+            // Log the error and continue with the next callback (default behavior)
+            console.error(`Error in event handler for "${event}":`, error);
+            break;
+        }
       }
     }
 
@@ -502,9 +542,14 @@ class EvEm implements IEventEmitter {
       timeoutHandle = setTimeout(() => resolve(undefined), timeout);
     });
 
-    return Promise.race([promise, timeoutPromise]).finally(() => {
+    try {
+      // Race between the promise and the timeout
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
       clearTimeout(timeoutHandle);
-    });
+    }
+    // Note: We don't catch errors here because we want them to propagate up
+    // to the publish method where they will be handled according to the error policy
   }
 
   private isEventMatch(event: string, registeredEvent: string): boolean {
