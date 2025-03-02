@@ -70,6 +70,13 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
   - Supports four policy modes: LOG_AND_CONTINUE (default), SILENT, CANCEL_ON_ERROR, and THROW
   - Control whether errors are logged, ignored, stop event propagation, or are rethrown
   - Provides flexibility in error handling strategies for different use cases
+  
+- **🔄 Middleware Support**: Process and transform events before they reach subscribers.
+
+  - Register middleware functions that can intercept and modify all events
+  - Transform event data or redirect events to different event names
+  - Cancel events based on custom conditions
+  - Apply global processing logic across your entire application
 
 - **⏱️ Timeout Management for Asynchronous Callbacks**: Ensures that asynchronous callbacks do not hang indefinitely.
 
@@ -279,6 +286,116 @@ evem.subscribe("system.*.error", error => {
 ```
 
 These wildcard capabilities make EvEm an ideal choice for applications requiring complex event handling strategies.
+
+## Middleware
+
+EvEm allows you to register middleware functions that can intercept, transform, or cancel events before they reach subscribers.
+
+### Basic Middleware Usage
+
+```typescript
+import { EvEm, MiddlewareFunction } from "evem";
+const evem = new EvEm();
+
+// Create a middleware that adds metadata to all events
+const addMetadataMiddleware: MiddlewareFunction = (event, data) => {
+  return {
+    ...data,
+    timestamp: Date.now(),
+    eventName: event
+  };
+};
+
+// Register the middleware
+evem.use(addMetadataMiddleware);
+
+// Register an event handler that can use the metadata
+evem.subscribe('user.login', (data) => {
+  console.log(`User logged in at ${new Date(data.timestamp).toISOString()}`);
+  console.log(`Event: ${data.eventName}`);
+  console.log(`Username: ${data.username}`);
+});
+
+// Publish an event
+await evem.publish('user.login', { username: 'alice' });
+// Output:
+// User logged in at 2023-05-20T15:30:45.123Z
+// Event: user.login
+// Username: alice
+```
+
+### Event Transformation and Redirection
+
+Middleware can also transform events or redirect them to different event types:
+
+```typescript
+// Create a middleware that redirects events based on roles
+const routingMiddleware: MiddlewareFunction = (event, data) => {
+  if (event === 'user.action' && data.role === 'admin') {
+    // Redirect admin actions to a special admin event
+    return {
+      event: 'admin.action',
+      data
+    };
+  }
+  return data;
+};
+
+// Register the middleware
+evem.use(routingMiddleware);
+
+// Set up handlers for both regular user actions and admin actions
+evem.subscribe('user.action', (data) => {
+  console.log('Regular user action:', data);
+});
+
+evem.subscribe('admin.action', (data) => {
+  console.log('Admin action (redirected):', data);
+});
+
+// Publish events - they will be routed based on the role
+await evem.publish('user.action', { role: 'user', action: 'view' });
+// Output: Regular user action: { role: 'user', action: 'view' }
+
+await evem.publish('user.action', { role: 'admin', action: 'delete' });
+// Output: Admin action (redirected): { role: 'admin', action: 'delete' }
+```
+
+### Event Filtering with Middleware
+
+Middleware can be used to filter or cancel events based on global conditions:
+
+```typescript
+// Create a middleware that implements a permissions system
+const permissionsMiddleware: MiddlewareFunction = (event, data) => {
+  // Check if this event requires permissions
+  if (event.startsWith('secure.')) {
+    // Check if the user has permissions
+    if (!data.user || !data.user.permissions || !data.user.permissions.includes('admin')) {
+      // Cancel the event by returning null
+      console.log('Access denied: Admin permission required');
+      return null;
+    }
+  }
+  return data;
+};
+
+// Register the middleware
+evem.use(permissionsMiddleware);
+
+// Handler will only be called if permissions check passes
+evem.subscribe('secure.data.access', (data) => {
+  console.log('Accessing secure data:', data);
+});
+
+// This will be canceled by the middleware
+await evem.publish('secure.data.access', { user: { name: 'bob', permissions: ['user'] } });
+// Output: Access denied: Admin permission required
+
+// This will pass the middleware check
+await evem.publish('secure.data.access', { user: { name: 'alice', permissions: ['admin'] } });
+// Output: Accessing secure data: { user: { name: 'alice', permissions: ['admin'] } }
+```
 
 ## Error Policy Configuration
 
@@ -745,7 +862,8 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
   - `options.timeout`: Number of milliseconds before timing out async callbacks (default: 5000)
   - `options.cancelable`: Whether the event can be canceled by handlers (default: false)
   - `options.errorPolicy`: How to handle errors in callbacks (default: ErrorPolicy.LOG_AND_CONTINUE)
-  - `options.errorPolicy`: How to handle errors in callbacks (default: ErrorPolicy.LOG_AND_CONTINUE)
+- `use(middleware: MiddlewareFunction)`: Register a middleware function to process events
+- `removeMiddleware(middleware: MiddlewareFunction)`: Remove a previously registered middleware function
 
 ## Join the Party - Contribute!
 
@@ -846,7 +964,7 @@ These are planned features for future releases:
 
 1. **Event History/Replay**: Keep a history of recent events and allow new subscribers to optionally receive the most recent event immediately upon subscription.
 
-2. **Middleware Support**: Allow registration of middleware functions that can intercept, modify, or cancel all events before they reach subscribers.
+✅ **Middleware Support**: Allow registration of middleware functions that can intercept, modify, or cancel all events before they reach subscribers.
 
 3. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
 

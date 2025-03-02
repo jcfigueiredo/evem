@@ -61,12 +61,31 @@ type SubscriptionOptions<T = unknown> = {
   priority?: number | PriorityLevel | Priority; // Can use numbers, strings, or Priority enum
 };
 
+/**
+ * Result from a middleware function
+ * - Return null to cancel the event
+ * - Return the modified data to continue with the modified data
+ * - Return an object with event and data to change the event name and data
+ */
+export type MiddlewareResult<T = any> = null | T | { event: string; data: T };
+
+/**
+ * Middleware function definition
+ * @param event - The event name
+ * @param data - The event data
+ * @returns A MiddlewareResult that can modify or cancel the event
+ */
+export type MiddlewareFunction<T = any> = 
+  (event: string, data: T) => MiddlewareResult<T> | Promise<MiddlewareResult<T>>;
+
 interface IEventEmitter {
   subscribe<T = unknown>(event: string, callback: EventCallback<T>, options?: SubscriptionOptions<T>): string;
   subscribeOnce<T = unknown>(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T>, 'once'>): string;
   unsubscribe<T = unknown>(event: string, callback: EventCallback<T>): void;
   unsubscribeById(id: string): void;
   publish<T = unknown>(event: string, args?: T, options?: PublishOptions | number): Promise<boolean>;
+  use<T = unknown>(middleware: MiddlewareFunction<T>): void;
+  removeMiddleware<T = unknown>(middleware: MiddlewareFunction<T>): void;
 }
 
 interface CallbackInfo<T = unknown> {
@@ -79,10 +98,30 @@ class EvEm implements IEventEmitter {
   private recursionDepth = new Map<string, number>();
   private debounceTimers = new Map<string, NodeJS.Timeout>();
   private throttleTimers = new Map<string, { timer: NodeJS.Timeout, expiresAt: number }>();
+  private middleware: MiddlewareFunction[] = [];
   private maxRecursionDepth: number;
 
   constructor(maxRecursionDepth: number = 3) {
     this.maxRecursionDepth = maxRecursionDepth;
+  }
+  
+  /**
+   * Register a middleware function to process events before they reach subscribers
+   * @param middleware - The middleware function to add
+   */
+  use<T = unknown>(middleware: MiddlewareFunction<T>): void {
+    this.middleware.push(middleware as MiddlewareFunction);
+  }
+  
+  /**
+   * Remove a previously registered middleware function
+   * @param middleware - The middleware function to remove
+   */
+  removeMiddleware<T = unknown>(middleware: MiddlewareFunction<T>): void {
+    const index = this.middleware.indexOf(middleware as MiddlewareFunction);
+    if (index !== -1) {
+      this.middleware.splice(index, 1);
+    }
   }
 
   private incrementRecursionDepth(event: string): void {
@@ -426,6 +465,46 @@ class EvEm implements IEventEmitter {
     }
   }
 
+  /**
+   * Apply middleware to an event
+   * @param event - The event name
+   * @param data - The event data
+   * @returns An object with potentially modified event and data, or null if the event was canceled
+   */
+  private async applyMiddleware<T = unknown>(event: string, data: T): Promise<{ event: string, data: T } | null> {
+    let currentEvent = event;
+    let currentData = data;
+    
+    // Apply each middleware in order
+    for (const middleware of this.middleware) {
+      try {
+        const result = middleware(currentEvent, currentData);
+        const processedResult = result instanceof Promise ? await result : result;
+        
+        // If middleware returns null, cancel the event
+        if (processedResult === null) {
+          return null;
+        }
+        
+        // If middleware returns an object with event and data properties, update both
+        if (processedResult && typeof processedResult === 'object' && 'event' in processedResult && 'data' in processedResult) {
+          currentEvent = processedResult.event;
+          currentData = processedResult.data;
+        } 
+        // Otherwise, just update the data
+        else {
+          currentData = processedResult as T;
+        }
+      } catch (error) {
+        // Log the error and cancel the event
+        console.error(`Error in middleware for event "${currentEvent}":`, error);
+        return null;
+      }
+    }
+    
+    return { event: currentEvent, data: currentData };
+  }
+
   async publish<T = unknown>(
     event: string, 
     args?: T, 
@@ -450,23 +529,36 @@ class EvEm implements IEventEmitter {
 
     this.incrementRecursionDepth(event);
 
-    // Create a cancelable event wrapper if needed
-    let eventData: any;
+    // Create event data (with or without cancel function)
+    let eventData: any = args ?? ({} as T);
     let isCanceled = false;
     
+    // Apply middleware to the event
+    if (this.middleware.length > 0) {
+      const middlewareResult = await this.applyMiddleware(event, eventData);
+      
+      // If middleware canceled the event, return false
+      if (middlewareResult === null) {
+        this.resetRecursionDepth(event);
+        return false;
+      }
+      
+      // Update event and data based on middleware result
+      event = middlewareResult.event;
+      eventData = middlewareResult.data;
+    }
+    
+    // Add cancel functionality if the event is cancelable
     if (cancelable) {
-      // Create a wrapper that includes the cancel functionality
+      // Add the cancel method to the event data
       eventData = {
-        ...(args ?? {}),
+        ...eventData,
         cancel: function() {
           isCanceled = true;
         }
       };
-    } else {
-      eventData = args ?? ({} as T);
     }
 
-    const asyncCallbacks: Promise<void>[] = [];
     const matchingCallbacks: { callback: EventCallback, priority: number }[] = [];
 
     // First, collect all matching callbacks with their priorities
@@ -570,6 +662,8 @@ export {
   type IEventEmitter, 
   type EventCallback, 
   type FilterPredicate,
+  type MiddlewareFunction,
+  type MiddlewareResult,
   type SubscriptionOptions,
   type PriorityLevel
 };

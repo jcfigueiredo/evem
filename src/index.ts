@@ -6,6 +6,8 @@ export {
   type IEventEmitter, 
   type EventCallback,
   type FilterPredicate,
+  type MiddlewareFunction,
+  type MiddlewareResult,
   type SubscriptionOptions,
   type PriorityLevel,
   type CancelableEvent,
