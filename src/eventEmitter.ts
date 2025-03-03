@@ -137,12 +137,24 @@ interface IEventEmitter {
   disableHistory(): void;
   clearEventHistory(): void;
   getEventHistory<T = any>(pattern?: string): EventRecord<T>[];
+  enableMemoryLeakDetection(options?: Partial<MemoryLeakOptions>): void;
+  disableMemoryLeakDetection(): void;
 }
 
 interface CallbackInfo<T = unknown, R = any> {
   callback: EventCallback<T>;
   priority: number;
   transform?: TransformFunction<T, R>;
+}
+
+/**
+ * Options for memory leak detection
+ */
+export interface MemoryLeakOptions {
+  /** The threshold number of subscriptions to an event before showing a warning */
+  threshold: number;
+  /** Whether to automatically log subscription details when a leak is detected */
+  showSubscriptionDetails: boolean;
 }
 
 class EvEm implements IEventEmitter {
@@ -157,6 +169,12 @@ class EvEm implements IEventEmitter {
   private eventHistory: EventRecord[] = [];
   private historyEnabled: boolean = false;
   private historyMaxSize: number = 50; // Default history size
+  
+  // Memory leak detection properties
+  private memoryLeakDetectionEnabled: boolean = false;
+  private memoryLeakThreshold: number = 10; // Default threshold
+  private showLeakSubscriptionDetails: boolean = true; // Default to showing details
+  private warnedEvents = new Set<string>(); // Track events we've already warned about
 
   constructor(maxRecursionDepth: number = 3) {
     this.maxRecursionDepth = maxRecursionDepth;
@@ -184,6 +202,33 @@ class EvEm implements IEventEmitter {
    */
   clearEventHistory(): void {
     this.eventHistory = [];
+  }
+  
+  /**
+   * Enable memory leak detection
+   * @param options - Configuration options for leak detection
+   */
+  enableMemoryLeakDetection(options?: Partial<MemoryLeakOptions>): void {
+    this.memoryLeakDetectionEnabled = true;
+    
+    if (options?.threshold !== undefined) {
+      this.memoryLeakThreshold = options.threshold;
+    }
+    
+    if (options?.showSubscriptionDetails !== undefined) {
+      this.showLeakSubscriptionDetails = options.showSubscriptionDetails;
+    }
+    
+    // Reset warnings when re-enabling
+    this.warnedEvents.clear();
+  }
+  
+  /**
+   * Disable memory leak detection
+   */
+  disableMemoryLeakDetection(): void {
+    this.memoryLeakDetectionEnabled = false;
+    this.warnedEvents.clear();
   }
   
   /**
@@ -541,6 +586,11 @@ class EvEm implements IEventEmitter {
     });
     this.events.set(event, callbacks);
     
+    // Check for potential memory leaks if detection is enabled
+    if (this.memoryLeakDetectionEnabled && callbacks.size > this.memoryLeakThreshold) {
+      this.checkForMemoryLeak(event, callbacks.size);
+    }
+    
     // Handle history replay options if history is enabled
     if (this.historyEnabled && (options?.replayLastEvent || options?.replayHistory)) {
       // Get relevant historical events
@@ -603,6 +653,14 @@ class EvEm implements IEventEmitter {
     for (const [id, cbInfo] of callbacks) {
       if (cbInfo.callback === callback) {
         callbacks.delete(id);
+        
+        // Clear memory leak warning if subscription count falls below threshold
+        if (this.memoryLeakDetectionEnabled && 
+            this.warnedEvents.has(event) && 
+            callbacks.size <= this.memoryLeakThreshold) {
+          this.warnedEvents.delete(event);
+        }
+        
         break;
       }
     }
@@ -615,6 +673,13 @@ class EvEm implements IEventEmitter {
     for (const [event, callbacks] of this.events) {
       if (callbacks.has(id)) {
         callbacks.delete(id);
+        
+        // Clear memory leak warning if subscription count falls below threshold
+        if (this.memoryLeakDetectionEnabled && 
+            this.warnedEvents.has(event) && 
+            callbacks.size <= this.memoryLeakThreshold) {
+          this.warnedEvents.delete(event);
+        }
         
         // Clean up any debounce timers associated with this subscription
         const debounceTimerKey = `debounce_${event}_${id}`;
@@ -919,6 +984,95 @@ class EvEm implements IEventEmitter {
   }
   
   /**
+   * Check for potential memory leaks when the number of subscriptions exceeds the threshold
+   * @param event - The event name
+   * @param count - The current number of subscriptions
+   */
+  private checkForMemoryLeak(event: string, count: number): void {
+    // Only warn once per event to avoid console spam
+    if (this.warnedEvents.has(event)) {
+      return;
+    }
+    
+    // Mark this event as warned
+    this.warnedEvents.add(event);
+    
+    // Format the warning message
+    console.warn(
+      `Possible memory leak detected: ${count} handlers added for event "${event}". ` +
+      `This exceeds the threshold of ${this.memoryLeakThreshold}. ` +
+      'This could indicate event handlers are not being properly unsubscribed.'
+    );
+    
+    // Show subscription details if enabled
+    if (this.showLeakSubscriptionDetails) {
+      console.group('Event subscription details:');
+      
+      try {
+        const eventInfo = this.info(event);
+        
+        console.log(`Total subscriptions for "${event}" pattern: ${eventInfo.length}`);
+        console.log('Subscription IDs:');
+        
+        eventInfo.forEach(info => {
+          if (!info.isMiddleware && info.id) {
+            console.log(`- ${info.id} (priority: ${info.priority})`);
+          }
+        });
+        
+        console.log('To fix this issue:');
+        console.log('1. Ensure all event handlers are unsubscribed when components are unmounted');
+        console.log('2. Use subscribeOnce() for one-time events');
+        console.log(`3. Increase the threshold if ${this.memoryLeakThreshold} is too low for your application`);
+      } catch (error) {
+        console.error('Error displaying subscription details:', error);
+      }
+      
+      console.groupEnd();
+    }
+  }
+
+  private isEventMatch(event: string, pattern: string): boolean {
+    // If pattern is a single wildcard, it matches everything
+    if (pattern === '*') {
+      return true;
+    }
+    
+    const eventParts = event.split(".");
+    const patternParts = pattern.split(".");
+    
+    // If pattern has more parts than the event, it can't match
+    if (patternParts.length > eventParts.length) {
+      return false;
+    }
+    
+    // Special case for wildcard at end (e.g. "user.*")
+    if (patternParts.length < eventParts.length && patternParts[patternParts.length - 1] === '*') {
+      // Check all parts before the last one
+      for (let i = 0; i < patternParts.length - 1; i++) {
+        if (patternParts[i] !== '*' && patternParts[i] !== eventParts[i]) {
+          return false;
+        }
+      }
+      return true;
+    }
+    
+    // If parts length is different but the last part isn't a wildcard, it can't match
+    if (patternParts.length !== eventParts.length) {
+      return false;
+    }
+    
+    // Check each part
+    for (let i = 0; i < patternParts.length; i++) {
+      if (patternParts[i] !== '*' && patternParts[i] !== eventParts[i]) {
+        return false;
+      }
+    }
+    
+    return true;
+  }
+  
+  /**
    * Get information about event subscriptions and middleware
    * @param pattern - Optional pattern to filter events and middleware
    * @returns Array of EventInfo objects describing subscriptions and middleware
@@ -982,5 +1136,6 @@ export {
   type EventInfo,
   type EventRecord,
   type SubscriptionOptions,
-  type PriorityLevel
+  type PriorityLevel,
+  type MemoryLeakOptions
 };

@@ -121,6 +121,13 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
   - Support for both synchronous and asynchronous transformations
   - Chain with other features like filtering and priorities for complex workflows
 
+- **🔍 Memory Leak Detection**: Detect potential memory leaks from event handlers that aren't properly unsubscribed.
+
+  - Enable with `enableMemoryLeakDetection(options)` 
+  - Configure custom thresholds for warning detection
+  - Detailed subscription information provided when potential leaks are detected
+  - Helps identify events with too many subscriptions that might be leaking memory
+
 ## Getting on Board
 
 ### Installation
@@ -239,6 +246,22 @@ evem.subscribe('sensor.reading', reading => {
 evem.subscribe('sensor.reading', reading => {
   console.log(`Historical reading: ${reading.value}${reading.unit}`);
 }, { replayHistory: true }); // Replays all recorded sensor.reading events
+
+// Using memory leak detection
+evem.enableMemoryLeakDetection({
+  threshold: 10,                 // Warn when an event has more than 10 subscribers (default)
+  showSubscriptionDetails: true  // Show detailed info about subscriptions (default)
+});
+
+// Now if you create many subscriptions to the same event without unsubscribing,
+// you'll get warnings in the console to help detect memory leaks
+for (let i = 0; i < 15; i++) {
+  evem.subscribe('button.click', () => console.log('Button clicked!')); 
+}
+// Warning: "Possible memory leak detected: 15 handlers added for event 'button.click'..."
+
+// Disable memory leak detection when no longer needed
+evem.disableMemoryLeakDetection();
 
 // Using cancelable events
 evem.subscribe("form.submit", (event) => {
@@ -1263,6 +1286,10 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
 - `disableHistory()`: Stop recording events in history (doesn't clear existing history)
 - `clearEventHistory()`: Remove all events from history
 - `getEventHistory(pattern?: string)`: Get recorded events, optionally filtered by pattern
+- `enableMemoryLeakDetection(options?: MemoryLeakOptions)`: Enable memory leak detection with optional configuration
+  - `options.threshold`: Number of handlers per event before warning (default: 10) 
+  - `options.showSubscriptionDetails`: Whether to show detailed information about subscriptions (default: true)
+- `disableMemoryLeakDetection()`: Disable memory leak detection
 
 ## Join the Party - Contribute!
 
@@ -1365,7 +1392,7 @@ These are planned features for future releases:
 
 2. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
 
-3. **Memory Leak Detection**: Add optional warnings when subscriptions might be leaking (e.g., too many subscriptions to the same event).
+3. ~~**Memory Leak Detection**: Add optional warnings when subscriptions might be leaking (e.g., too many subscriptions to the same event).~~ ✅ Implemented in latest version!
 
 4. **Event Schema Validation**: Add optional runtime validation of event data against schemas.
 
