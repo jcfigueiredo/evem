@@ -17,6 +17,13 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
 
   - `subscribeOnce(event: string, callback: EventCallback<T>): string`
   - Or use `subscribe(event, callback, { once: true })`
+  
+- **📜 Event History**: Keep a history of events and replay them to new subscribers.
+
+  - Enable with `enableHistory(maxEvents)` to start recording events
+  - Replay the most recent event with `subscribe(event, callback, { replayLastEvent: true })`
+  - Replay all matching historical events with `subscribe(event, callback, { replayHistory: true })`
+  - Access recorded events with `getEventHistory()`
 
 - **📣 Event Publishing**: Publish events with optional data and configuration.
 
@@ -215,6 +222,23 @@ evem.subscribe("app.startup", () => {
 
 // The handlers will execute in order of priority: high, normal, low
 await evem.publish("app.startup");
+
+// Using event history and replay
+evem.enableHistory();  // Start recording events
+
+// Publish some events
+await evem.publish('sensor.reading', { value: 42, unit: 'celsius' });
+await evem.publish('sensor.reading', { value: 43, unit: 'celsius' });
+
+// Later, a new subscriber can get the last reading immediately
+evem.subscribe('sensor.reading', reading => {
+  console.log(`Current temperature: ${reading.value}${reading.unit}`);
+}, { replayLastEvent: true }); // Outputs "Current temperature: 43celsius" immediately
+
+// Or replay the entire history
+evem.subscribe('sensor.reading', reading => {
+  console.log(`Historical reading: ${reading.value}${reading.unit}`);
+}, { replayHistory: true }); // Replays all recorded sensor.reading events
 
 // Using cancelable events
 evem.subscribe("form.submit", (event) => {
@@ -1104,6 +1128,65 @@ emitter.subscribe('document.updated', handleDocUpdate, {
 
 Filtering provides a clean and declarative way to handle complex event processing logic without cluttering your event handlers.
 
+## Using Event History and Replay
+
+EvEm can maintain a history of published events, allowing new subscribers to catch up on what they missed.
+
+```typescript
+import { EvEm } from "evem";
+const evem = new EvEm();
+
+// Enable history recording with a maximum of 100 events
+evem.enableHistory(100);
+
+// Publish some events that will be recorded
+await evem.publish('user.login', { userId: 1, name: 'Alice' });
+await evem.publish('notification', { message: 'New feature available!' });
+await evem.publish('user.login', { userId: 2, name: 'Bob' });
+
+// Retrieve all recorded events
+const allHistory = evem.getEventHistory();
+console.log(`Recorded ${allHistory.length} events`);
+
+// Retrieve just user.login events
+const loginHistory = evem.getEventHistory('user.login');
+console.log(`${loginHistory.length} user logins recorded`);
+
+// When a new component is initialized later, it can get the most recent notification
+function initializeNotificationCenter() {
+  evem.subscribe('notification', (notification) => {
+    displayNotification(notification.message);
+  }, { 
+    replayLastEvent: true  // Will immediately receive 'New feature available!'
+  });
+}
+
+// When a new analytics service connects, it can get all user login history
+function initializeAnalytics() {
+  evem.subscribe('user.login', (user) => {
+    trackUserLogin(user.userId, user.name);
+  }, { 
+    replayHistory: true  // Will receive both Alice and Bob's logins in order
+  });
+}
+
+// Clear history if needed
+evem.clearEventHistory();
+
+// Disable history recording when no longer needed
+evem.disableHistory();
+```
+
+### Uses for Event History
+
+Event history is particularly useful for:
+
+1. **Late Subscribers**: Components that initialize after events have occurred can catch up 
+2. **State Synchronization**: New components can immediately sync with the current application state
+3. **Audit Trails**: Keep a record of important events for logging or debugging
+4. **Replay Scenarios**: Test components by replaying the same sequence of events
+5. **Event Sourcing**: Build event-sourced architectures where system state is derived from event history
+
 ## Using the Info Method for Debugging
 
 The `info` method provides a convenient way to inspect the current state of the event emitter, which is useful for debugging and monitoring.
@@ -1158,6 +1241,8 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
   - `options.once`: When true, automatically unsubscribes after the callback is invoked for the first time
   - `options.priority`: Priority level ('high', 'normal', 'low'), number, or Priority enum value (Priority.HIGH) to control execution order (higher values execute first)
   - `options.transform`: A function that transforms the event data before it's passed to the next subscriber
+  - `options.replayLastEvent`: When true, immediately trigger the callback with the most recent matching event from history
+  - `options.replayHistory`: When true, immediately trigger the callback with all matching events from history
 - `subscribeOnce(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T>, 'once'>): string`
 - `unsubscribe(event: string, callback: EventCallback<T>): void`
 - `unsubscribeById(id: string): void`
@@ -1174,6 +1259,10 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
   - Returns an array of EventInfo objects containing details about events and middleware
   - Can be filtered by providing an optional pattern parameter
   - Useful for debugging and inspecting the current state of the event emitter
+- `enableHistory(maxEvents?: number)`: Start recording events in history (default max: 50)
+- `disableHistory()`: Stop recording events in history (doesn't clear existing history)
+- `clearEventHistory()`: Remove all events from history
+- `getEventHistory(pattern?: string)`: Get recorded events, optionally filtered by pattern
 
 ## Join the Party - Contribute!
 
@@ -1272,7 +1361,7 @@ Here's how EvEm compares to other popular event emitter libraries:
 
 These are planned features for future releases:
 
-1. **Event History/Replay**: Keep a history of recent events and allow new subscribers to optionally receive the most recent event immediately upon subscription.
+1. ~~**Event History/Replay**: Keep a history of recent events and allow new subscribers to optionally receive the most recent event immediately upon subscription.~~ ✅ Implemented in latest version!
 
 2. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
 

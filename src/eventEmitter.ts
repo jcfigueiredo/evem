@@ -65,6 +65,8 @@ type SubscriptionOptions<T = unknown, R = any> = {
   once?: boolean;
   priority?: number | PriorityLevel | Priority; // Can use numbers, strings, or Priority enum
   transform?: TransformFunction<T, R>; // Transform event data before passing to next subscriber
+  replayLastEvent?: boolean; // Replay the most recent event on subscription
+  replayHistory?: boolean; // Replay all historical events for this event pattern on subscription
 };
 
 /**
@@ -97,6 +99,18 @@ export interface MiddlewareConfig<T = any> {
 /**
  * Information about an event subscription or middleware
  */
+/**
+ * Represents a record of a published event
+ */
+export interface EventRecord<T = any> {
+  /** The event name */
+  event: string;
+  /** The event data */
+  data: T;
+  /** When the event was published */
+  timestamp: number;
+}
+
 export interface EventInfo {
   /** The event name or pattern */
   event: string;
@@ -119,6 +133,10 @@ interface IEventEmitter {
   use<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void;
   removeMiddleware<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void;
   info(pattern?: string): EventInfo[];
+  enableHistory(maxEvents?: number): void;
+  disableHistory(): void;
+  clearEventHistory(): void;
+  getEventHistory<T = any>(pattern?: string): EventRecord<T>[];
 }
 
 interface CallbackInfo<T = unknown, R = any> {
@@ -134,9 +152,77 @@ class EvEm implements IEventEmitter {
   private throttleTimers = new Map<string, { timer: NodeJS.Timeout, expiresAt: number }>();
   private middleware: Array<{ pattern?: string; handler: MiddlewareFunction }> = [];
   private maxRecursionDepth: number;
+  
+  // Event history related properties
+  private eventHistory: EventRecord[] = [];
+  private historyEnabled: boolean = false;
+  private historyMaxSize: number = 50; // Default history size
 
   constructor(maxRecursionDepth: number = 3) {
     this.maxRecursionDepth = maxRecursionDepth;
+  }
+  
+  /**
+   * Enable event history recording
+   * @param maxEvents - Maximum number of events to store in history (default: 50)
+   */
+  enableHistory(maxEvents: number = 50): void {
+    this.historyEnabled = true;
+    this.historyMaxSize = maxEvents;
+  }
+  
+  /**
+   * Disable event history recording
+   * Note: This doesn't clear existing history
+   */
+  disableHistory(): void {
+    this.historyEnabled = false;
+  }
+  
+  /**
+   * Clear all recorded event history
+   */
+  clearEventHistory(): void {
+    this.eventHistory = [];
+  }
+  
+  /**
+   * Get the recorded event history
+   * @param pattern - Optional event pattern to filter history by
+   * @returns Array of event records
+   */
+  getEventHistory<T = any>(pattern?: string): EventRecord<T>[] {
+    if (!pattern) {
+      return this.eventHistory as EventRecord<T>[];
+    }
+    
+    // Filter history by pattern
+    return this.eventHistory.filter(record => 
+      this.isEventMatch(record.event, pattern)
+    ) as EventRecord<T>[];
+  }
+  
+  /**
+   * Record an event in history if history is enabled
+   * @param event - Event name
+   * @param data - Event data
+   */
+  private recordEvent<T = any>(event: string, data: T): void {
+    if (!this.historyEnabled) return;
+    
+    // Add to history with timestamp
+    const record: EventRecord<T> = {
+      event,
+      data,
+      timestamp: Date.now()
+    };
+    
+    this.eventHistory.push(record);
+    
+    // Trim history if it exceeds the maximum size
+    if (this.eventHistory.length > this.historyMaxSize) {
+      this.eventHistory = this.eventHistory.slice(-this.historyMaxSize);
+    }
   }
   
   /**
@@ -454,6 +540,38 @@ class EvEm implements IEventEmitter {
       transform
     });
     this.events.set(event, callbacks);
+    
+    // Handle history replay options if history is enabled
+    if (this.historyEnabled && (options?.replayLastEvent || options?.replayHistory)) {
+      // Get relevant historical events
+      const relevantHistory = this.getEventHistory().filter(record => 
+        this.isEventMatch(record.event, event)
+      );
+      
+      if (relevantHistory.length > 0) {
+        // If replayLastEvent is true, only replay the most recent event
+        if (options?.replayLastEvent) {
+          const lastEvent = relevantHistory[relevantHistory.length - 1];
+          // Directly call the callback with the historical data
+          try {
+            finalCallback(lastEvent.data);
+          } catch (error) {
+            console.error(`Error replaying last event "${event}" to new subscriber:`, error);
+          }
+        } 
+        // If replayHistory is true, replay all matching historical events in order
+        else if (options?.replayHistory) {
+          for (const record of relevantHistory) {
+            try {
+              finalCallback(record.data);
+            } catch (error) {
+              console.error(`Error replaying historical event "${event}" to new subscriber:`, error);
+            }
+          }
+        }
+      }
+    }
+    
     return subscriptionId;
   }
   
@@ -622,6 +740,11 @@ class EvEm implements IEventEmitter {
         }
       };
     }
+    
+    // Record this event in history (before processing any callbacks)
+    // We record the original data (without cancel method) to avoid circular references in history
+    // and ensure that replayed events don't have cancel methods unless explicitly requested
+    this.recordEvent(event, args ?? ({} as T));
 
     const matchingCallbacks: { callback: EventCallback, priority: number, transform?: TransformFunction }[] = [];
 
@@ -857,6 +980,7 @@ export {
   type MiddlewareResult,
   type MiddlewareConfig,
   type EventInfo,
+  type EventRecord,
   type SubscriptionOptions,
   type PriorityLevel
 };
