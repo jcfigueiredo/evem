@@ -128,6 +128,14 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
   - Detailed subscription information provided when potential leaks are detected
   - Helps identify events with too many subscriptions that might be leaking memory
 
+- **🔒 Event Schema Validation**: Validate event data against schemas to ensure data integrity.
+
+  - Define schema validators that check event data structure and types
+  - Support for both simple validators (boolean result) and advanced validators (detailed error information)
+  - Configurable error policies for validation failures (continue, silent, cancel, throw)
+  - Seamlessly integrates with other features like filtering and transformations
+  - Works with both synchronous and asynchronous validation
+
 ## Getting on Board
 
 ### Installation
@@ -284,6 +292,89 @@ const formData = { isValid: false };
 const eventCompleted = await evem.publish("form.submit", formData, { cancelable: true });
 
 console.log(eventCompleted ? "Form submitted successfully" : "Form submission was canceled");
+
+// Using schema validation
+// First, define an interface for your event data
+interface UserData {
+  id: number;
+  name: string;
+  email: string;
+  age: number;
+}
+
+// Simple schema validator
+const userSchema = (data: UserData) => {
+  return (
+    typeof data === 'object' &&
+    typeof data.id === 'number' &&
+    typeof data.name === 'string' &&
+    typeof data.email === 'string' && 
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email) && // Email validation
+    typeof data.age === 'number' &&
+    data.age >= 18 // Must be 18 or older
+  );
+};
+
+// Advanced schema validator with detailed errors
+const advancedUserSchema = (data: any) => {
+  const errors = [];
+  
+  if (!data || typeof data !== 'object') {
+    return { valid: false, errors: [{ message: 'Data must be an object' }] };
+  }
+  
+  if (typeof data.id !== 'number') {
+    errors.push({ message: 'ID must be a number', path: 'id' });
+  }
+  
+  if (typeof data.name !== 'string' || data.name.length < 2) {
+    errors.push({ message: 'Name must be a string with at least 2 characters', path: 'name' });
+  }
+  
+  if (typeof data.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+    errors.push({ message: 'Email must be a valid email address', path: 'email' });
+  }
+  
+  if (typeof data.age !== 'number' || data.age < 18) {
+    errors.push({ message: 'Age must be a number and 18 or older', path: 'age' });
+  }
+  
+  return { 
+    valid: errors.length === 0,
+    errors: errors.length > 0 ? errors : undefined
+  };
+};
+
+// Subscribe with schema validation
+evem.subscribe<UserData>('user.register', (user) => {
+  console.log(`User registered successfully: ${user.name}, ${user.email}`);
+}, {
+  schema: userSchema
+});
+
+// Subscribe with advanced schema validation and custom error policy
+evem.subscribe<UserData>('user.register', (user) => {
+  console.log(`Processing valid user registration: ${user.name}`);
+}, {
+  schema: advancedUserSchema,
+  schemaErrorPolicy: ErrorPolicy.LOG_AND_CONTINUE // Log errors but still execute callback
+});
+
+// This will trigger the callback (valid data)
+await evem.publish('user.register', {
+  id: 1,
+  name: 'Alice',
+  email: 'alice@example.com',
+  age: 25
+});
+
+// This will fail schema validation (invalid email and age)
+await evem.publish('user.register', {
+  id: 2,
+  name: 'Bob',
+  email: 'invalid-email',
+  age: 16
+});
 ```
 
 ## Managing Timeouts in Callbacks
@@ -1266,6 +1357,8 @@ For a comprehensive set of examples, check out the [examples](docs/examples.md) 
   - `options.transform`: A function that transforms the event data before it's passed to the next subscriber
   - `options.replayLastEvent`: When true, immediately trigger the callback with the most recent matching event from history
   - `options.replayHistory`: When true, immediately trigger the callback with all matching events from history
+  - `options.schema`: A schema validator function to validate event data before the callback is executed
+  - `options.schemaErrorPolicy`: How to handle schema validation errors (default: ErrorPolicy.CANCEL_ON_ERROR)
 - `subscribeOnce(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T>, 'once'>): string`
 - `unsubscribe(event: string, callback: EventCallback<T>): void`
 - `unsubscribeById(id: string): void`
@@ -1394,7 +1487,7 @@ These are planned features for future releases:
 
 3. ~~**Memory Leak Detection**: Add optional warnings when subscriptions might be leaking (e.g., too many subscriptions to the same event).~~ ✅ Implemented in latest version!
 
-4. **Event Schema Validation**: Add optional runtime validation of event data against schemas.
+4. ~~**Event Schema Validation**: Add optional runtime validation of event data against schemas.~~ ✅ Implemented in latest version!
 
 5. ~~**Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.~~ ✅ Implemented in latest version!
 

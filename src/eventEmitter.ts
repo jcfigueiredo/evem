@@ -58,6 +58,31 @@ export enum Priority {
  */
 type TransformFunction<T = unknown, R = any> = (data: T) => R | Promise<R>;
 
+/**
+ * Schema validation function that validates event data against a schema
+ * Returns true if valid, false if invalid
+ */
+export type SchemaValidator<T = unknown> = (data: T) => boolean | Promise<boolean>;
+
+/**
+ * Interface for schema validation error details
+ */
+export interface SchemaValidationError {
+  /** The error message */
+  message: string; 
+  /** The path to the invalid field (if available) */
+  path?: string;
+  /** Additional validation error details */
+  details?: any;
+}
+
+/**
+ * Advanced schema validator that returns validation errors
+ */
+export type AdvancedSchemaValidator<T = unknown> = (data: T) => 
+  { valid: boolean, errors?: SchemaValidationError[] } | 
+  Promise<{ valid: boolean, errors?: SchemaValidationError[] }>;
+
 type SubscriptionOptions<T = unknown, R = any> = {
   filter?: FilterPredicate<T> | FilterPredicate<T>[];
   debounceTime?: number;
@@ -67,6 +92,8 @@ type SubscriptionOptions<T = unknown, R = any> = {
   transform?: TransformFunction<T, R>; // Transform event data before passing to next subscriber
   replayLastEvent?: boolean; // Replay the most recent event on subscription
   replayHistory?: boolean; // Replay all historical events for this event pattern on subscription
+  schema?: SchemaValidator<T> | AdvancedSchemaValidator<T>; // Schema validation for event data
+  schemaErrorPolicy?: ErrorPolicy; // How to handle schema validation errors (default: ErrorPolicy.CANCEL_ON_ERROR)
 };
 
 /**
@@ -395,7 +422,7 @@ class EvEm implements IEventEmitter {
       }
     }
     
-    // Then, apply filters if needed - this ensures filters run before the once logic,
+    // Apply filters if needed - this ensures filters run before the once logic,
     // so once-unsubscribe only happens when a filter passes
     const filters = options?.filter ? 
       (Array.isArray(options.filter) ? options.filter : [options.filter]) : 
@@ -441,6 +468,118 @@ class EvEm implements IEventEmitter {
         }
         // Otherwise don't call the callback
         return undefined;
+      };
+    }
+    
+    // Apply schema validation if provided
+    if (options?.schema) {
+      const schemaValidator = options.schema;
+      const originalCallback = finalCallback;
+      const schemaErrorPolicy = options.schemaErrorPolicy ?? ErrorPolicy.CANCEL_ON_ERROR;
+      
+      // Wrap the callback with schema validation logic
+      finalCallback = function schemaValidationWrapper(args: T) {
+        // Handler for schema validation errors based on error policy
+        const handleSchemaValidationError = (
+          message: string, 
+          policy: ErrorPolicy, 
+          errors: SchemaValidationError[] | null
+        ): any => {
+          switch (policy) {
+            case ErrorPolicy.SILENT:
+              // Silently ignore the error, don't call the callback
+              return undefined;
+              
+            case ErrorPolicy.LOG_AND_CONTINUE:
+              // Log the error and continue with the callback
+              console.error(message, errors ? errors : '');
+              return originalCallback(args);
+              
+            case ErrorPolicy.THROW:
+              // Throw an error
+              const error = new Error(message);
+              (error as any).validationErrors = errors;
+              throw error;
+              
+            case ErrorPolicy.CANCEL_ON_ERROR:
+            default:
+              // Log the error and cancel event propagation (don't call the callback)
+              console.error(message, errors ? errors : '');
+              return undefined;
+          }
+        };
+        
+        try {
+          // Determine if this is a simple or advanced validator by checking function signature
+          const validationResult = schemaValidator(args);
+          
+          // Handle both synchronous and asynchronous validators
+          if (validationResult instanceof Promise) {
+            // Async validator
+            return validationResult.then(result => {
+              if (typeof result === 'boolean') {
+                // Simple validator returned a boolean
+                if (result) {
+                  // Data is valid, continue with callback
+                  return originalCallback(args);
+                } else {
+                  // Data is invalid, handle according to error policy
+                  return handleSchemaValidationError(
+                    `Schema validation failed for event '${event}'`, 
+                    schemaErrorPolicy,
+                    null
+                  );
+                }
+              } else {
+                // Advanced validator returned an object with validation errors
+                if (result.valid) {
+                  // Data is valid, continue with callback
+                  return originalCallback(args);
+                } else {
+                  // Data is invalid, handle according to error policy
+                  return handleSchemaValidationError(
+                    `Schema validation failed for event '${event}'`,
+                    schemaErrorPolicy,
+                    result.errors
+                  );
+                }
+              }
+            });
+          } else if (typeof validationResult === 'boolean') {
+            // Synchronous simple validator
+            if (validationResult) {
+              // Data is valid, continue with callback
+              return originalCallback(args);
+            } else {
+              // Data is invalid, handle according to error policy
+              return handleSchemaValidationError(
+                `Schema validation failed for event '${event}'`,
+                schemaErrorPolicy,
+                null
+              );
+            }
+          } else {
+            // Synchronous advanced validator
+            if (validationResult.valid) {
+              // Data is valid, continue with callback
+              return originalCallback(args);
+            } else {
+              // Data is invalid, handle according to error policy
+              return handleSchemaValidationError(
+                `Schema validation failed for event '${event}'`,
+                schemaErrorPolicy,
+                validationResult.errors
+              );
+            }
+          }
+        } catch (error) {
+          // Schema validator threw an error, handle according to error policy
+          return handleSchemaValidationError(
+            `Error during schema validation for event '${event}': ${error}`,
+            schemaErrorPolicy,
+            error instanceof Error ? [{ message: error.message }] : null
+          );
+        }
       };
     }
     
@@ -829,6 +968,41 @@ class EvEm implements IEventEmitter {
     // Sort callbacks by priority (highest first)
     matchingCallbacks.sort((a, b) => b.priority - a.priority);
 
+    // Helper function to handle callback errors based on the error policy
+    const handleCallbackError = (error: any) => {
+      // Special handling for schema validation errors with THROW policy
+      if (error && error.message && error.message.includes('Schema validation failed')) {
+        if (errorPolicy === ErrorPolicy.THROW) {
+          this.resetRecursionDepth(event);
+          throw error;
+        }
+      }
+      
+      // Handle other errors based on the error policy
+      switch (errorPolicy) {
+        case ErrorPolicy.SILENT:
+          // Silently ignore the error
+          break;
+          
+        case ErrorPolicy.CANCEL_ON_ERROR:
+          // Log the error and cancel event propagation
+          console.error(`Error in event handler for "${event}":`, error);
+          isCanceled = true;
+          break;
+          
+        case ErrorPolicy.THROW:
+          // Rethrow the error to the caller
+          this.resetRecursionDepth(event);
+          throw error;
+          
+        case ErrorPolicy.LOG_AND_CONTINUE:
+        default:
+          // Log the error and continue with the next callback (default behavior)
+          console.error(`Error in event handler for "${event}":`, error);
+          break;
+      }
+    };
+    
     // Execute callbacks in priority order - we need to handle them sequentially for cancellation
     let currentEventData = eventData; // Start with the initial event data
     
@@ -842,8 +1016,25 @@ class EvEm implements IEventEmitter {
         // Call the current callback with the current event data
         const callbackPromise = callback(currentEventData);
         if (callbackPromise instanceof Promise) {
-          // For async callbacks, wait for them to complete before proceeding to the next one
-          await this.handlePromiseWithTimeout(callbackPromise, timeout);
+          try {
+            // For async callbacks, wait for them to complete before proceeding to the next one
+            await this.handlePromiseWithTimeout(callbackPromise, timeout);
+          } catch (error) {
+            // Special handling for schema validation errors with THROW policy
+            if (error && error.message && error.message.includes('Schema validation failed')) {
+              if (errorPolicy === ErrorPolicy.THROW) {
+                this.resetRecursionDepth(event);
+                throw error;
+              }
+              
+              // For other error policies, handle as usual
+              handleCallbackError(error);
+              continue; // Skip to the next callback
+            }
+            
+            // Re-throw other errors to be handled by the outer catch
+            throw error;
+          }
         }
         
         // Check if the event was canceled by the callback
@@ -888,29 +1079,7 @@ class EvEm implements IEventEmitter {
           }
         }
       } catch (error) {
-        // Handle callback error based on the error policy
-        switch (errorPolicy) {
-          case ErrorPolicy.SILENT:
-            // Silently ignore the error
-            break;
-            
-          case ErrorPolicy.CANCEL_ON_ERROR:
-            // Log the error and cancel event propagation
-            console.error(`Error in event handler for "${event}":`, error);
-            isCanceled = true;
-            break;
-            
-          case ErrorPolicy.THROW:
-            // Rethrow the error to the caller
-            this.resetRecursionDepth(event);
-            throw error;
-            
-          case ErrorPolicy.LOG_AND_CONTINUE:
-          default:
-            // Log the error and continue with the next callback (default behavior)
-            console.error(`Error in event handler for "${event}":`, error);
-            break;
-        }
+        handleCallbackError(error);
       }
     }
 
@@ -1137,5 +1306,8 @@ export {
   type EventRecord,
   type SubscriptionOptions,
   type PriorityLevel,
-  type MemoryLeakOptions
+  type MemoryLeakOptions,
+  type SchemaValidator,
+  type AdvancedSchemaValidator,
+  type SchemaValidationError
 };

@@ -14,5 +14,8 @@ export {
   type SubscriptionOptions,
   type PriorityLevel,
   type CancelableEvent,
-  type PublishOptions
+  type PublishOptions,
+  type SchemaValidator,
+  type AdvancedSchemaValidator,
+  type SchemaValidationError
 } from "./eventEmitter";
