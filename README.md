@@ -136,6 +136,146 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
   - Seamlessly integrates with other features like filtering and transformations
   - Works with both synchronous and asynchronous validation
 
+## WebSocket Adapter (Optional Extension)
+
+EvEm includes an optional WebSocket adapter that provides common patterns for real-time communication. The adapter is implemented as a separate module that doesn't modify the core library.
+
+**Key Features:**
+- **Auto-Wiring**: WebSocketHandler automatically connects WebSocket events to EvEm (zero boilerplate!)
+- **Connection State Management**: Track connection lifecycle with state machine (disconnected → connecting → connected → reconnecting → disconnecting)
+- **Message Queue**: Automatic queueing of messages while disconnected with configurable size limits and overflow handling
+- **Request-Response Pattern**: RPC-style communication with correlation IDs, timeouts, and error handling
+- **Universal Compatibility**: Works with both browser WebSocket and Node.js `ws` library
+- **100% Test Coverage**: 115 comprehensive tests covering all edge cases
+
+### Quick Start with WebSocketHandler (Recommended)
+
+The simplest way to integrate WebSocket with EvEm is using `WebSocketHandler`, which automatically wires everything:
+
+```typescript
+import { EvEm } from 'evem';
+import { WebSocketHandler } from 'evem/websocket';
+
+const evem = new EvEm();
+const handler = new WebSocketHandler('wss://api.example.com', evem);
+
+// Subscribe to server events - everything is auto-wired!
+evem.subscribe('server.user.*', (data) => {
+  console.log('User event from server:', data);
+});
+
+evem.subscribe('server.notification', (notification) => {
+  showToast(notification.message);
+});
+
+// Send messages to the server
+await evem.publish('ws.send', { type: 'chat', text: 'Hello!' });
+
+// Use the handler for connection state and lifecycle management
+console.log('Connected:', handler.isConnected());
+console.log('Queue size:', handler.getQueueSize());
+
+// Clean up when done
+window.addEventListener('beforeunload', () => {
+  handler.disconnect();
+});
+```
+
+**What WebSocketHandler does automatically:**
+- Wires WebSocket lifecycle events (`onopen`, `onclose`, `onerror`, `onmessage`) to EvEm events
+- Routes incoming server messages to the appropriate EvEm event patterns
+- Sends outgoing EvEm events to the WebSocket automatically
+- Integrates ConnectionManager, MessageQueue, and RequestResponseManager seamlessly
+- Parses and formats messages using customizable JSON serialization
+
+**When to use the handler reference:**
+- ✅ Check connection state with `handler.isConnected()`
+- ✅ Monitor queue size with `handler.getQueueSize()`
+- ✅ Clean up resources with `handler.disconnect()`
+- 💡 If you don't need lifecycle management, you can skip storing it (though cleanup is recommended)
+
+**Configuration Options:**
+
+```typescript
+const handler = new WebSocketHandler('wss://api.example.com', evem, {
+  // Enable/disable message queue (default: true)
+  enableQueue: true,
+  queueSize: 100,
+  autoFlush: true,
+
+  // Enable/disable request-response pattern (default: true)
+  enableRequestResponse: true,
+
+  // Customize server event prefix (default: 'server')
+  serverEventPrefix: 'server',
+
+  // Custom message parsing/formatting
+  messageParser: (data) => JSON.parse(data),
+  messageFormatter: (data) => JSON.stringify(data),
+
+  // Error handling
+  onError: (error) => console.error('WebSocket error:', error)
+});
+```
+
+### Manual Approach (Advanced)
+
+For more control, you can wire components manually:
+
+```typescript
+import { EvEm } from 'evem';
+import { ConnectionManager, MessageQueue, RequestResponseManager } from 'evem/websocket';
+
+const evem = new EvEm();
+const ws = new WebSocket('wss://api.example.com');
+const connectionManager = new ConnectionManager(evem);
+const messageQueue = new MessageQueue(evem, connectionManager);
+const requestResponse = new RequestResponseManager(evem);
+
+// Enable message queue with auto-flush on reconnection
+messageQueue.enable(100, { autoFlush: true });
+
+// Manually wire WebSocket events
+ws.onopen = () => connectionManager.transitionTo('connected');
+ws.onclose = () => connectionManager.transitionTo('disconnected');
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  if (message.event) {
+    evem.publish(`server.${message.event}`, message.data);
+  }
+};
+
+// Handle outgoing messages
+evem.subscribe('ws.send.queued', (data) => {
+  ws.send(JSON.stringify(data));
+});
+
+// Subscribe to server events
+evem.subscribe('server.user.*', (data) => {
+  console.log('User event:', data);
+});
+```
+
+### Request-Response Pattern
+
+WebSocketHandler supports RPC-style request-response when enabled:
+
+```typescript
+// Request-response is enabled by default
+const handler = new WebSocketHandler('wss://api.example.com', evem);
+
+// Send a request and wait for response
+const result = await requestResponse.request('getUser', { id: 123 }, {
+  timeout: 5000
+});
+
+console.log('User data:', result);
+```
+
+For complete documentation, examples, and API reference, see:
+- [WebSocket Adapter Documentation](docs/websocket-adapter.md)
+- [WebSocketHandler API Reference](docs/websocket-handler.md)
+
 ## Getting on Board
 
 ### Installation
