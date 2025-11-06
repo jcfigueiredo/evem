@@ -20,28 +20,18 @@
         }
 
         .page-container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
-            display: grid;
-            grid-template-columns: 1fr 900px;
-            gap: 20px;
-            align-items: start;
-        }
-
-        .output-section {
-            position: sticky;
-            top: 20px;
         }
 
         .chat-container {
             width: 100%;
-            height: 90vh;
             background: white;
             border-radius: 16px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+            max-height: calc(100vh - 40px);
         }
 
         .chat-header {
@@ -85,6 +75,7 @@
             flex: 1;
             display: flex;
             overflow: hidden;
+            min-height: 0;
         }
 
         .sidebar {
@@ -287,9 +278,13 @@
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 13px;
             line-height: 1.6;
-            height: 400px;
+            height: 250px;
             overflow-y: auto;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            position: sticky;
+            top: 20px;
+            z-index: 100;
         }
 
         .output .log-entry {
@@ -374,47 +369,24 @@
             line-height: 1.5;
         }
 
-        @media (max-width: 1200px) {
-            .page-container {
-                grid-template-columns: 1fr;
-            }
-
-            .output-section {
-                position: relative;
-                top: 0;
-            }
-
-            .output {
-                height: 200px;
-                margin-bottom: 20px;
-            }
-
-            .chat-container {
-                height: 70vh;
-            }
-        }
-
         @media (max-width: 768px) {
             .sidebar {
                 display: none;
             }
 
             .chat-container {
-                height: 60vh;
                 border-radius: 8px;
             }
 
             .output {
-                height: 150px;
+                height: 180px;
             }
         }
     </style>
 </head>
 <body>
     <div class="page-container">
-        <div class="output-section">
-            <div class="output" id="output"></div>
-        </div>
+        <div class="output" id="output"></div>
 
         <div class="chat-container">
             <div class="chat-header">
@@ -428,7 +400,7 @@
                 </div>
             </div>
 
-        <div class="tabs">
+            <div class="tabs">
             <button class="tab active" onclick="switchTab(event, 'chat-ui')">Chat</button>
             <button class="tab" onclick="switchTab(event, 'code-view')">View Code</button>
         </div>
@@ -631,7 +603,7 @@ async function disconnect() {
 // ✓ Clean separation of concerns (connection, queue, UI)
 // ✓ Event-driven architecture makes it easy to add features
 // ✓ All WebSocket logic is centralized and testable</code></pre></div>
-        </div>
+            </div>
         </div>
     </div>
 
