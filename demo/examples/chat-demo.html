@@ -15,16 +15,26 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            min-height: 100vh;
             padding: 20px;
+        }
+
+        .page-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 900px;
+            gap: 20px;
+            align-items: start;
+        }
+
+        .output-section {
+            position: sticky;
+            top: 20px;
         }
 
         .chat-container {
             width: 100%;
-            max-width: 900px;
             height: 90vh;
             background: white;
             border-radius: 16px;
@@ -272,17 +282,14 @@
         .output {
             background: #1a202c;
             color: #e2e8f0;
-            padding: 15px;
-            border-radius: 0;
+            padding: 20px;
+            border-radius: 8px;
             font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 12px;
-            line-height: 1.5;
-            height: 180px;
+            font-size: 13px;
+            line-height: 1.6;
+            height: 400px;
             overflow-y: auto;
-            margin-bottom: 20px;
-            position: sticky;
-            top: 20px;
-            z-index: 100;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
 
         .output .log-entry {
@@ -367,32 +374,59 @@
             line-height: 1.5;
         }
 
+        @media (max-width: 1200px) {
+            .page-container {
+                grid-template-columns: 1fr;
+            }
+
+            .output-section {
+                position: relative;
+                top: 0;
+            }
+
+            .output {
+                height: 200px;
+                margin-bottom: 20px;
+            }
+
+            .chat-container {
+                height: 70vh;
+            }
+        }
+
         @media (max-width: 768px) {
             .sidebar {
                 display: none;
             }
 
             .chat-container {
-                height: 100vh;
-                border-radius: 0;
+                height: 60vh;
+                border-radius: 8px;
+            }
+
+            .output {
+                height: 150px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="chat-container">
-        <div class="chat-header">
-            <div>
-                <h1>💬 EvEm Chat</h1>
-                <div style="font-size: 0.85rem; opacity: 0.9; margin-top: 5px;">Real-time messaging with offline support</div>
-            </div>
-            <div class="connection-status">
-                <div class="status-dot" id="statusDot"></div>
-                <span id="statusText">Offline</span>
-            </div>
+    <div class="page-container">
+        <div class="output-section">
+            <div class="output" id="output"></div>
         </div>
 
-        <div class="output" id="output"></div>
+        <div class="chat-container">
+            <div class="chat-header">
+                <div>
+                    <h1>💬 EvEm Chat</h1>
+                    <div style="font-size: 0.85rem; opacity: 0.9; margin-top: 5px;">Real-time messaging with offline support</div>
+                </div>
+                <div class="connection-status">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Offline</span>
+                </div>
+            </div>
 
         <div class="tabs">
             <button class="tab active" onclick="switchTab(event, 'chat-ui')">Chat</button>
@@ -597,6 +631,7 @@ async function disconnect() {
 // ✓ Clean separation of concerns (connection, queue, UI)
 // ✓ Event-driven architecture makes it easy to add features
 // ✓ All WebSocket logic is centralized and testable</code></pre></div>
+        </div>
         </div>
     </div>
 
