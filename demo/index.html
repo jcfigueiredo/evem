@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EvEm Demo - Feature Showcase</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 60px;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .demo-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        .demo-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+
+        .demo-card h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+        }
+
+        .demo-card p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .features-list {
+            list-style: none;
+        }
+
+        .features-list li {
+            padding: 8px 0;
+            color: #555;
+            display: flex;
+            align-items: center;
+        }
+
+        .features-list li:before {
+            content: "✓";
+            color: #667eea;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .demo-badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin-top: 10px;
+        }
+
+        .new-badge {
+            background: #f093fb;
+        }
+
+        footer {
+            text-align: center;
+            color: white;
+            margin-top: 60px;
+            opacity: 0.9;
+        }
+
+        footer a {
+            color: white;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📢 EvEm Demo Suite</h1>
+            <p class="subtitle">Interactive examples showcasing all features</p>
+        </header>
+
+        <div class="demo-grid">
+            <a href="examples/core-features.html" class="demo-card">
+                <h2>Core Features</h2>
+                <p>Basic pub/sub, wildcards, namespaces, and filters</p>
+                <ul class="features-list">
+                    <li>Event subscription & publishing</li>
+                    <li>Wildcard patterns</li>
+                    <li>Event filtering</li>
+                    <li>Priority handling</li>
+                </ul>
+                <span class="demo-badge">Essential</span>
+            </a>
+
+            <a href="examples/flow-control.html" class="demo-card">
+                <h2>Flow Control</h2>
+                <p>Throttling, debouncing, and once-only events</p>
+                <ul class="features-list">
+                    <li>Event throttling</li>
+                    <li>Event debouncing</li>
+                    <li>Once-only subscriptions</li>
+                    <li>Combined techniques</li>
+                </ul>
+                <span class="demo-badge">Performance</span>
+            </a>
+
+            <a href="examples/middleware-transforms.html" class="demo-card">
+                <h2>Middleware & Transforms</h2>
+                <p>Event interception and data transformation</p>
+                <ul class="features-list">
+                    <li>Global middleware</li>
+                    <li>Pattern-based middleware</li>
+                    <li>Event transformations</li>
+                    <li>Transform chains</li>
+                </ul>
+                <span class="demo-badge">Advanced</span>
+            </a>
+
+            <a href="examples/history-replay.html" class="demo-card">
+                <h2>History & Replay</h2>
+                <p>Event recording and playback for late subscribers</p>
+                <ul class="features-list">
+                    <li>Event history recording</li>
+                    <li>Replay last event</li>
+                    <li>Replay full history</li>
+                    <li>Late subscriber sync</li>
+                </ul>
+                <span class="demo-badge">State Management</span>
+            </a>
+
+            <a href="examples/schema-validation.html" class="demo-card">
+                <h2>Schema Validation</h2>
+                <p>Runtime data validation with detailed error handling</p>
+                <ul class="features-list">
+                    <li>Simple validators</li>
+                    <li>Advanced validators</li>
+                    <li>Error policies</li>
+                    <li>Type safety</li>
+                </ul>
+                <span class="demo-badge">Data Quality</span>
+            </a>
+
+            <a href="examples/cancelable-errors.html" class="demo-card">
+                <h2>Cancelable Events & Errors</h2>
+                <p>Event cancellation and error policy management</p>
+                <ul class="features-list">
+                    <li>Cancelable events</li>
+                    <li>Error policies</li>
+                    <li>Validation chains</li>
+                    <li>Permission checks</li>
+                </ul>
+                <span class="demo-badge">Control Flow</span>
+            </a>
+
+            <a href="examples/websocket-demo.html" class="demo-card">
+                <h2>WebSocket Adapter</h2>
+                <p>Real-time communication with auto-wiring</p>
+                <ul class="features-list">
+                    <li>WebSocketHandler auto-wiring</li>
+                    <li>Connection state management</li>
+                    <li>Message queueing</li>
+                    <li>Request-response pattern</li>
+                </ul>
+                <span class="demo-badge new-badge">New!</span>
+            </a>
+
+            <a href="examples/chat-demo.html" class="demo-card">
+                <h2>Chat Application</h2>
+                <p>Complete real-time chat with WebSocket</p>
+                <ul class="features-list">
+                    <li>Full chat implementation</li>
+                    <li>Offline support</li>
+                    <li>Message history</li>
+                    <li>User presence</li>
+                </ul>
+                <span class="demo-badge new-badge">New!</span>
+            </a>
+        </div>
+
+        <footer>
+            <p>Built with ❤️ using EvEm | <a href="https://github.com/jcfigueiredo/evem" target="_blank">View on GitHub</a></p>
+        </footer>
+    </div>
+</body>
+</html>

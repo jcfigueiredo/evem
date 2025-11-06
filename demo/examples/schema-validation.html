@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EvEm - Schema Validation Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            opacity: 0.9;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .nav-link:hover {
+            opacity: 1;
+        }
+
+        .demo-section {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .demo-section h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+        }
+
+        .demo-section p {
+            color: #666;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s ease;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button.secondary {
+            background: #48bb78;
+        }
+
+        button.secondary:hover {
+            background: #38a169;
+        }
+
+        button.danger {
+            background: #f56565;
+        }
+
+        button.danger:hover {
+            background: #e53e3e;
+        }
+
+        .output {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .output .log-entry {
+            margin-bottom: 8px;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .output .timestamp {
+            color: #718096;
+        }
+
+        .output .event-name {
+            color: #48bb78;
+            font-weight: bold;
+        }
+
+        .output .data {
+            color: #fbd38d;
+        }
+
+        .output .info {
+            color: #63b3ed;
+        }
+
+        .output .success {
+            color: #48bb78;
+        }
+
+        .output .error {
+            color: #fc8181;
+        }
+
+        .output .warning {
+            color: #f6ad55;
+        }
+
+        .code-block {
+            background: #2d3748;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            color: #e2e8f0;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-box {
+            background: #edf2f7;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-box .label {
+            color: #718096;
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+        }
+
+        .stat-box .value {
+            color: #667eea;
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+
+        .stat-box.success .value {
+            color: #48bb78;
+        }
+
+        .stat-box.error .value {
+            color: #f56565;
+        }
+
+        .validation-result {
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+
+        .validation-result.success {
+            background: #c6f6d5;
+            border-left: 4px solid #48bb78;
+        }
+
+        .validation-result.error {
+            background: #fed7d7;
+            border-left: 4px solid #f56565;
+        }
+
+        .validation-result .title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .validation-result .details {
+            font-size: 0.9rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>✅ Schema Validation Demo</h1>
+            <p>Runtime data validation with detailed error handling</p>
+            <a href="../index.html" class="nav-link">← Back to demos</a>
+        </header>
+
+        <div class="demo-section">
+            <h2>1. Simple Validators</h2>
+            <p>Basic data type and structure validation</p>
+            <div class="code-block">evem.setSchema('user.create', {
+    validate: (data) => {
+        if (!data.username) throw new Error('username required');
+        if (!data.email) throw new Error('email required');
+        return true;
+    }
+});</div>
+            <div class="controls">
+                <button onclick="setupSimpleValidator()">Setup Validator</button>
+                <button class="secondary" onclick="publishValidUser()">Valid User</button>
+                <button class="secondary" onclick="publishInvalidUser()">Invalid User</button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>2. Advanced Validators</h2>
+            <p>Complex validation with detailed error messages</p>
+            <div class="code-block">evem.setSchema('payment.process', {
+    validate: (data) => {
+        const errors = [];
+        if (!data.amount || data.amount <= 0) {
+            errors.push('Amount must be positive');
+        }
+        if (!data.currency || !/^[A-Z]{3}$/.test(data.currency)) {
+            errors.push('Invalid currency code');
+        }
+        if (errors.length) throw new Error(errors.join(', '));
+        return true;
+    }
+});</div>
+            <div class="controls">
+                <button onclick="setupAdvancedValidator()">Setup Validator</button>
+                <button class="secondary" onclick="publishValidPayment()">Valid Payment</button>
+                <button class="secondary" onclick="publishInvalidPayment()">Invalid Payment</button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>3. Error Policies</h2>
+            <p>Configure how validation errors are handled</p>
+            <div class="code-block">// throw: Stop execution and throw error
+// log: Log error and continue
+// ignore: Silently skip invalid events</div>
+            <div class="controls">
+                <button onclick="setErrorPolicy('throw')">Policy: Throw</button>
+                <button onclick="setErrorPolicy('log')">Policy: Log</button>
+                <button onclick="setErrorPolicy('ignore')">Policy: Ignore</button>
+                <button class="secondary" onclick="publishWithPolicy()">Test Policy</button>
+            </div>
+            <div id="policyDisplay" style="margin-top: 10px; color: #667eea; font-weight: bold;">
+                Current Policy: throw
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>4. Type Safety</h2>
+            <p>Validate data types and structure</p>
+            <div class="controls">
+                <button onclick="setupTypeValidator()">Setup Type Validator</button>
+                <button class="secondary" onclick="publishCorrectType()">Correct Types</button>
+                <button class="secondary" onclick="publishWrongType()">Wrong Types</button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>5. Custom Validators</h2>
+            <p>Create reusable validation functions</p>
+            <div class="controls">
+                <button onclick="setupCustomValidators()">Setup Custom Validators</button>
+                <button class="secondary" onclick="testCustomValidators()">Test Validators</button>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-box success">
+                <div class="label">Valid Events</div>
+                <div class="value" id="validCount">0</div>
+            </div>
+            <div class="stat-box error">
+                <div class="label">Invalid Events</div>
+                <div class="value" id="invalidCount">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Total Validations</div>
+                <div class="value" id="totalValidations">0</div>
+            </div>
+        </div>
+
+        <div class="output" id="output"></div>
+    </div>
+
+    <script type="module">
+        class EvEm {
+            constructor() {
+                this.events = new Map();
+                this.schemas = new Map();
+                this.subscriptionCounter = 0;
+                this.errorPolicy = 'throw'; // throw, log, ignore
+            }
+
+            setSchema(event, schema) {
+                this.schemas.set(event, schema);
+                log(`Schema set for <span class="event-name">${event}</span>`, 'info');
+            }
+
+            setErrorPolicy(policy) {
+                this.errorPolicy = policy;
+                log(`Error policy set to: <span class="warning">${policy}</span>`, 'info');
+            }
+
+            subscribe(event, callback, options = {}) {
+                const id = `sub-${++this.subscriptionCounter}`;
+                if (!this.events.has(event)) {
+                    this.events.set(event, new Map());
+                }
+                this.events.get(event).set(id, { callback, options });
+                return id;
+            }
+
+            async publish(event, data) {
+                window.totalValidations++;
+                updateStats();
+
+                // Validate against schema if present
+                const schema = this.schemas.get(event);
+                if (schema) {
+                    try {
+                        schema.validate(data);
+                        window.validCount++;
+                        updateStats();
+                        log(`<span class="success">✓ Validation passed</span> for <span class="event-name">${event}</span>`, 'success');
+                    } catch (error) {
+                        window.invalidCount++;
+                        updateStats();
+                        log(`<span class="error">✗ Validation failed</span> for <span class="event-name">${event}</span>: ${error.message}`, 'error');
+
+                        if (this.errorPolicy === 'throw') {
+                            throw error;
+                        } else if (this.errorPolicy === 'log') {
+                            console.error('Validation error:', error);
+                            return false; // Don't publish
+                        } else if (this.errorPolicy === 'ignore') {
+                            return false; // Silently skip
+                        }
+                    }
+                }
+
+                // Get handlers
+                const handlers = [];
+                if (this.events.has(event)) {
+                    handlers.push(...Array.from(this.events.get(event).values()));
+                }
+
+                // Execute handlers
+                for (const handler of handlers) {
+                    try {
+                        await handler.callback(data);
+                    } catch (error) {
+                        console.error('Error in handler:', error);
+                    }
+                }
+
+                return true;
+            }
+        }
+
+        // Global state
+        window.evem = new EvEm();
+        window.validCount = 0;
+        window.invalidCount = 0;
+        window.totalValidations = 0;
+        window.currentPolicy = 'throw';
+
+        // Logging utility
+        window.log = (message, type = 'info') => {
+            const output = document.getElementById('output');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="timestamp">[${timestamp}]</span> <span class="${type}">${message}</span>`;
+            output.appendChild(entry);
+            output.scrollTop = output.scrollHeight;
+        };
+
+        window.updateStats = () => {
+            document.getElementById('validCount').textContent = window.validCount;
+            document.getElementById('invalidCount').textContent = window.invalidCount;
+            document.getElementById('totalValidations').textContent = window.totalValidations;
+        };
+
+        // Demo functions
+        window.setupSimpleValidator = () => {
+            window.evem.setSchema('user.create', {
+                validate: (data) => {
+                    if (!data.username) throw new Error('username is required');
+                    if (!data.email) throw new Error('email is required');
+                    if (data.username.length < 3) throw new Error('username must be at least 3 characters');
+                    return true;
+                }
+            });
+
+            window.evem.subscribe('user.create', (data) => {
+                log(`User created: <span class="data">${data.username} (${data.email})</span>`, 'success');
+            });
+        };
+
+        window.publishValidUser = async () => {
+            try {
+                await window.evem.publish('user.create', {
+                    username: 'alice123',
+                    email: 'alice@example.com'
+                });
+            } catch (error) {
+                log(`Publish failed: ${error.message}`, 'error');
+            }
+        };
+
+        window.publishInvalidUser = async () => {
+            try {
+                await window.evem.publish('user.create', {
+                    username: 'ab', // Too short
+                    // Missing email
+                });
+            } catch (error) {
+                log(`Publish failed: ${error.message}`, 'error');
+            }
+        };
+
+        window.setupAdvancedValidator = () => {
+            window.evem.setSchema('payment.process', {
+                validate: (data) => {
+                    const errors = [];
+
+                    if (!data.amount || typeof data.amount !== 'number' || data.amount <= 0) {
+                        errors.push('Amount must be a positive number');
+                    }
+
+                    if (!data.currency || !/^[A-Z]{3}$/.test(data.currency)) {
+                        errors.push('Currency must be a 3-letter code (e.g., USD)');
+                    }
+
+                    if (!data.method || !['card', 'bank', 'crypto'].includes(data.method)) {
+                        errors.push('Payment method must be: card, bank, or crypto');
+                    }
+
+                    if (errors.length > 0) {
+                        throw new Error(errors.join('; '));
+                    }
+
+                    return true;
+                }
+            });
+
+            window.evem.subscribe('payment.process', (data) => {
+                log(`Payment processed: <span class="data">${data.amount} ${data.currency} via ${data.method}</span>`, 'success');
+            });
+        };
+
+        window.publishValidPayment = async () => {
+            try {
+                await window.evem.publish('payment.process', {
+                    amount: 99.99,
+                    currency: 'USD',
+                    method: 'card'
+                });
+            } catch (error) {
+                log(`Publish failed: ${error.message}`, 'error');
+            }
+        };
+
+        window.publishInvalidPayment = async () => {
+            try {
+                await window.evem.publish('payment.process', {
+                    amount: -50, // Negative amount
+                    currency: 'US', // Invalid currency code
+                    method: 'paypal' // Invalid method
+                });
+            } catch (error) {
+                log(`Publish failed: ${error.message}`, 'error');
+            }
+        };
+
+        window.setErrorPolicy = (policy) => {
+            window.evem.setErrorPolicy(policy);
+            window.currentPolicy = policy;
+            document.getElementById('policyDisplay').textContent = `Current Policy: ${policy}`;
+        };
+
+        window.publishWithPolicy = async () => {
+            // Ensure validator is set up
+            window.evem.setSchema('test.event', {
+                validate: (data) => {
+                    if (!data.valid) throw new Error('Data is marked as invalid');
+                    return true;
+                }
+            });
+
+            window.evem.subscribe('test.event', (data) => {
+                log(`Handler executed with data: <span class="data">${JSON.stringify(data)}</span>`, 'success');
+            });
+
+            // Publish invalid data
+            try {
+                await window.evem.publish('test.event', { valid: false });
+                log(`Event published despite validation error (policy: ${window.currentPolicy})`, 'warning');
+            } catch (error) {
+                log(`Event blocked by validation (policy: ${window.currentPolicy})`, 'error');
+            }
+        };
+
+        window.setupTypeValidator = () => {
+            window.evem.setSchema('data.submit', {
+                validate: (data) => {
+                    const errors = [];
+
+                    if (typeof data.id !== 'number') {
+                        errors.push('id must be a number');
+                    }
+
+                    if (typeof data.name !== 'string') {
+                        errors.push('name must be a string');
+                    }
+
+                    if (!Array.isArray(data.tags)) {
+                        errors.push('tags must be an array');
+                    }
+
+                    if (typeof data.active !== 'boolean') {
+                        errors.push('active must be a boolean');
+                    }
+
+                    if (errors.length > 0) {
+                        throw new Error(errors.join('; '));
+                    }
+
+                    return true;
+                }
+            });
+
+            window.evem.subscribe('data.submit', (data) => {
+                log(`Data submitted: <span class="data">${JSON.stringify(data)}</span>`, 'success');
+            });
+        };
+
+        window.publishCorrectType = async () => {
+            try {
+                await window.evem.publish('data.submit', {
+                    id: 123,
+                    name: 'Test Item',
+                    tags: ['tag1', 'tag2'],
+                    active: true
+                });
+            } catch (error) {
+                log(`Publish failed: ${error.message}`, 'error');
+            }
+        };
+
+        window.publishWrongType = async () => {
+            try {
+                await window.evem.publish('data.submit', {
+                    id: '123', // Should be number
+                    name: 456, // Should be string
+                    tags: 'tag1,tag2', // Should be array
+                    active: 'yes' // Should be boolean
+                });
+            } catch (error) {
+                log(`Publish failed: ${error.message}`, 'error');
+            }
+        };
+
+        window.setupCustomValidators = () => {
+            // Reusable validators
+            const validators = {
+                email: (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
+                url: (value) => /^https?:\/\/.+/.test(value),
+                phone: (value) => /^\+?[\d\s-()]+$/.test(value),
+                notEmpty: (value) => value && value.length > 0
+            };
+
+            window.evem.setSchema('contact.add', {
+                validate: (data) => {
+                    const errors = [];
+
+                    if (!validators.notEmpty(data.name)) {
+                        errors.push('Name cannot be empty');
+                    }
+
+                    if (!validators.email(data.email)) {
+                        errors.push('Invalid email format');
+                    }
+
+                    if (data.website && !validators.url(data.website)) {
+                        errors.push('Invalid website URL');
+                    }
+
+                    if (data.phone && !validators.phone(data.phone)) {
+                        errors.push('Invalid phone format');
+                    }
+
+                    if (errors.length > 0) {
+                        throw new Error(errors.join('; '));
+                    }
+
+                    return true;
+                }
+            });
+
+            window.evem.subscribe('contact.add', (data) => {
+                log(`Contact added: <span class="data">${data.name} - ${data.email}</span>`, 'success');
+            });
+
+            log('Custom validators created: email, url, phone, notEmpty', 'info');
+        };
+
+        window.testCustomValidators = async () => {
+            log('Testing with valid data...', 'info');
+            try {
+                await window.evem.publish('contact.add', {
+                    name: 'John Doe',
+                    email: 'john@example.com',
+                    website: 'https://example.com',
+                    phone: '+1-555-0123'
+                });
+            } catch (error) {
+                log(`Valid test failed: ${error.message}`, 'error');
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            log('Testing with invalid data...', 'info');
+            try {
+                await window.evem.publish('contact.add', {
+                    name: '',
+                    email: 'not-an-email',
+                    website: 'not-a-url',
+                    phone: 'abc'
+                });
+            } catch (error) {
+                log(`Invalid test failed as expected: ${error.message}`, 'error');
+            }
+        };
+
+        // Initialize
+        log('EvEm Schema Validation Demo loaded. Click buttons to test features!', 'info');
+        updateStats();
+    </script>
+</body>
+</html>

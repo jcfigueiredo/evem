@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EvEm - History & Replay Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            opacity: 0.9;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .nav-link:hover {
+            opacity: 1;
+        }
+
+        .demo-section {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .demo-section h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+        }
+
+        .demo-section p {
+            color: #666;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s ease;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button.secondary {
+            background: #48bb78;
+        }
+
+        button.secondary:hover {
+            background: #38a169;
+        }
+
+        button.danger {
+            background: #f56565;
+        }
+
+        button.danger:hover {
+            background: #e53e3e;
+        }
+
+        .output {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .output .log-entry {
+            margin-bottom: 8px;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .output .timestamp {
+            color: #718096;
+        }
+
+        .output .event-name {
+            color: #48bb78;
+            font-weight: bold;
+        }
+
+        .output .data {
+            color: #fbd38d;
+        }
+
+        .output .info {
+            color: #63b3ed;
+        }
+
+        .output .replay {
+            color: #9f7aea;
+        }
+
+        .output .history {
+            color: #f093fb;
+        }
+
+        .timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin: 15px 0;
+            padding: 15px;
+            background: #edf2f7;
+            border-radius: 6px;
+        }
+
+        .timeline-event {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background: white;
+            border-left: 4px solid #667eea;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .timeline-event .event-time {
+            color: #718096;
+            font-size: 0.85rem;
+            margin-right: 15px;
+            min-width: 80px;
+        }
+
+        .timeline-event .event-info {
+            flex: 1;
+        }
+
+        .timeline-event .event-name {
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .timeline-event .event-data {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-box {
+            background: #edf2f7;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-box .label {
+            color: #718096;
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+        }
+
+        .stat-box .value {
+            color: #667eea;
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+
+        .code-block {
+            background: #2d3748;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            color: #e2e8f0;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⏱️ History & Replay Demo</h1>
+            <p>Event recording and playback for late subscribers</p>
+            <a href="../index.html" class="nav-link">← Back to demos</a>
+        </header>
+
+        <div class="demo-section">
+            <h2>1. Event History Recording</h2>
+            <p>Enable history tracking for specific events</p>
+            <div class="code-block">evem.enableHistory('user.*', { maxSize: 10 });</div>
+            <div class="controls">
+                <button onclick="enableHistory()">Enable History</button>
+                <button class="secondary" onclick="publishHistoryEvents()">Publish 5 Events</button>
+                <button class="secondary" onclick="showHistory()">Show History</button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>2. Replay Last Event</h2>
+            <p>Late subscribers automatically receive the most recent event</p>
+            <div class="code-block">evem.subscribe('status.update', handler, {
+    replayLast: true  // Receive last event immediately
+});</div>
+            <div class="controls">
+                <button onclick="publishStatus()">Publish Status</button>
+                <button class="secondary" onclick="subscribeLate()">Subscribe Late (replay last)</button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>3. Replay Full History</h2>
+            <p>New subscribers receive all historical events</p>
+            <div class="code-block">evem.subscribe('chat.message', handler, {
+    replayHistory: true  // Receive all history
+});</div>
+            <div class="controls">
+                <button onclick="publishMessages()">Publish 3 Messages</button>
+                <button class="secondary" onclick="subscribeLateHistory()">Subscribe Late (full history)</button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>4. Event Timeline</h2>
+            <p>Visual representation of event history</p>
+            <div id="timeline" class="timeline"></div>
+            <div class="controls">
+                <button onclick="addTimelineEvent()">Add Event</button>
+                <button class="danger" onclick="clearTimeline()">Clear Timeline</button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>5. Late Subscriber Sync</h2>
+            <p>Simulate a component joining late and catching up</p>
+            <div class="controls">
+                <button onclick="simulateLateJoin()">Simulate Late Join</button>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-box">
+                <div class="label">Events in History</div>
+                <div class="value" id="historySize">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Replays Performed</div>
+                <div class="value" id="replayCount">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Late Subscribers</div>
+                <div class="value" id="lateSubCount">0</div>
+            </div>
+        </div>
+
+        <div class="output" id="output"></div>
+    </div>
+
+    <script type="module">
+        class EvEm {
+            constructor() {
+                this.events = new Map();
+                this.history = new Map();
+                this.historyConfig = new Map();
+                this.subscriptionCounter = 0;
+            }
+
+            enableHistory(pattern, options = {}) {
+                const maxSize = options.maxSize || 100;
+                this.historyConfig.set(pattern, { maxSize });
+                log(`History enabled for <span class="event-name">${pattern}</span> (max: ${maxSize})`, 'history');
+            }
+
+            subscribe(event, callback, options = {}) {
+                const id = `sub-${++this.subscriptionCounter}`;
+                if (!this.events.has(event)) {
+                    this.events.set(event, new Map());
+                }
+                this.events.get(event).set(id, { callback, options });
+
+                // Handle replay options
+                if (options.replayLast) {
+                    const lastEvent = this.getLastEvent(event);
+                    if (lastEvent) {
+                        window.replayCount++;
+                        window.lateSubCount++;
+                        updateStats();
+                        log(`<span class="replay">Replaying last event</span> for late subscriber: <span class="event-name">${event}</span>`, 'replay');
+                        setTimeout(() => callback(lastEvent.data), 0);
+                    }
+                } else if (options.replayHistory) {
+                    const history = this.getHistory(event);
+                    if (history.length > 0) {
+                        window.replayCount += history.length;
+                        window.lateSubCount++;
+                        updateStats();
+                        log(`<span class="replay">Replaying ${history.length} events</span> for late subscriber`, 'replay');
+                        setTimeout(() => {
+                            history.forEach(record => callback(record.data));
+                        }, 0);
+                    }
+                }
+
+                return id;
+            }
+
+            async publish(event, data) {
+                // Record in history if enabled
+                for (const [pattern, config] of this.historyConfig) {
+                    if (this.matchesPattern(event, pattern)) {
+                        if (!this.history.has(event)) {
+                            this.history.set(event, []);
+                        }
+                        const eventHistory = this.history.get(event);
+                        eventHistory.push({
+                            event,
+                            data,
+                            timestamp: Date.now()
+                        });
+                        // Trim to max size
+                        if (eventHistory.length > config.maxSize) {
+                            eventHistory.shift();
+                        }
+                        window.historySize = this.getTotalHistorySize();
+                        updateStats();
+                        break;
+                    }
+                }
+
+                // Get handlers
+                const handlers = [];
+                if (this.events.has(event)) {
+                    handlers.push(...Array.from(this.events.get(event).values()));
+                }
+
+                for (const [pattern, subs] of this.events) {
+                    if (this.matchesPattern(event, pattern)) {
+                        handlers.push(...Array.from(subs.values()));
+                    }
+                }
+
+                // Execute handlers
+                for (const handler of handlers) {
+                    try {
+                        await handler.callback(data);
+                    } catch (error) {
+                        console.error('Error in handler:', error);
+                    }
+                }
+
+                return true;
+            }
+
+            getLastEvent(event) {
+                const eventHistory = this.history.get(event);
+                if (eventHistory && eventHistory.length > 0) {
+                    return eventHistory[eventHistory.length - 1];
+                }
+                return null;
+            }
+
+            getHistory(event) {
+                return this.history.get(event) || [];
+            }
+
+            getTotalHistorySize() {
+                let total = 0;
+                for (const [, events] of this.history) {
+                    total += events.length;
+                }
+                return total;
+            }
+
+            matchesPattern(event, pattern) {
+                if (pattern === event || pattern === '*') return true;
+                const eventParts = event.split('.');
+                const patternParts = pattern.split('.');
+                if (patternParts.length !== eventParts.length) return false;
+                return patternParts.every((part, i) =>
+                    part === '*' || part === eventParts[i]
+                );
+            }
+        }
+
+        // Global state
+        window.evem = new EvEm();
+        window.historySize = 0;
+        window.replayCount = 0;
+        window.lateSubCount = 0;
+
+        // Logging utility
+        window.log = (message, type = 'info') => {
+            const output = document.getElementById('output');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="timestamp">[${timestamp}]</span> <span class="${type}">${message}</span>`;
+            output.appendChild(entry);
+            output.scrollTop = output.scrollHeight;
+        };
+
+        window.updateStats = () => {
+            document.getElementById('historySize').textContent = window.historySize;
+            document.getElementById('replayCount').textContent = window.replayCount;
+            document.getElementById('lateSubCount').textContent = window.lateSubCount;
+        };
+
+        window.addToTimeline = (eventName, data) => {
+            const timeline = document.getElementById('timeline');
+            const event = document.createElement('div');
+            event.className = 'timeline-event';
+            event.innerHTML = `
+                <div class="event-time">${new Date().toLocaleTimeString()}</div>
+                <div class="event-info">
+                    <div class="event-name">${eventName}</div>
+                    <div class="event-data">${JSON.stringify(data)}</div>
+                </div>
+            `;
+            timeline.appendChild(event);
+            timeline.scrollTop = timeline.scrollHeight;
+        };
+
+        // Demo functions
+        window.enableHistory = () => {
+            window.evem.enableHistory('user.*', { maxSize: 10 });
+            window.evem.enableHistory('status.*', { maxSize: 5 });
+            window.evem.enableHistory('chat.*', { maxSize: 20 });
+            log('History enabled for user.*, status.*, and chat.* events', 'info');
+        };
+
+        window.publishHistoryEvents = async () => {
+            for (let i = 1; i <= 5; i++) {
+                await window.evem.publish('user.action', {
+                    action: `Action ${i}`,
+                    userId: 100 + i,
+                    timestamp: Date.now()
+                });
+                log(`Published user.action #${i}`, 'info');
+                addToTimeline('user.action', { action: `Action ${i}` });
+            }
+        };
+
+        window.showHistory = () => {
+            const history = window.evem.getHistory('user.action');
+            log(`<span class="history">History for user.action:</span> ${history.length} events`, 'history');
+            history.forEach((record, i) => {
+                log(`  ${i + 1}. ${JSON.stringify(record.data)}`, 'history');
+            });
+        };
+
+        window.publishStatus = async () => {
+            await window.evem.publish('status.update', {
+                status: 'online',
+                server: 'main-01',
+                timestamp: Date.now()
+            });
+            log('Published status.update', 'info');
+            addToTimeline('status.update', { status: 'online' });
+        };
+
+        window.subscribeLate = () => {
+            window.evem.subscribe('status.update', (data) => {
+                log(`Late subscriber received: <span class="data">${JSON.stringify(data)}</span>`, 'replay');
+            }, { replayLast: true });
+            log('Late subscriber created with replayLast option', 'info');
+        };
+
+        window.publishMessages = async () => {
+            const messages = [
+                { user: 'Alice', text: 'Hello everyone!' },
+                { user: 'Bob', text: 'Hey Alice!' },
+                { user: 'Charlie', text: 'Good morning!' }
+            ];
+
+            for (const msg of messages) {
+                await window.evem.publish('chat.message', msg);
+                log(`Published: <span class="data">${msg.user}: ${msg.text}</span>`, 'info');
+                addToTimeline('chat.message', msg);
+            }
+        };
+
+        window.subscribeLateHistory = () => {
+            window.evem.subscribe('chat.message', (data) => {
+                log(`Late subscriber received: <span class="data">${data.user}: ${data.text}</span>`, 'replay');
+            }, { replayHistory: true });
+            log('Late subscriber created with replayHistory option', 'info');
+        };
+
+        window.addTimelineEvent = async () => {
+            const eventNum = Math.floor(Math.random() * 1000);
+            await window.evem.publish('user.action', {
+                action: `Random Action ${eventNum}`,
+                timestamp: Date.now()
+            });
+            addToTimeline('user.action', { action: `Random Action ${eventNum}` });
+            log(`Added random event to timeline`, 'info');
+        };
+
+        window.clearTimeline = () => {
+            document.getElementById('timeline').innerHTML = '';
+            log('Timeline cleared', 'info');
+        };
+
+        window.simulateLateJoin = async () => {
+            log('<span class="info">Simulating scenario:</span> Publishing events, then late subscriber joins...', 'info');
+
+            // Publish some events
+            for (let i = 1; i <= 3; i++) {
+                await window.evem.publish('user.login', {
+                    user: `User${i}`,
+                    timestamp: Date.now()
+                });
+                addToTimeline('user.login', { user: `User${i}` });
+            }
+
+            log('3 events published before subscriber existed', 'info');
+
+            // Wait a bit
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Now subscribe with replay
+            window.evem.subscribe('user.login', (data) => {
+                log(`Component received login: <span class="data">${data.user}</span>`, 'replay');
+            }, { replayHistory: true });
+
+            log('<span class="replay">Late subscriber joined and caught up!</span>', 'replay');
+        };
+
+        // Initialize
+        log('EvEm History & Replay Demo loaded. Click buttons to test features!', 'info');
+        updateStats();
+
+        // Enable history by default
+        window.evem.enableHistory('*', { maxSize: 50 });
+    </script>
+</body>
+</html>

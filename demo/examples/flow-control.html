@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EvEm - Flow Control Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            opacity: 0.9;
+        }
+
+        .demo-section {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .demo-section h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button.secondary {
+            background: #48bb78;
+        }
+
+        button.danger {
+            background: #f56565;
+        }
+
+        .output {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 6px;
+            font-family: 'Monaco', monospace;
+            font-size: 13px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .visualizer {
+            background: #edf2f7;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .event-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background: #667eea;
+            border-radius: 50%;
+            margin: 2px;
+            animation: pulse 0.3s ease;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.5); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.7; }
+        }
+
+        .handled-indicator {
+            background: #48bb78;
+        }
+
+        .ignored-indicator {
+            background: #cbd5e0;
+            opacity: 0.3;
+        }
+
+        .counter {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            margin: 10px 5px;
+            font-weight: bold;
+        }
+
+        .rapid-fire-area {
+            background: #edf2f7;
+            padding: 30px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 15px 0;
+        }
+
+        .rapid-fire-button {
+            font-size: 18px;
+            padding: 20px 40px;
+            background: #ed8936;
+        }
+
+        .rapid-fire-button:hover {
+            background: #dd6b20;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+
+        .stat-box {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            color: #718096;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⏱️ Flow Control Demo</h1>
+            <p>Throttling, Debouncing, and Once-Only Events</p>
+            <a href="../index.html" class="nav-link">← Back to demos</a>
+        </header>
+
+        <div class="demo-section">
+            <h2>1. Throttling</h2>
+            <p>Limits execution to once per time window (first event is processed immediately)</p>
+
+            <div class="rapid-fire-area">
+                <button class="rapid-fire-button" onmousedown="startRapidFire('throttle')" onmouseup="stopRapidFire()">
+                    Hold to Fire Events Rapidly
+                </button>
+                <p style="margin-top: 15px; color: #718096;">Events are throttled to 500ms intervals</p>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-value" id="throttlePublished">0</div>
+                    <div class="stat-label">Published</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="throttleHandled">0</div>
+                    <div class="stat-label">Handled</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="throttleIgnored">0</div>
+                    <div class="stat-label">Throttled</div>
+                </div>
+            </div>
+
+            <div class="visualizer" id="throttleViz">
+                <strong>Event Timeline:</strong>
+                <div id="throttleTimeline" style="margin-top: 10px;"></div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>2. Debouncing</h2>
+            <p>Waits for events to stop before processing (only the last event in a window is processed)</p>
+
+            <div class="rapid-fire-area">
+                <button class="rapid-fire-button" onmousedown="startRapidFire('debounce')" onmouseup="stopRapidFire()">
+                    Hold to Fire Events Rapidly
+                </button>
+                <p style="margin-top: 15px; color: #718096;">Events are debounced to 500ms intervals</p>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-value" id="debouncePublished">0</div>
+                    <div class="stat-label">Published</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="debounceHandled">0</div>
+                    <div class="stat-label">Handled</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="debounceIgnored">0</div>
+                    <div class="stat-label">Debounced</div>
+                </div>
+            </div>
+
+            <div class="visualizer" id="debounceViz">
+                <strong>Event Timeline:</strong>
+                <div id="debounceTimeline" style="margin-top: 10px;"></div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>3. Once-Only Events</h2>
+            <p>Subscription automatically removed after first trigger</p>
+
+            <div style="margin: 20px 0;">
+                <button onclick="setupOnce()">Setup Once-Only Subscription</button>
+                <button class="secondary" onclick="publishOnceEvent()">Trigger Event</button>
+                <button class="danger" onclick="resetOnce()">Reset</button>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-value" id="oncePublished">0</div>
+                    <div class="stat-label">Published</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="onceHandled">0</div>
+                    <div class="stat-label">Handled</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="onceActive">0</div>
+                    <div class="stat-label">Active Subs</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>4. Combined: Throttle + Debounce</h2>
+            <p>Process first event immediately, then wait for pause</p>
+
+            <div class="rapid-fire-area">
+                <button class="rapid-fire-button" onmousedown="startRapidFire('combined')" onmouseup="stopRapidFire()">
+                    Hold to Fire Events Rapidly
+                </button>
+                <p style="margin-top: 15px; color: #718096;">Throttle 300ms + Debounce 300ms</p>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-value" id="combinedPublished">0</div>
+                    <div class="stat-label">Published</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="combinedHandled">0</div>
+                    <div class="stat-label">Handled</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="output" id="output"></div>
+    </div>
+
+    <script>
+        // Simplified EvEm with flow control
+        class EvEm {
+            constructor() {
+                this.events = new Map();
+                this.subscriptionCounter = 0;
+                this.throttleTimers = new Map();
+                this.debounceTimers = new Map();
+            }
+
+            subscribe(event, callback, options = {}) {
+                const id = `sub-${++this.subscriptionCounter}`;
+
+                if (!this.events.has(event)) {
+                    this.events.set(event, new Map());
+                }
+
+                this.events.get(event).set(id, { callback, options });
+                return id;
+            }
+
+            unsubscribe(id) {
+                for (const [event, subs] of this.events) {
+                    if (subs.has(id)) {
+                        subs.delete(id);
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            async publish(event, data) {
+                if (!this.events.has(event)) return;
+
+                const handlers = Array.from(this.events.get(event).entries());
+
+                for (const [id, handler] of handlers) {
+                    const { callback, options } = handler;
+
+                    // Handle throttle
+                    if (options.throttleTime) {
+                        const throttleKey = `${event}-${id}`;
+                        if (this.throttleTimers.has(throttleKey)) {
+                            continue; // Skip this execution
+                        }
+
+                        this.throttleTimers.set(throttleKey, true);
+                        setTimeout(() => {
+                            this.throttleTimers.delete(throttleKey);
+                        }, options.throttleTime);
+                    }
+
+                    // Handle debounce
+                    if (options.debounceTime) {
+                        const debounceKey = `${event}-${id}`;
+                        if (this.debounceTimers.has(debounceKey)) {
+                            clearTimeout(this.debounceTimers.get(debounceKey));
+                        }
+
+                        const timerId = setTimeout(async () => {
+                            this.debounceTimers.delete(debounceKey);
+                            try {
+                                await callback(data);
+                            } catch (error) {
+                                console.error(error);
+                            }
+
+                            // Handle once option
+                            if (options.once) {
+                                this.unsubscribe(id);
+                            }
+                        }, options.debounceTime);
+
+                        this.debounceTimers.set(debounceKey, timerId);
+                        continue; // Don't execute immediately
+                    }
+
+                    // Execute callback
+                    try {
+                        await callback(data);
+                    } catch (error) {
+                        console.error(error);
+                    }
+
+                    // Handle once option
+                    if (options.once) {
+                        this.unsubscribe(id);
+                    }
+                }
+            }
+
+            getSubscriptionCount(event) {
+                return this.events.has(event) ? this.events.get(event).size : 0;
+            }
+        }
+
+        // Initialize
+        const evem = new EvEm();
+        let rapidFireInterval = null;
+
+        const log = (message) => {
+            const output = document.getElementById('output');
+            const timestamp = new Date().toLocaleTimeString();
+            output.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            output.scrollTop = output.scrollHeight;
+        };
+
+        // Throttle demo
+        let throttleStats = { published: 0, handled: 0, ignored: 0 };
+        evem.subscribe('throttle.event', () => {
+            throttleStats.handled++;
+            document.getElementById('throttleHandled').textContent = throttleStats.handled;
+
+            const timeline = document.getElementById('throttleTimeline');
+            const indicator = document.createElement('span');
+            indicator.className = 'event-indicator handled-indicator';
+            timeline.appendChild(indicator);
+
+            log('<span style="color: #48bb78">✓ Throttle:</span> Event handled');
+        }, { throttleTime: 500 });
+
+        // Debounce demo
+        let debounceStats = { published: 0, handled: 0, ignored: 0 };
+        evem.subscribe('debounce.event', () => {
+            debounceStats.handled++;
+            document.getElementById('debounceHandled').textContent = debounceStats.handled;
+
+            const timeline = document.getElementById('debounceTimeline');
+            const indicator = document.createElement('span');
+            indicator.className = 'event-indicator handled-indicator';
+            timeline.appendChild(indicator);
+
+            log('<span style="color: #48bb78">✓ Debounce:</span> Event handled (after pause)');
+        }, { debounceTime: 500 });
+
+        // Combined demo
+        let combinedStats = { published: 0, handled: 0 };
+        evem.subscribe('combined.event', () => {
+            combinedStats.handled++;
+            document.getElementById('combinedHandled').textContent = combinedStats.handled;
+            log('<span style="color: #48bb78">✓ Combined:</span> Event handled');
+        }, { throttleTime: 300, debounceTime: 300 });
+
+        // Once demo
+        let onceStats = { published: 0, handled: 0 };
+        let onceSubId = null;
+
+        window.setupOnce = () => {
+            if (onceSubId) return;
+            onceSubId = evem.subscribe('once.event', () => {
+                onceStats.handled++;
+                document.getElementById('onceHandled').textContent = onceStats.handled;
+                document.getElementById('onceActive').textContent = evem.getSubscriptionCount('once.event');
+                log('<span style="color: #48bb78">✓ Once:</span> Event handled (subscription removed)');
+                onceSubId = null;
+            }, { once: true });
+
+            document.getElementById('onceActive').textContent = '1';
+            log('Setup once-only subscription');
+        };
+
+        window.publishOnceEvent = () => {
+            onceStats.published++;
+            document.getElementById('oncePublished').textContent = onceStats.published;
+            evem.publish('once.event');
+            log('Published once.event');
+            setTimeout(() => {
+                document.getElementById('onceActive').textContent = evem.getSubscriptionCount('once.event');
+            }, 100);
+        };
+
+        window.resetOnce = () => {
+            if (onceSubId) {
+                evem.unsubscribe(onceSubId);
+                onceSubId = null;
+            }
+            onceStats = { published: 0, handled: 0 };
+            document.getElementById('oncePublished').textContent = '0';
+            document.getElementById('onceHandled').textContent = '0';
+            document.getElementById('onceActive').textContent = '0';
+            log('Reset once demo');
+        };
+
+        window.startRapidFire = (type) => {
+            if (rapidFireInterval) return;
+
+            rapidFireInterval = setInterval(() => {
+                if (type === 'throttle') {
+                    throttleStats.published++;
+                    const wasHandled = !evem.throttleTimers.has('throttle.event-sub-1');
+                    if (!wasHandled) throttleStats.ignored++;
+
+                    document.getElementById('throttlePublished').textContent = throttleStats.published;
+                    document.getElementById('throttleIgnored').textContent = throttleStats.ignored;
+
+                    const timeline = document.getElementById('throttleTimeline');
+                    const indicator = document.createElement('span');
+                    indicator.className = wasHandled ? 'event-indicator handled-indicator' : 'event-indicator ignored-indicator';
+                    timeline.appendChild(indicator);
+
+                    evem.publish('throttle.event');
+                } else if (type === 'debounce') {
+                    debounceStats.published++;
+                    debounceStats.ignored++;
+                    document.getElementById('debouncePublished').textContent = debounceStats.published;
+                    document.getElementById('debounceIgnored').textContent = debounceStats.ignored;
+
+                    const timeline = document.getElementById('debounceTimeline');
+                    const indicator = document.createElement('span');
+                    indicator.className = 'event-indicator ignored-indicator';
+                    timeline.appendChild(indicator);
+
+                    evem.publish('debounce.event');
+                } else if (type === 'combined') {
+                    combinedStats.published++;
+                    document.getElementById('combinedPublished').textContent = combinedStats.published;
+                    evem.publish('combined.event');
+                }
+            }, 50);
+        };
+
+        window.stopRapidFire = () => {
+            if (rapidFireInterval) {
+                clearInterval(rapidFireInterval);
+                rapidFireInterval = null;
+            }
+        };
+
+        log('Flow Control Demo loaded. Try the interactive demos above!');
+    </script>
+</body>
+</html>

@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EvEm - Core Features Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            opacity: 0.9;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .nav-link:hover {
+            opacity: 1;
+        }
+
+        .demo-section {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .demo-section h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+        }
+
+        .demo-section p {
+            color: #666;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s ease;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button.secondary {
+            background: #48bb78;
+        }
+
+        button.secondary:hover {
+            background: #38a169;
+        }
+
+        button.danger {
+            background: #f56565;
+        }
+
+        button.danger:hover {
+            background: #e53e3e;
+        }
+
+        .output {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .output .log-entry {
+            margin-bottom: 8px;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .output .timestamp {
+            color: #718096;
+        }
+
+        .output .event-name {
+            color: #48bb78;
+            font-weight: bold;
+        }
+
+        .output .data {
+            color: #fbd38d;
+        }
+
+        .output .info {
+            color: #63b3ed;
+        }
+
+        .output .warning {
+            color: #f6ad55;
+        }
+
+        .output .error {
+            color: #fc8181;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-box {
+            background: #edf2f7;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-box .label {
+            color: #718096;
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+        }
+
+        .stat-box .value {
+            color: #667eea;
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+
+        .clear-btn {
+            background: #718096;
+            font-size: 12px;
+            padding: 8px 16px;
+        }
+
+        .clear-btn:hover {
+            background: #4a5568;
+        }
+
+        input[type="text"] {
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📢 Core Features Demo</h1>
+            <p>Basic pub/sub, wildcards, namespaces, and filters</p>
+            <a href="../index.html" class="nav-link">← Back to demos</a>
+        </header>
+
+        <div class="demo-section">
+            <h2>1. Basic Pub/Sub</h2>
+            <p>Simple event subscription and publishing</p>
+            <div class="controls">
+                <button onclick="basicPubSub()">Publish "user.login" Event</button>
+                <button onclick="publishMultiple()">Publish Multiple Events</button>
+                <button class="danger" onclick="clearOutput()">Clear Output</button>
+            </div>
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="label">Events Published</div>
+                    <div class="value" id="eventsPublished">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="label">Total Subscriptions</div>
+                    <div class="value" id="totalSubs">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>2. Wildcard Patterns</h2>
+            <p>Subscribe to multiple events using wildcard patterns</p>
+            <div class="controls">
+                <button onclick="wildcardDemo()">Subscribe to user.* Events</button>
+                <button class="secondary" onclick="publishUserEvents()">Publish User Events</button>
+                <button class="secondary" onclick="publishSystemEvents()">Publish System Events</button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>3. Event Filtering</h2>
+            <p>Filter events based on data properties</p>
+            <div class="controls">
+                <button onclick="filterDemo()">Setup Admin Filter</button>
+                <button class="secondary" onclick="publishWithRole('admin')">Publish Admin Event</button>
+                <button class="secondary" onclick="publishWithRole('user')">Publish User Event</button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>4. Priority Handling</h2>
+            <p>Control execution order with priorities</p>
+            <div class="controls">
+                <button onclick="priorityDemo()">Setup Priority Handlers</button>
+                <button class="secondary" onclick="publishPriorityEvent()">Trigger Priority Event</button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>5. Namespaces</h2>
+            <p>Organize events with namespace patterns</p>
+            <div class="controls">
+                <input type="text" id="namespaceInput" placeholder="e.g., api.user.create" />
+                <button onclick="publishNamespaced()">Publish Namespaced Event</button>
+            </div>
+        </div>
+
+        <div class="output" id="output"></div>
+    </div>
+
+    <script type="module">
+        // Import EvEm (in a real scenario, this would come from a built bundle)
+        // For demo purposes, we'll create a simplified version inline
+
+        class EvEm {
+            constructor() {
+                this.events = new Map();
+                this.subscriptionCounter = 0;
+            }
+
+            subscribe(event, callback, options = {}) {
+                const id = `sub-${++this.subscriptionCounter}`;
+
+                if (!this.events.has(event)) {
+                    this.events.set(event, new Map());
+                }
+
+                this.events.get(event).set(id, { callback, options });
+                return id;
+            }
+
+            async publish(event, data) {
+                const handlers = [];
+
+                // Direct match
+                if (this.events.has(event)) {
+                    handlers.push(...Array.from(this.events.get(event).values()));
+                }
+
+                // Wildcard match
+                for (const [pattern, subs] of this.events) {
+                    if (this.matchesPattern(event, pattern)) {
+                        handlers.push(...Array.from(subs.values()));
+                    }
+                }
+
+                // Sort by priority
+                handlers.sort((a, b) => {
+                    const priorityA = a.options.priority === 'high' ? 100 :
+                                     a.options.priority === 'low' ? -100 : 0;
+                    const priorityB = b.options.priority === 'high' ? 100 :
+                                     b.options.priority === 'low' ? -100 : 0;
+                    return priorityB - priorityA;
+                });
+
+                // Execute handlers
+                for (const handler of handlers) {
+                    // Apply filter if present
+                    if (handler.options.filter && !handler.options.filter(data)) {
+                        continue;
+                    }
+
+                    try {
+                        await handler.callback(data);
+                    } catch (error) {
+                        console.error('Error in handler:', error);
+                    }
+                }
+
+                return true;
+            }
+
+            matchesPattern(event, pattern) {
+                if (pattern === event) return true;
+
+                const eventParts = event.split('.');
+                const patternParts = pattern.split('.');
+
+                if (patternParts.length !== eventParts.length) return false;
+
+                return patternParts.every((part, i) =>
+                    part === '*' || part === eventParts[i]
+                );
+            }
+
+            info() {
+                return {
+                    subscriptions: Array.from(this.events.entries()).map(([event, subs]) => ({
+                        event,
+                        count: subs.size
+                    }))
+                };
+            }
+        }
+
+        // Create global EvEm instance
+        window.evem = new EvEm();
+        window.eventCount = 0;
+
+        // Logging utility
+        window.log = (message, type = 'info') => {
+            const output = document.getElementById('output');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="timestamp">[${timestamp}]</span> <span class="${type}">${message}</span>`;
+            output.appendChild(entry);
+            output.scrollTop = output.scrollHeight;
+
+            // Update stats
+            document.getElementById('eventsPublished').textContent = ++window.eventCount;
+            updateSubCount();
+        };
+
+        window.updateSubCount = () => {
+            const info = window.evem.info();
+            const total = info.subscriptions.reduce((sum, s) => sum + s.count, 0);
+            document.getElementById('totalSubs').textContent = total;
+        };
+
+        // Demo functions
+        window.basicPubSub = () => {
+            window.evem.subscribe('user.login', (data) => {
+                log(`Event received: <span class="event-name">user.login</span> | User: <span class="data">${data.username}</span>`);
+            });
+
+            window.evem.publish('user.login', { username: 'Alice', id: 123 });
+            log('Published event: <span class="event-name">user.login</span>', 'info');
+        };
+
+        window.publishMultiple = async () => {
+            for (let i = 1; i <= 3; i++) {
+                await window.evem.publish('user.login', { username: `User${i}`, id: i });
+                log(`Published event ${i}: <span class="event-name">user.login</span>`, 'info');
+            }
+        };
+
+        window.wildcardDemo = () => {
+            window.evem.subscribe('user.*', (data) => {
+                log(`Wildcard caught: <span class="event-name">${data.event}</span> | <span class="data">${JSON.stringify(data.payload)}</span>`);
+            });
+            log('Subscribed to <span class="event-name">user.*</span> pattern', 'info');
+        };
+
+        window.publishUserEvents = async () => {
+            await window.evem.publish('user.login', { event: 'user.login', payload: { user: 'Alice' } });
+            await window.evem.publish('user.logout', { event: 'user.logout', payload: { user: 'Alice' } });
+            await window.evem.publish('user.update', { event: 'user.update', payload: { user: 'Alice' } });
+            log('Published 3 user.* events', 'info');
+        };
+
+        window.publishSystemEvents = async () => {
+            await window.evem.publish('system.startup', { event: 'system.startup' });
+            log('Published system.startup (should not be caught by user.* wildcard)', 'warning');
+        };
+
+        window.filterDemo = () => {
+            window.evem.subscribe('user.action', (data) => {
+                log(`Admin action: <span class="data">${data.action}</span> by ${data.username}`, 'info');
+            }, {
+                filter: (data) => data.role === 'admin'
+            });
+            log('Subscribed with filter: <span class="data">role === "admin"</span>', 'info');
+        };
+
+        window.publishWithRole = async (role) => {
+            await window.evem.publish('user.action', {
+                username: role === 'admin' ? 'AdminUser' : 'RegularUser',
+                role,
+                action: 'delete-file'
+            });
+            log(`Published user.action with role: <span class="data">${role}</span>`, 'info');
+        };
+
+        window.priorityDemo = () => {
+            window.evem.subscribe('app.startup', () => {
+                log('Priority: <span class="data">HIGH</span> - Loading critical services', 'info');
+            }, { priority: 'high' });
+
+            window.evem.subscribe('app.startup', () => {
+                log('Priority: <span class="data">NORMAL</span> - Loading UI components', 'info');
+            }, { priority: 'normal' });
+
+            window.evem.subscribe('app.startup', () => {
+                log('Priority: <span class="data">LOW</span> - Loading analytics', 'info');
+            }, { priority: 'low' });
+
+            log('Setup 3 handlers with different priorities', 'info');
+        };
+
+        window.publishPriorityEvent = async () => {
+            await window.evem.publish('app.startup');
+            log('Published <span class="event-name">app.startup</span> - observe execution order', 'info');
+        };
+
+        window.publishNamespaced = async () => {
+            const input = document.getElementById('namespaceInput');
+            const event = input.value || 'api.user.create';
+
+            // Subscribe to namespace pattern
+            window.evem.subscribe('api.*.*', (data) => {
+                log(`API event caught: <span class="event-name">${data.event}</span>`, 'info');
+            });
+
+            await window.evem.publish(event, { event, data: 'Sample data' });
+            log(`Published: <span class="event-name">${event}</span>`, 'info');
+            input.value = '';
+        };
+
+        window.clearOutput = () => {
+            document.getElementById('output').innerHTML = '';
+            log('Output cleared', 'info');
+        };
+
+        // Initialize
+        log('EvEm Core Features Demo loaded. Click buttons to test features!', 'info');
+        updateSubCount();
+    </script>
+</body>
+</html>

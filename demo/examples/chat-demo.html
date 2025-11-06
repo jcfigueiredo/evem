@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EvEm - Real-time Chat Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 900px;
+            height: 90vh;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-header h1 {
+            font-size: 1.5rem;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #fc8181;
+        }
+
+        .status-dot.connected {
+            background: #48bb78;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .chat-body {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 200px;
+            background: #f7fafc;
+            border-right: 1px solid #e2e8f0;
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .sidebar h3 {
+            font-size: 0.85rem;
+            color: #718096;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .user-list {
+            list-style: none;
+        }
+
+        .user-item {
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .user-item.online {
+            background: #c6f6d5;
+        }
+
+        .user-item.offline {
+            opacity: 0.5;
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #667eea;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.85rem;
+        }
+
+        .messages-container {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f5f7fa;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .message.own {
+            flex-direction: row-reverse;
+        }
+
+        .message.system {
+            justify-content: center;
+        }
+
+        .message-content {
+            max-width: 60%;
+            background: white;
+            padding: 12px 16px;
+            border-radius: 12px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .message.own .message-content {
+            background: #667eea;
+            color: white;
+        }
+
+        .message.system .message-content {
+            background: #edf2f7;
+            color: #718096;
+            font-size: 0.85rem;
+            text-align: center;
+            max-width: 80%;
+        }
+
+        .message-author {
+            font-weight: 600;
+            margin-bottom: 4px;
+            font-size: 0.9rem;
+        }
+
+        .message-text {
+            line-height: 1.5;
+        }
+
+        .message-time {
+            font-size: 0.75rem;
+            opacity: 0.7;
+            margin-top: 4px;
+        }
+
+        .queue-notice {
+            background: #fef5e7;
+            border-left: 3px solid #f6ad55;
+            padding: 8px 12px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: #744210;
+        }
+
+        .chat-input-container {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 25px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .chat-input:focus {
+            border-color: #667eea;
+        }
+
+        .send-button {
+            padding: 12px 30px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .send-button:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+        }
+
+        .send-button:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .typing-indicator {
+            padding: 10px 20px;
+            font-size: 0.85rem;
+            color: #718096;
+            font-style: italic;
+        }
+
+        .controls {
+            padding: 10px 20px;
+            background: #edf2f7;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .control-btn {
+            padding: 6px 12px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .control-btn:hover {
+            background: #f7fafc;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                display: none;
+            }
+
+            .chat-container {
+                height: 100vh;
+                border-radius: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <div>
+                <h1>💬 EvEm Chat</h1>
+                <div style="font-size: 0.85rem; opacity: 0.9; margin-top: 5px;">Real-time messaging with offline support</div>
+            </div>
+            <div class="connection-status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Offline</span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="control-btn" onclick="connect()" id="connectBtn">Connect</button>
+            <button class="control-btn" onclick="disconnect()" id="disconnectBtn">Disconnect</button>
+            <button class="control-btn" onclick="simulateDelay()">Simulate Lag</button>
+            <button class="control-btn" onclick="loadHistory()">Load History</button>
+            <span style="margin-left: auto; padding: 6px 12px; background: #fef5e7; border-radius: 4px; font-size: 0.85rem;">
+                Queue: <strong id="queueSize">0</strong>
+            </span>
+        </div>
+
+        <div class="chat-body">
+            <div class="sidebar">
+                <h3>Online Users</h3>
+                <ul class="user-list" id="userList"></ul>
+            </div>
+
+            <div class="messages-container" id="messagesContainer">
+                <div class="message system">
+                    <div class="message-content">
+                        Welcome to EvEm Chat! Messages sent while offline will be queued and delivered when you reconnect.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="typingIndicator" class="typing-indicator" style="display: none;"></div>
+
+        <div class="chat-input-container">
+            <div class="chat-input-wrapper">
+                <input
+                    type="text"
+                    class="chat-input"
+                    id="messageInput"
+                    placeholder="Type a message..."
+                    onkeypress="handleKeyPress(event)"
+                />
+                <button class="send-button" onclick="sendMessage()" id="sendBtn">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simplified implementations
+        class EvEm {
+            constructor() {
+                this.events = new Map();
+                this.counter = 0;
+            }
+
+            subscribe(event, callback) {
+                const id = `sub-${++this.counter}`;
+                if (!this.events.has(event)) {
+                    this.events.set(event, new Map());
+                }
+                this.events.get(event).set(id, callback);
+                return id;
+            }
+
+            async publish(event, data) {
+                if (this.events.has(event)) {
+                    for (const cb of this.events.get(event).values()) {
+                        await cb(data);
+                    }
+                }
+
+                // Wildcard
+                for (const [pattern, cbs] of this.events) {
+                    if (pattern.includes('*')) {
+                        const regex = new RegExp('^' + pattern.replace(/\*/g, '[^.]+') + '$');
+                        if (regex.test(event) && pattern !== event) {
+                            for (const cb of cbs.values()) {
+                                await cb(data);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        class ConnectionManager {
+            constructor(evem) {
+                this.evem = evem;
+                this.state = 'disconnected';
+            }
+
+            async transitionTo(newState) {
+                const oldState = this.state;
+                this.state = newState;
+                await this.evem.publish('ws.connection.state', {
+                    from: oldState,
+                    to: newState
+                });
+            }
+
+            isConnected() {
+                return this.state === 'connected';
+            }
+        }
+
+        class MessageQueue {
+            constructor(evem, connectionManager) {
+                this.evem = evem;
+                this.connectionManager = connectionManager;
+                this.queue = [];
+            }
+
+            enable() {
+                this.evem.subscribe('ws.send', (data) => {
+                    if (!this.connectionManager.isConnected()) {
+                        this.queue.push(data);
+                        updateQueueUI();
+                    } else {
+                        this.evem.publish('ws.send.queued', data);
+                    }
+                });
+
+                this.evem.subscribe('ws.connection.state', async (event) => {
+                    if (event.to === 'connected' && this.queue.length > 0) {
+                        await this.flush();
+                    }
+                });
+            }
+
+            async flush() {
+                const messages = [...this.queue];
+                this.queue = [];
+
+                for (const msg of messages) {
+                    await this.evem.publish('ws.send.queued', msg);
+                    await new Promise(r => setTimeout(r, 100));
+                }
+
+                updateQueueUI();
+            }
+
+            getQueueSize() {
+                return this.queue.length;
+            }
+        }
+
+        // Initialize
+        const evem = new EvEm();
+        const connectionManager = new ConnectionManager(evem);
+        const messageQueue = new MessageQueue(evem, connectionManager);
+        const currentUser = 'You';
+        const users = [
+            { name: 'You', online: true },
+            { name: 'Alice', online: true },
+            { name: 'Bob', online: true },
+            { name: 'Charlie', online: false }
+        ];
+
+        messageQueue.enable();
+
+        // Mock WebSocket
+        let simulatedLag = 0;
+
+        // Setup handlers
+        evem.subscribe('ws.connection.state', (event) => {
+            updateConnectionUI(event.to);
+
+            if (event.to === 'connected') {
+                addSystemMessage('Connected to chat server');
+            } else if (event.to === 'disconnected') {
+                addSystemMessage('Disconnected from chat server');
+            }
+        });
+
+        evem.subscribe('ws.send.queued', (data) => {
+            setTimeout(() => {
+                if (connectionManager.isConnected()) {
+                    addMessage(data.user, data.text, data.timestamp, true);
+
+                    // Simulate server echo
+                    setTimeout(() => {
+                        const responses = [
+                            "That's interesting!",
+                            "I see what you mean",
+                            "Tell me more!",
+                            "Great point!",
+                            "👍"
+                        ];
+                        simulateIncomingMessage(
+                            users[Math.floor(Math.random() * 2) + 1].name,
+                            responses[Math.floor(Math.random() * responses.length)]
+                        );
+                    }, 1000 + Math.random() * 2000);
+                }
+            }, simulatedLag);
+        });
+
+        evem.subscribe('server.message', (data) => {
+            addMessage(data.user, data.text, data.timestamp);
+        });
+
+        evem.subscribe('server.user.typing', (data) => {
+            showTypingIndicator(data.user);
+        });
+
+        // UI Functions
+        function updateConnectionUI(state) {
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+            const sendBtn = document.getElementById('sendBtn');
+
+            if (state === 'connected') {
+                statusDot.classList.add('connected');
+                statusText.textContent = 'Online';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                sendBtn.disabled = false;
+            } else {
+                statusDot.classList.remove('connected');
+                statusText.textContent = 'Offline';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                sendBtn.disabled = false; // Can still queue messages
+            }
+        }
+
+        function updateQueueUI() {
+            document.getElementById('queueSize').textContent = messageQueue.getQueueSize();
+
+            const container = document.getElementById('messagesContainer');
+            let notice = container.querySelector('.queue-notice');
+
+            if (messageQueue.getQueueSize() > 0 && !connectionManager.isConnected()) {
+                if (!notice) {
+                    notice = document.createElement('div');
+                    notice.className = 'queue-notice';
+                    container.appendChild(notice);
+                }
+                notice.textContent = `📤 ${messageQueue.getQueueSize()} message(s) queued. Will be sent when reconnected.`;
+            } else if (notice) {
+                notice.remove();
+            }
+        }
+
+        function addMessage(user, text, timestamp, isOwn = false) {
+            const container = document.getElementById('messagesContainer');
+            const message = document.createElement('div');
+            message.className = `message ${isOwn ? 'own' : ''}`;
+
+            const time = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            message.innerHTML = `
+                ${!isOwn ? `<div class="user-avatar">${user[0]}</div>` : ''}
+                <div class="message-content">
+                    ${!isOwn ? `<div class="message-author">${user}</div>` : ''}
+                    <div class="message-text">${text}</div>
+                    <div class="message-time">${time}</div>
+                </div>
+                ${isOwn ? `<div class="user-avatar">${user[0]}</div>` : ''}
+            `;
+
+            container.appendChild(message);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function addSystemMessage(text) {
+            const container = document.getElementById('messagesContainer');
+            const message = document.createElement('div');
+            message.className = 'message system';
+            message.innerHTML = `<div class="message-content">${text}</div>`;
+            container.appendChild(message);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function showTypingIndicator(user) {
+            const indicator = document.getElementById('typingIndicator');
+            indicator.textContent = `${user} is typing...`;
+            indicator.style.display = 'block';
+
+            setTimeout(() => {
+                indicator.style.display = 'none';
+            }, 3000);
+        }
+
+        function simulateIncomingMessage(user, text) {
+            evem.publish('server.message', {
+                user,
+                text,
+                timestamp: Date.now()
+            });
+        }
+
+        function renderUserList() {
+            const userList = document.getElementById('userList');
+            userList.innerHTML = users.map(user => `
+                <li class="user-item ${user.online ? 'online' : 'offline'}">
+                    <div class="user-avatar">${user.name[0]}</div>
+                    <span>${user.name}</span>
+                </li>
+            `).join('');
+        }
+
+        // Control Functions
+        async function connect() {
+            await connectionManager.transitionTo('connecting');
+            setTimeout(async () => {
+                await connectionManager.transitionTo('connected');
+            }, 500);
+        }
+
+        async function disconnect() {
+            await connectionManager.transitionTo('disconnected');
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+
+            if (!text) return;
+
+            await evem.publish('ws.send', {
+                user: currentUser,
+                text,
+                timestamp: Date.now()
+            });
+
+            if (!connectionManager.isConnected()) {
+                addSystemMessage('Message queued (offline)');
+            }
+
+            input.value = '';
+            updateQueueUI();
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function simulateDelay() {
+            simulatedLag = simulatedLag === 0 ? 2000 : 0;
+            addSystemMessage(simulatedLag > 0 ? 'Network lag simulation enabled (2s delay)' : 'Network lag simulation disabled');
+        }
+
+        function loadHistory() {
+            const history = [
+                { user: 'Alice', text: 'Hey everyone!', timestamp: Date.now() - 300000 },
+                { user: 'Bob', text: 'Hi Alice! How are you?', timestamp: Date.now() - 240000 },
+                { user: 'Alice', text: 'Doing great! Working on this EvEm demo.', timestamp: Date.now() - 180000 }
+            ];
+
+            addSystemMessage('Loading message history...');
+            history.forEach((msg, i) => {
+                setTimeout(() => {
+                    addMessage(msg.user, msg.text, msg.timestamp);
+                }, i * 200);
+            });
+        }
+
+        // Initialize
+        renderUserList();
+        updateConnectionUI('disconnected');
+        updateQueueUI();
+    </script>
+</body>
+</html>

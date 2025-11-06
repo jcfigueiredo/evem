@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EvEm - WebSocket Adapter Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            opacity: 0.9;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            margin-bottom: 25px;
+        }
+
+        @media (max-width: 968px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .panel h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+        }
+
+        .status-bar {
+            background: #edf2f7;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #cbd5e0;
+        }
+
+        .status-dot.connected {
+            background: #48bb78;
+            box-shadow: 0 0 10px rgba(72, 187, 120, 0.5);
+            animation: pulse-green 2s infinite;
+        }
+
+        .status-dot.connecting {
+            background: #ed8936;
+            animation: pulse-orange 1s infinite;
+        }
+
+        .status-dot.disconnected {
+            background: #f56565;
+        }
+
+        @keyframes pulse-green {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes pulse-orange {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        button.secondary {
+            background: #48bb78;
+        }
+
+        button.danger {
+            background: #f56565;
+        }
+
+        .output {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Monaco', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .log-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .timestamp {
+            color: #718096;
+        }
+
+        .event-in {
+            color: #63b3ed;
+        }
+
+        .event-out {
+            color: #f6ad55;
+        }
+
+        .event-system {
+            color: #48bb78;
+        }
+
+        .event-error {
+            color: #fc8181;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .stat-box {
+            background: #f7fafc;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            color: #718096;
+            font-size: 0.8rem;
+            margin-top: 3px;
+        }
+
+        .message-input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+
+        .message-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: #667eea;
+            color: white;
+            margin-left: 8px;
+        }
+
+        .server-sim {
+            background: #2d3748;
+            padding: 15px;
+            border-radius: 6px;
+            color: white;
+            margin-top: 15px;
+        }
+
+        .server-sim h3 {
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+            color: #48bb78;
+        }
+
+        .queue-list {
+            background: #edf2f7;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .queue-item {
+            background: white;
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 3px solid #ed8936;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔌 WebSocket Adapter Demo</h1>
+            <p>Real-time communication with auto-wiring and offline support</p>
+            <a href="../index.html" class="nav-link">← Back to demos</a>
+        </header>
+
+        <div class="grid">
+            <div class="panel">
+                <h2>Connection Control</h2>
+
+                <div class="status-bar">
+                    <div class="status-indicator">
+                        <div class="status-dot" id="statusDot"></div>
+                        <span id="statusText">Disconnected</span>
+                    </div>
+                    <span id="queueBadge" class="badge">Queue: 0</span>
+                </div>
+
+                <div>
+                    <button onclick="connect()" id="connectBtn">Connect</button>
+                    <button onclick="disconnect()" id="disconnectBtn" disabled>Disconnect</button>
+                    <button class="secondary" onclick="simulateNetworkIssue()">Simulate Network Issue</button>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-value" id="messagesSent">0</div>
+                        <div class="stat-label">Sent</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="messagesReceived">0</div>
+                        <div class="stat-label">Received</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="messagesQueued">0</div>
+                        <div class="stat-label">Queued</div>
+                    </div>
+                </div>
+
+                <h3 style="margin-top: 20px; color: #667eea;">Message Queue</h3>
+                <p style="color: #718096; font-size: 0.9rem; margin: 10px 0;">Messages sent while disconnected are automatically queued</p>
+
+                <div class="queue-list" id="queueList">
+                    <em style="color: #a0aec0;">Queue is empty</em>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Send Messages</h2>
+                <p style="color: #718096; margin-bottom: 15px;">Try sending messages while connected and disconnected</p>
+
+                <input type="text" class="message-input" id="messageInput" placeholder="Type a message...">
+                <button onclick="sendMessage()" class="secondary">Send Message</button>
+                <button onclick="sendMultiple()">Send 5 Messages</button>
+
+                <h3 style="margin-top: 25px; color: #667eea;">Request-Response Pattern</h3>
+                <p style="color: #718096; margin: 10px 0;">RPC-style requests with automatic timeout handling</p>
+
+                <div style="margin-top: 15px;">
+                    <button onclick="requestUserData()" class="secondary">Request User Data</button>
+                    <button onclick="requestWithTimeout()">Request (2s timeout)</button>
+                </div>
+
+                <div class="server-sim">
+                    <h3>📡 Simulated Server Activity</h3>
+                    <div id="serverActivity" style="font-size: 0.85rem; color: #cbd5e0;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Event Log <button class="danger" onclick="clearLog()" style="float: right; font-size: 0.85rem;">Clear</button></h2>
+            <div class="output" id="output"></div>
+        </div>
+    </div>
+
+    <script>
+        // Simplified WebSocket adapter implementation for demo
+        class EvEm {
+            constructor() {
+                this.events = new Map();
+                this.counter = 0;
+            }
+
+            subscribe(event, callback) {
+                const id = `sub-${++this.counter}`;
+                if (!this.events.has(event)) {
+                    this.events.set(event, new Map());
+                }
+                this.events.get(event).set(id, callback);
+                return id;
+            }
+
+            async publish(event, data) {
+                // Exact match
+                if (this.events.has(event)) {
+                    for (const cb of this.events.get(event).values()) {
+                        await cb(data);
+                    }
+                }
+
+                // Wildcard match
+                for (const [pattern, cbs] of this.events) {
+                    if (this.matchPattern(event, pattern)) {
+                        for (const cb of cbs.values()) {
+                            await cb(data);
+                        }
+                    }
+                }
+            }
+
+            matchPattern(event, pattern) {
+                if (pattern === event) return false; // Already handled
+                const eParts = event.split('.');
+                const pParts = pattern.split('.');
+                if (eParts.length !== pParts.length) return false;
+                return pParts.every((p, i) => p === '*' || p === eParts[i]);
+            }
+        }
+
+        class ConnectionManager {
+            constructor(evem) {
+                this.evem = evem;
+                this.state = 'disconnected';
+            }
+
+            async transitionTo(newState) {
+                const oldState = this.state;
+                this.state = newState;
+                await this.evem.publish('ws.connection.state', {
+                    from: oldState,
+                    to: newState,
+                    timestamp: Date.now()
+                });
+            }
+
+            isConnected() {
+                return this.state === 'connected';
+            }
+
+            getState() {
+                return this.state;
+            }
+        }
+
+        class MessageQueue {
+            constructor(evem, connectionManager) {
+                this.evem = evem;
+                this.connectionManager = connectionManager;
+                this.queue = [];
+                this.enabled = false;
+                this.maxSize = 100;
+            }
+
+            enable(maxSize, options = {}) {
+                this.enabled = true;
+                this.maxSize = maxSize;
+                this.autoFlush = options.autoFlush ?? true;
+
+                // Subscribe to ws.send events
+                this.evem.subscribe('ws.send', (data) => {
+                    if (!this.connectionManager.isConnected() && this.enabled) {
+                        this.queue.push({ data, timestamp: Date.now() });
+                        updateQueueDisplay();
+                    } else if (this.connectionManager.isConnected()) {
+                        this.evem.publish('ws.send.queued', data);
+                    }
+                });
+
+                // Auto-flush on connection
+                if (this.autoFlush) {
+                    this.evem.subscribe('ws.connection.state', async (event) => {
+                        if (event.to === 'connected' && this.queue.length > 0) {
+                            await this.flush();
+                        }
+                    });
+                }
+            }
+
+            async flush() {
+                const messages = [...this.queue];
+                this.queue = [];
+                updateQueueDisplay();
+
+                for (const msg of messages) {
+                    await this.evem.publish('ws.send.queued', msg.data);
+                }
+            }
+
+            getQueueSize() {
+                return this.queue.length;
+            }
+        }
+
+        class MockWebSocket {
+            constructor() {
+                this.connected = false;
+            }
+
+            async send(data) {
+                if (!this.connected) {
+                    throw new Error('Not connected');
+                }
+
+                // Simulate server processing
+                setTimeout(() => {
+                    logServer('Received: ' + data);
+
+                    // Simulate server response
+                    const parsed = JSON.parse(data);
+                    if (parsed.type === 'request') {
+                        const response = {
+                            type: 'response',
+                            id: parsed.id,
+                            result: { user: 'John Doe', id: 123 },
+                            timestamp: Date.now()
+                        };
+                        this.onmessage({ data: JSON.stringify(response) });
+                    } else {
+                        // Echo message back
+                        const echo = {
+                            event: 'server.echo',
+                            data: { original: parsed, receivedAt: Date.now() }
+                        };
+                        setTimeout(() => {
+                            this.onmessage({ data: JSON.stringify(echo) });
+                        }, 100);
+                    }
+                }, 100);
+            }
+
+            connect() {
+                this.connected = true;
+                setTimeout(() => this.onopen && this.onopen(), 500);
+            }
+
+            close() {
+                this.connected = false;
+                this.onclose && this.onclose();
+            }
+        }
+
+        // Initialize
+        const evem = new EvEm();
+        const connectionManager = new ConnectionManager(evem);
+        const messageQueue = new MessageQueue(evem, connectionManager);
+        const ws = new MockWebSocket();
+
+        let stats = { sent: 0, received: 0, queued: 0 };
+        let requestCounter = 0;
+
+        // Enable queue
+        messageQueue.enable(100, { autoFlush: true });
+
+        // Setup WebSocket handlers
+        ws.onopen = async () => {
+            await connectionManager.transitionTo('connected');
+            updateConnectionUI();
+            log('Connected to server', 'system');
+        };
+
+        ws.onclose = async () => {
+            await connectionManager.transitionTo('disconnected');
+            updateConnectionUI();
+            log('Disconnected from server', 'system');
+        };
+
+        ws.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            stats.received++;
+            updateStats();
+
+            if (message.type === 'response') {
+                evem.publish('ws.response', message);
+                log(`Response received: ${JSON.stringify(message.result)}`, 'in');
+            } else if (message.event) {
+                evem.publish(message.event, message.data);
+                log(`Server event: ${message.event}`, 'in');
+            }
+        };
+
+        // Subscribe to outgoing messages
+        evem.subscribe('ws.send.queued', (data) => {
+            if (connectionManager.isConnected()) {
+                ws.send(JSON.stringify(data));
+                stats.sent++;
+                updateStats();
+                log(`Sent: ${JSON.stringify(data)}`, 'out');
+            }
+        });
+
+        // Subscribe to connection state changes
+        evem.subscribe('ws.connection.state', (event) => {
+            log(`State: ${event.from} → ${event.to}`, 'system');
+        });
+
+        // Subscribe to server events
+        evem.subscribe('server.*', (data) => {
+            log(`Server event received: ${JSON.stringify(data)}`, 'in');
+        });
+
+        // UI Functions
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'in' ? 'event-in' :
+                            type === 'out' ? 'event-out' :
+                            type === 'system' ? 'event-system' :
+                            type === 'error' ? 'event-error' : '';
+            output.innerHTML += `<div class="log-entry"><span class="timestamp">[${timestamp}]</span> <span class="${className}">${message}</span></div>`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function logServer(message) {
+            const serverActivity = document.getElementById('serverActivity');
+            serverActivity.innerHTML = message + '<br>' + serverActivity.innerHTML;
+        }
+
+        function updateConnectionUI() {
+            const state = connectionManager.getState();
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+
+            statusDot.className = `status-dot ${state}`;
+            statusText.textContent = state.charAt(0).toUpperCase() + state.slice(1);
+
+            connectBtn.disabled = state === 'connected';
+            disconnectBtn.disabled = state !== 'connected';
+        }
+
+        function updateStats() {
+            document.getElementById('messagesSent').textContent = stats.sent;
+            document.getElementById('messagesReceived').textContent = stats.received;
+            document.getElementById('messagesQueued').textContent = messageQueue.getQueueSize();
+        }
+
+        function updateQueueDisplay() {
+            const queueList = document.getElementById('queueList');
+            const queue = messageQueue.queue;
+            const queueBadge = document.getElementById('queueBadge');
+
+            queueBadge.textContent = `Queue: ${queue.length}`;
+
+            if (queue.length === 0) {
+                queueList.innerHTML = '<em style="color: #a0aec0;">Queue is empty</em>';
+            } else {
+                queueList.innerHTML = queue.map((item, i) =>
+                    `<div class="queue-item">#${i + 1}: ${JSON.stringify(item.data)}</div>`
+                ).join('');
+            }
+
+            stats.queued = queue.length;
+            updateStats();
+        }
+
+        // Control Functions
+        async function connect() {
+            log('Connecting...', 'system');
+            await connectionManager.transitionTo('connecting');
+            updateConnectionUI();
+            ws.connect();
+        }
+
+        async function disconnect() {
+            log('Disconnecting...', 'system');
+            ws.close();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value || 'Hello from EvEm!';
+
+            await evem.publish('ws.send', {
+                type: 'message',
+                text: message,
+                timestamp: Date.now()
+            });
+
+            if (!connectionManager.isConnected()) {
+                log('Message queued (offline)', 'out');
+            }
+
+            input.value = '';
+        }
+
+        async function sendMultiple() {
+            for (let i = 1; i <= 5; i++) {
+                await evem.publish('ws.send', {
+                    type: 'message',
+                    text: `Message ${i}`,
+                    timestamp: Date.now()
+                });
+            }
+
+            if (!connectionManager.isConnected()) {
+                log('5 messages queued (offline)', 'out');
+            }
+        }
+
+        async function requestUserData() {
+            const reqId = `req-${++requestCounter}`;
+
+            await evem.publish('ws.send', {
+                type: 'request',
+                id: reqId,
+                method: 'getUser',
+                params: { id: 123 }
+            });
+
+            log(`Request sent: ${reqId}`, 'out');
+        }
+
+        async function requestWithTimeout() {
+            log('Request sent (will timeout in 2s)', 'out');
+            setTimeout(() => {
+                log('Request timed out!', 'error');
+            }, 2000);
+        }
+
+        async function simulateNetworkIssue() {
+            if (connectionManager.isConnected()) {
+                log('Simulating network disconnection...', 'error');
+                await disconnect();
+
+                setTimeout(async () => {
+                    log('Auto-reconnecting...', 'system');
+                    await connect();
+                }, 3000);
+            }
+        }
+
+        function clearLog() {
+            document.getElementById('output').innerHTML = '';
+            log('Log cleared', 'system');
+        }
+
+        // Initialize UI
+        updateConnectionUI();
+        updateStats();
+        updateQueueDisplay();
+        log('WebSocket Adapter Demo loaded! Click "Connect" to start.', 'system');
+    </script>
+</body>
+</html>

@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EvEm - Middleware & Transforms Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            opacity: 0.9;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .nav-link:hover {
+            opacity: 1;
+        }
+
+        .demo-section {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .demo-section h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+        }
+
+        .demo-section p {
+            color: #666;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s ease;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button.secondary {
+            background: #48bb78;
+        }
+
+        button.secondary:hover {
+            background: #38a169;
+        }
+
+        button.danger {
+            background: #f56565;
+        }
+
+        button.danger:hover {
+            background: #e53e3e;
+        }
+
+        .output {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .output .log-entry {
+            margin-bottom: 8px;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .output .timestamp {
+            color: #718096;
+        }
+
+        .output .event-name {
+            color: #48bb78;
+            font-weight: bold;
+        }
+
+        .output .data {
+            color: #fbd38d;
+        }
+
+        .output .info {
+            color: #63b3ed;
+        }
+
+        .output .middleware {
+            color: #9f7aea;
+        }
+
+        .output .transform {
+            color: #f093fb;
+        }
+
+        .code-block {
+            background: #2d3748;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            color: #e2e8f0;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-box {
+            background: #edf2f7;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-box .label {
+            color: #718096;
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+        }
+
+        .stat-box .value {
+            color: #667eea;
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔄 Middleware & Transforms Demo</h1>
+            <p>Event interception and data transformation</p>
+            <a href="../index.html" class="nav-link">← Back to demos</a>
+        </header>
+
+        <div class="demo-section">
+            <h2>1. Global Middleware</h2>
+            <p>Intercept all events before they reach handlers</p>
+            <div class="code-block">evem.use((event, data, next) => {
+    console.log('Middleware:', event);
+    await next(); // Continue to handlers
+});</div>
+            <div class="controls">
+                <button onclick="setupGlobalMiddleware()">Setup Global Logger</button>
+                <button class="secondary" onclick="publishTestEvents()">Publish Events</button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>2. Pattern-Based Middleware</h2>
+            <p>Apply middleware only to events matching a pattern</p>
+            <div class="code-block">evem.use('api.*', async (event, data, next) => {
+    data.timestamp = Date.now();
+    await next();
+});</div>
+            <div class="controls">
+                <button onclick="setupPatternMiddleware()">Setup API Middleware</button>
+                <button class="secondary" onclick="publishApiEvents()">Publish API Events</button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>3. Event Transformations</h2>
+            <p>Transform event data before it reaches handlers</p>
+            <div class="code-block">evem.subscribe('user.input', handler, {
+    transform: (data) => ({
+        ...data,
+        text: data.text.toUpperCase()
+    })
+});</div>
+            <div class="controls">
+                <button onclick="setupTransform()">Setup Transform</button>
+                <button class="secondary" onclick="publishWithTransform()">Publish Event</button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>4. Transform Chains</h2>
+            <p>Multiple transforms applied in sequence</p>
+            <div class="controls">
+                <button onclick="setupTransformChain()">Setup Chain</button>
+                <button class="secondary" onclick="publishForChain()">Test Chain</button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>5. Middleware Cancellation</h2>
+            <p>Middleware can cancel event propagation</p>
+            <div class="controls">
+                <button onclick="setupCancelMiddleware()">Setup Validation Middleware</button>
+                <button class="secondary" onclick="publishValid()">Publish Valid Event</button>
+                <button class="secondary" onclick="publishInvalid()">Publish Invalid Event</button>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-box">
+                <div class="label">Middleware Calls</div>
+                <div class="value" id="middlewareCalls">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Transforms Applied</div>
+                <div class="value" id="transformsApplied">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Events Handled</div>
+                <div class="value" id="eventsHandled">0</div>
+            </div>
+        </div>
+
+        <div class="output" id="output"></div>
+    </div>
+
+    <script type="module">
+        class EvEm {
+            constructor() {
+                this.events = new Map();
+                this.middleware = [];
+                this.subscriptionCounter = 0;
+            }
+
+            use(patternOrHandler, handler) {
+                if (typeof patternOrHandler === 'function') {
+                    // Global middleware
+                    this.middleware.push({ pattern: '*', handler: patternOrHandler });
+                } else {
+                    // Pattern-based middleware
+                    this.middleware.push({ pattern: patternOrHandler, handler });
+                }
+            }
+
+            subscribe(event, callback, options = {}) {
+                const id = `sub-${++this.subscriptionCounter}`;
+                if (!this.events.has(event)) {
+                    this.events.set(event, new Map());
+                }
+                this.events.get(event).set(id, { callback, options });
+                return id;
+            }
+
+            async publish(event, data) {
+                // Run middleware
+                let cancelled = false;
+                const middlewareNext = () => Promise.resolve();
+
+                for (const mw of this.middleware) {
+                    if (mw.pattern === '*' || this.matchesPattern(event, mw.pattern)) {
+                        window.middlewareCallCount++;
+                        updateStats();
+
+                        try {
+                            await mw.handler(event, data, middlewareNext);
+                        } catch (error) {
+                            if (error.message === 'CANCEL') {
+                                cancelled = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (cancelled) {
+                    log(`Event <span class="event-name">${event}</span> was <span class="middleware">cancelled by middleware</span>`, 'middleware');
+                    return false;
+                }
+
+                // Get handlers
+                const handlers = [];
+                if (this.events.has(event)) {
+                    handlers.push(...Array.from(this.events.get(event).values()));
+                }
+
+                for (const [pattern, subs] of this.events) {
+                    if (this.matchesPattern(event, pattern)) {
+                        handlers.push(...Array.from(subs.values()));
+                    }
+                }
+
+                // Execute handlers
+                for (const handler of handlers) {
+                    let handlerData = data;
+
+                    // Apply transform if present
+                    if (handler.options.transform) {
+                        handlerData = handler.options.transform(data);
+                        window.transformCount++;
+                        updateStats();
+                        log(`Transform applied: <span class="transform">${JSON.stringify(handlerData)}</span>`, 'transform');
+                    }
+
+                    try {
+                        await handler.callback(handlerData);
+                        window.handledCount++;
+                        updateStats();
+                    } catch (error) {
+                        console.error('Error in handler:', error);
+                    }
+                }
+
+                return true;
+            }
+
+            matchesPattern(event, pattern) {
+                if (pattern === event || pattern === '*') return true;
+                const eventParts = event.split('.');
+                const patternParts = pattern.split('.');
+                if (patternParts.length !== eventParts.length) return false;
+                return patternParts.every((part, i) =>
+                    part === '*' || part === eventParts[i]
+                );
+            }
+        }
+
+        // Global state
+        window.evem = new EvEm();
+        window.middlewareCallCount = 0;
+        window.transformCount = 0;
+        window.handledCount = 0;
+
+        // Logging utility
+        window.log = (message, type = 'info') => {
+            const output = document.getElementById('output');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="timestamp">[${timestamp}]</span> <span class="${type}">${message}</span>`;
+            output.appendChild(entry);
+            output.scrollTop = output.scrollHeight;
+        };
+
+        window.updateStats = () => {
+            document.getElementById('middlewareCalls').textContent = window.middlewareCallCount;
+            document.getElementById('transformsApplied').textContent = window.transformCount;
+            document.getElementById('eventsHandled').textContent = window.handledCount;
+        };
+
+        // Demo functions
+        window.setupGlobalMiddleware = () => {
+            window.evem.use(async (event, data, next) => {
+                log(`<span class="middleware">Global middleware</span> intercepted: <span class="event-name">${event}</span>`, 'middleware');
+                await next();
+            });
+            log('Global middleware installed', 'info');
+        };
+
+        window.publishTestEvents = async () => {
+            await window.evem.publish('user.login', { user: 'Alice' });
+            await window.evem.publish('system.update', { version: '2.0' });
+            log('Published 2 test events', 'info');
+        };
+
+        window.setupPatternMiddleware = () => {
+            window.evem.use('api.*', async (event, data, next) => {
+                data.timestamp = Date.now();
+                data.requestId = Math.random().toString(36).substr(2, 9);
+                log(`<span class="middleware">API middleware</span> added metadata to <span class="event-name">${event}</span>`, 'middleware');
+                await next();
+            });
+
+            window.evem.subscribe('api.*', (data) => {
+                log(`API handler received: <span class="data">${JSON.stringify(data)}</span>`, 'info');
+            });
+
+            log('Pattern-based middleware for api.* installed', 'info');
+        };
+
+        window.publishApiEvents = async () => {
+            await window.evem.publish('api.users.get', { userId: 123 });
+            await window.evem.publish('api.posts.create', { title: 'Hello' });
+            log('Published 2 API events', 'info');
+        };
+
+        window.setupTransform = () => {
+            window.evem.subscribe('user.input', (data) => {
+                log(`Received transformed data: <span class="data">${data.text}</span>`, 'info');
+            }, {
+                transform: (data) => ({
+                    ...data,
+                    text: data.text.toUpperCase(),
+                    processed: true
+                })
+            });
+            log('Transform subscription created', 'info');
+        };
+
+        window.publishWithTransform = async () => {
+            await window.evem.publish('user.input', { text: 'hello world', timestamp: Date.now() });
+            log('Published user.input event', 'info');
+        };
+
+        window.setupTransformChain = () => {
+            // First subscriber: trim whitespace
+            window.evem.subscribe('data.process', (data) => {
+                log(`Step 1 received: <span class="data">${data.value}</span>`, 'info');
+            }, {
+                transform: (data) => ({
+                    ...data,
+                    value: data.value.trim()
+                })
+            });
+
+            // Second subscriber: uppercase
+            window.evem.subscribe('data.process', (data) => {
+                log(`Step 2 received: <span class="data">${data.value}</span>`, 'info');
+            }, {
+                transform: (data) => ({
+                    ...data,
+                    value: data.value.toUpperCase()
+                })
+            });
+
+            // Third subscriber: add prefix
+            window.evem.subscribe('data.process', (data) => {
+                log(`Step 3 received: <span class="data">${data.value}</span>`, 'info');
+            }, {
+                transform: (data) => ({
+                    ...data,
+                    value: `PROCESSED: ${data.value}`
+                })
+            });
+
+            log('Transform chain (3 transforms) created', 'info');
+        };
+
+        window.publishForChain = async () => {
+            await window.evem.publish('data.process', { value: '  hello world  ' });
+            log('Published data.process event with raw input', 'info');
+        };
+
+        window.setupCancelMiddleware = () => {
+            window.evem.use('user.delete', async (event, data, next) => {
+                if (!data.confirmed) {
+                    log(`<span class="middleware">Validation middleware</span> rejected: missing confirmation`, 'middleware');
+                    throw new Error('CANCEL');
+                }
+                log(`<span class="middleware">Validation middleware</span> approved deletion`, 'middleware');
+                await next();
+            });
+
+            window.evem.subscribe('user.delete', (data) => {
+                log(`Handler executed: deleted user <span class="data">${data.userId}</span>`, 'info');
+            });
+
+            log('Validation middleware installed', 'info');
+        };
+
+        window.publishValid = async () => {
+            await window.evem.publish('user.delete', { userId: 123, confirmed: true });
+            log('Published valid delete request', 'info');
+        };
+
+        window.publishInvalid = async () => {
+            await window.evem.publish('user.delete', { userId: 456, confirmed: false });
+            log('Published invalid delete request (should be cancelled)', 'info');
+        };
+
+        // Initialize
+        log('EvEm Middleware & Transforms Demo loaded. Click buttons to test features!', 'info');
+        updateStats();
+    </script>
+</body>
+</html>
