@@ -114,13 +114,14 @@
             background: #1a202c;
             color: #e2e8f0;
             padding: 20px;
-            border-radius: 6px;
+            border-radius: 8px;
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 13px;
             line-height: 1.6;
-            max-height: 400px;
+            height: 300px;
             overflow-y: auto;
-            margin-top: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .output .log-entry {
@@ -162,11 +163,48 @@
             background: #2d3748;
             padding: 15px;
             border-radius: 6px;
-            margin: 10px 0;
             color: #e2e8f0;
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 12px;
             overflow-x: auto;
+            line-height: 1.5;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .tab {
+            background: none;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            color: #718096;
+            font-size: 14px;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s ease;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
         }
 
         .stats {
@@ -238,79 +276,235 @@
             <a href="../index.html" class="nav-link">← Back to demos</a>
         </header>
 
+        <div class="output" id="output"></div>
+
         <div class="demo-section">
             <h2>1. Simple Validators</h2>
             <p>Basic data type and structure validation</p>
-            <div class="code-block">evem.setSchema('user.create', {
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'simple-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'simple-code')">View Code</button>
+            </div>
+            <div id="simple-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="setupSimpleValidator()">Setup Validator</button>
+                    <button class="secondary" onclick="publishValidUser()">Valid User</button>
+                    <button class="secondary" onclick="publishInvalidUser()">Invalid User</button>
+                </div>
+            </div>
+            <div id="simple-code" class="tab-content">
+                <div class="code-block">// Setup a simple validator for user creation
+evem.setSchema('user.create', {
     validate: (data) => {
         if (!data.username) throw new Error('username required');
         if (!data.email) throw new Error('email required');
+        if (data.username.length < 3) throw new Error('username must be at least 3 characters');
         return true;
     }
+});
+
+// Subscribe to the event
+evem.subscribe('user.create', (data) => {
+    console.log('User created:', data.username);
+});
+
+// Publish valid data
+evem.publish('user.create', {
+    username: 'alice123',
+    email: 'alice@example.com'
 });</div>
-            <div class="controls">
-                <button onclick="setupSimpleValidator()">Setup Validator</button>
-                <button class="secondary" onclick="publishValidUser()">Valid User</button>
-                <button class="secondary" onclick="publishInvalidUser()">Invalid User</button>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>2. Advanced Validators</h2>
             <p>Complex validation with detailed error messages</p>
-            <div class="code-block">evem.setSchema('payment.process', {
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'advanced-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'advanced-code')">View Code</button>
+            </div>
+            <div id="advanced-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="setupAdvancedValidator()">Setup Validator</button>
+                    <button class="secondary" onclick="publishValidPayment()">Valid Payment</button>
+                    <button class="secondary" onclick="publishInvalidPayment()">Invalid Payment</button>
+                </div>
+            </div>
+            <div id="advanced-code" class="tab-content">
+                <div class="code-block">// Advanced multi-field validation
+evem.setSchema('payment.process', {
     validate: (data) => {
         const errors = [];
-        if (!data.amount || data.amount <= 0) {
-            errors.push('Amount must be positive');
+
+        // Validate amount
+        if (!data.amount || typeof data.amount !== 'number' || data.amount <= 0) {
+            errors.push('Amount must be a positive number');
         }
+
+        // Validate currency code
         if (!data.currency || !/^[A-Z]{3}$/.test(data.currency)) {
-            errors.push('Invalid currency code');
+            errors.push('Currency must be a 3-letter code (e.g., USD)');
         }
-        if (errors.length) throw new Error(errors.join(', '));
+
+        // Validate payment method
+        if (!data.method || !['card', 'bank', 'crypto'].includes(data.method)) {
+            errors.push('Payment method must be: card, bank, or crypto');
+        }
+
+        // Throw all errors at once
+        if (errors.length > 0) {
+            throw new Error(errors.join('; '));
+        }
+
         return true;
     }
 });</div>
-            <div class="controls">
-                <button onclick="setupAdvancedValidator()">Setup Validator</button>
-                <button class="secondary" onclick="publishValidPayment()">Valid Payment</button>
-                <button class="secondary" onclick="publishInvalidPayment()">Invalid Payment</button>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>3. Error Policies</h2>
             <p>Configure how validation errors are handled</p>
-            <div class="code-block">// throw: Stop execution and throw error
-// log: Log error and continue
-// ignore: Silently skip invalid events</div>
-            <div class="controls">
-                <button onclick="setErrorPolicy('throw')">Policy: Throw</button>
-                <button onclick="setErrorPolicy('log')">Policy: Log</button>
-                <button onclick="setErrorPolicy('ignore')">Policy: Ignore</button>
-                <button class="secondary" onclick="publishWithPolicy()">Test Policy</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'policy-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'policy-code')">View Code</button>
             </div>
-            <div id="policyDisplay" style="margin-top: 10px; color: #667eea; font-weight: bold;">
-                Current Policy: throw
+            <div id="policy-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="setErrorPolicy('throw')">Policy: Throw</button>
+                    <button onclick="setErrorPolicy('log')">Policy: Log</button>
+                    <button onclick="setErrorPolicy('ignore')">Policy: Ignore</button>
+                    <button class="secondary" onclick="publishWithPolicy()">Test Policy</button>
+                </div>
+                <div id="policyDisplay" style="margin-top: 10px; color: #667eea; font-weight: bold;">
+                    Current Policy: throw
+                </div>
+            </div>
+            <div id="policy-code" class="tab-content">
+                <div class="code-block">// Set error policy to control validation failure behavior
+evem.setErrorPolicy('throw');  // Stop execution and throw error (default)
+evem.setErrorPolicy('log');    // Log error to console and skip event
+evem.setErrorPolicy('ignore'); // Silently skip invalid events
+
+// Example: Using 'log' policy
+evem.setErrorPolicy('log');
+
+evem.setSchema('test.event', {
+    validate: (data) => {
+        if (!data.valid) throw new Error('Data is invalid');
+        return true;
+    }
+});
+
+// This will log an error but won't throw
+evem.publish('test.event', { valid: false });</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>4. Type Safety</h2>
             <p>Validate data types and structure</p>
-            <div class="controls">
-                <button onclick="setupTypeValidator()">Setup Type Validator</button>
-                <button class="secondary" onclick="publishCorrectType()">Correct Types</button>
-                <button class="secondary" onclick="publishWrongType()">Wrong Types</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'type-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'type-code')">View Code</button>
+            </div>
+            <div id="type-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="setupTypeValidator()">Setup Type Validator</button>
+                    <button class="secondary" onclick="publishCorrectType()">Correct Types</button>
+                    <button class="secondary" onclick="publishWrongType()">Wrong Types</button>
+                </div>
+            </div>
+            <div id="type-code" class="tab-content">
+                <div class="code-block">// Type checking validation
+evem.setSchema('data.submit', {
+    validate: (data) => {
+        const errors = [];
+
+        if (typeof data.id !== 'number') {
+            errors.push('id must be a number');
+        }
+
+        if (typeof data.name !== 'string') {
+            errors.push('name must be a string');
+        }
+
+        if (!Array.isArray(data.tags)) {
+            errors.push('tags must be an array');
+        }
+
+        if (typeof data.active !== 'boolean') {
+            errors.push('active must be a boolean');
+        }
+
+        if (errors.length > 0) {
+            throw new Error(errors.join('; '));
+        }
+
+        return true;
+    }
+});
+
+// Valid data
+evem.publish('data.submit', {
+    id: 123,
+    name: 'Test Item',
+    tags: ['tag1', 'tag2'],
+    active: true
+});</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>5. Custom Validators</h2>
             <p>Create reusable validation functions</p>
-            <div class="controls">
-                <button onclick="setupCustomValidators()">Setup Custom Validators</button>
-                <button class="secondary" onclick="testCustomValidators()">Test Validators</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'custom-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'custom-code')">View Code</button>
+            </div>
+            <div id="custom-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="setupCustomValidators()">Setup Custom Validators</button>
+                    <button class="secondary" onclick="testCustomValidators()">Test Validators</button>
+                </div>
+            </div>
+            <div id="custom-code" class="tab-content">
+                <div class="code-block">// Create reusable validator functions
+const validators = {
+    email: (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
+    url: (value) => /^https?:\/\/.+/.test(value),
+    phone: (value) => /^\+?[\d\s-()]+$/.test(value),
+    notEmpty: (value) => value && value.length > 0
+};
+
+// Use them in your schema
+evem.setSchema('contact.add', {
+    validate: (data) => {
+        const errors = [];
+
+        if (!validators.notEmpty(data.name)) {
+            errors.push('Name cannot be empty');
+        }
+
+        if (!validators.email(data.email)) {
+            errors.push('Invalid email format');
+        }
+
+        if (data.website && !validators.url(data.website)) {
+            errors.push('Invalid website URL');
+        }
+
+        if (data.phone && !validators.phone(data.phone)) {
+            errors.push('Invalid phone format');
+        }
+
+        if (errors.length > 0) {
+            throw new Error(errors.join('; '));
+        }
+
+        return true;
+    }
+});</div>
             </div>
         </div>
 
@@ -328,11 +522,23 @@
                 <div class="value" id="totalValidations">0</div>
             </div>
         </div>
-
-        <div class="output" id="output"></div>
     </div>
 
     <script type="module">
+        // Tab switching function
+        window.switchTab = (event, tabId) => {
+            const button = event.target;
+            const section = button.closest('.demo-section');
+
+            // Remove active class from all tabs and contents in this section
+            section.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            section.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            // Add active class to clicked tab and corresponding content
+            button.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        };
+
         class EvEm {
             constructor() {
                 this.events = new Map();

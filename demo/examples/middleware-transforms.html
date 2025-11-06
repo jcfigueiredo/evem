@@ -48,6 +48,51 @@
             opacity: 1;
         }
 
+        .output {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            height: 300px;
+            overflow-y: auto;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .output .log-entry {
+            margin-bottom: 8px;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .output .timestamp {
+            color: #718096;
+        }
+
+        .output .event-name {
+            color: #48bb78;
+            font-weight: bold;
+        }
+
+        .output .data {
+            color: #fbd38d;
+        }
+
+        .output .info {
+            color: #63b3ed;
+        }
+
+        .output .middleware {
+            color: #9f7aea;
+        }
+
+        .output .transform {
+            color: #f093fb;
+        }
+
         .demo-section {
             background: white;
             padding: 25px;
@@ -66,6 +111,43 @@
             color: #666;
             margin-bottom: 15px;
             line-height: 1.6;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .tab {
+            background: none;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            color: #718096;
+            font-size: 14px;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s ease;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
         }
 
         .controls {
@@ -110,59 +192,15 @@
             background: #e53e3e;
         }
 
-        .output {
-            background: #1a202c;
-            color: #e2e8f0;
-            padding: 20px;
-            border-radius: 6px;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 13px;
-            line-height: 1.6;
-            max-height: 400px;
-            overflow-y: auto;
-            margin-top: 15px;
-        }
-
-        .output .log-entry {
-            margin-bottom: 8px;
-            padding: 4px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-
-        .output .timestamp {
-            color: #718096;
-        }
-
-        .output .event-name {
-            color: #48bb78;
-            font-weight: bold;
-        }
-
-        .output .data {
-            color: #fbd38d;
-        }
-
-        .output .info {
-            color: #63b3ed;
-        }
-
-        .output .middleware {
-            color: #9f7aea;
-        }
-
-        .output .transform {
-            color: #f093fb;
-        }
-
         .code-block {
             background: #2d3748;
             padding: 15px;
             border-radius: 6px;
-            margin: 10px 0;
             color: #e2e8f0;
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 12px;
             overflow-x: auto;
+            line-height: 1.5;
         }
 
         .stats {
@@ -200,63 +238,196 @@
             <a href="../index.html" class="nav-link">← Back to demos</a>
         </header>
 
+        <div class="output" id="output"></div>
+
         <div class="demo-section">
             <h2>1. Global Middleware</h2>
             <p>Intercept all events before they reach handlers</p>
-            <div class="code-block">evem.use((event, data, next) => {
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'global-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'global-code')">View Code</button>
+            </div>
+            <div id="global-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="setupGlobalMiddleware()">Setup Global Logger</button>
+                    <button class="secondary" onclick="publishTestEvents()">Publish Events</button>
+                </div>
+            </div>
+            <div id="global-code" class="tab-content">
+                <div class="code-block">// Global middleware intercepts ALL events
+evem.use(async (event, data, next) => {
     console.log('Middleware:', event);
     await next(); // Continue to handlers
-});</div>
-            <div class="controls">
-                <button onclick="setupGlobalMiddleware()">Setup Global Logger</button>
-                <button class="secondary" onclick="publishTestEvents()">Publish Events</button>
+});
+
+// Subscribe to some events
+evem.subscribe('user.login', (data) => {
+    console.log('Login handler:', data);
+});
+
+// Publish events - middleware runs first
+await evem.publish('user.login', { user: 'Alice' });
+await evem.publish('system.update', { version: '2.0' });</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>2. Pattern-Based Middleware</h2>
             <p>Apply middleware only to events matching a pattern</p>
-            <div class="code-block">evem.use('api.*', async (event, data, next) => {
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'pattern-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'pattern-code')">View Code</button>
+            </div>
+            <div id="pattern-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="setupPatternMiddleware()">Setup API Middleware</button>
+                    <button class="secondary" onclick="publishApiEvents()">Publish API Events</button>
+                </div>
+            </div>
+            <div id="pattern-code" class="tab-content">
+                <div class="code-block">// Pattern-based middleware only runs for matching events
+evem.use('api.*', async (event, data, next) => {
     data.timestamp = Date.now();
+    data.requestId = Math.random().toString(36).substr(2, 9);
     await next();
-});</div>
-            <div class="controls">
-                <button onclick="setupPatternMiddleware()">Setup API Middleware</button>
-                <button class="secondary" onclick="publishApiEvents()">Publish API Events</button>
+});
+
+// Subscribe to API events
+evem.subscribe('api.*', (data) => {
+    console.log('API handler:', data);
+});
+
+// These will trigger the middleware
+await evem.publish('api.users.get', { userId: 123 });
+await evem.publish('api.posts.create', { title: 'Hello' });</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>3. Event Transformations</h2>
             <p>Transform event data before it reaches handlers</p>
-            <div class="code-block">evem.subscribe('user.input', handler, {
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'transform-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'transform-code')">View Code</button>
+            </div>
+            <div id="transform-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="setupTransform()">Setup Transform</button>
+                    <button class="secondary" onclick="publishWithTransform()">Publish Event</button>
+                </div>
+            </div>
+            <div id="transform-code" class="tab-content">
+                <div class="code-block">// Transform modifies data before handler receives it
+evem.subscribe('user.input', (data) => {
+    console.log('Received:', data.text); // "HELLO WORLD"
+}, {
     transform: (data) => ({
         ...data,
-        text: data.text.toUpperCase()
+        text: data.text.toUpperCase(),
+        processed: true
     })
+});
+
+// Publish original data
+await evem.publish('user.input', {
+    text: 'hello world',
+    timestamp: Date.now()
 });</div>
-            <div class="controls">
-                <button onclick="setupTransform()">Setup Transform</button>
-                <button class="secondary" onclick="publishWithTransform()">Publish Event</button>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>4. Transform Chains</h2>
             <p>Multiple transforms applied in sequence</p>
-            <div class="controls">
-                <button onclick="setupTransformChain()">Setup Chain</button>
-                <button class="secondary" onclick="publishForChain()">Test Chain</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'chain-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'chain-code')">View Code</button>
+            </div>
+            <div id="chain-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="setupTransformChain()">Setup Chain</button>
+                    <button class="secondary" onclick="publishForChain()">Test Chain</button>
+                </div>
+            </div>
+            <div id="chain-code" class="tab-content">
+                <div class="code-block">// Each subscriber can have its own transform
+// Transforms are applied independently per handler
+
+// Handler 1: trim whitespace
+evem.subscribe('data.process', (data) => {
+    console.log('Step 1:', data.value); // "hello world"
+}, {
+    transform: (data) => ({
+        ...data,
+        value: data.value.trim()
+    })
+});
+
+// Handler 2: uppercase
+evem.subscribe('data.process', (data) => {
+    console.log('Step 2:', data.value); // "HELLO WORLD"
+}, {
+    transform: (data) => ({
+        ...data,
+        value: data.value.toUpperCase()
+    })
+});
+
+// Handler 3: add prefix
+evem.subscribe('data.process', (data) => {
+    console.log('Step 3:', data.value); // "PROCESSED: HELLO WORLD"
+}, {
+    transform: (data) => ({
+        ...data,
+        value: `PROCESSED: ${data.value}`
+    })
+});
+
+await evem.publish('data.process', {
+    value: '  hello world  '
+});</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>5. Middleware Cancellation</h2>
             <p>Middleware can cancel event propagation</p>
-            <div class="controls">
-                <button onclick="setupCancelMiddleware()">Setup Validation Middleware</button>
-                <button class="secondary" onclick="publishValid()">Publish Valid Event</button>
-                <button class="secondary" onclick="publishInvalid()">Publish Invalid Event</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'cancel-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'cancel-code')">View Code</button>
+            </div>
+            <div id="cancel-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="setupCancelMiddleware()">Setup Validation Middleware</button>
+                    <button class="secondary" onclick="publishValid()">Publish Valid Event</button>
+                    <button class="secondary" onclick="publishInvalid()">Publish Invalid Event</button>
+                </div>
+            </div>
+            <div id="cancel-code" class="tab-content">
+                <div class="code-block">// Middleware can cancel events by throwing an error
+evem.use('user.delete', async (event, data, next) => {
+    if (!data.confirmed) {
+        // Cancel event by throwing with 'CANCEL' message
+        throw new Error('CANCEL');
+    }
+    await next(); // Continue to handlers
+});
+
+evem.subscribe('user.delete', (data) => {
+    console.log('Deleted user:', data.userId);
+});
+
+// This will reach the handler
+await evem.publish('user.delete', {
+    userId: 123,
+    confirmed: true
+});
+
+// This will be cancelled by middleware
+await evem.publish('user.delete', {
+    userId: 456,
+    confirmed: false
+});</div>
             </div>
         </div>
 
@@ -274,11 +445,23 @@
                 <div class="value" id="eventsHandled">0</div>
             </div>
         </div>
-
-        <div class="output" id="output"></div>
     </div>
 
     <script type="module">
+        // Tab switching function
+        window.switchTab = (event, tabId) => {
+            const button = event.target;
+            const section = button.closest('.demo-section');
+
+            // Remove active class from all tabs and contents in this section
+            section.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            section.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            // Add active class to clicked tab and corresponding content
+            button.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        };
+
         class EvEm {
             constructor() {
                 this.events = new Map();

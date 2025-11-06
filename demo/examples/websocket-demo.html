@@ -153,9 +153,9 @@
             border-radius: 6px;
             font-family: 'Monaco', monospace;
             font-size: 12px;
-            max-height: 300px;
+            height: 300px;
             overflow-y: auto;
-            margin-top: 15px;
+            margin-bottom: 30px;
         }
 
         .log-entry {
@@ -265,6 +265,54 @@
             border-left: 3px solid #ed8936;
             font-size: 0.85rem;
         }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .tab {
+            background: none;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            color: #718096;
+            font-size: 14px;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s ease;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .code-block {
+            background: #2d3748;
+            padding: 15px;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            line-height: 1.5;
+        }
     </style>
 </head>
 <body>
@@ -275,77 +323,155 @@
             <a href="../index.html" class="nav-link">← Back to demos</a>
         </header>
 
+        <div class="panel">
+            <h2>Event Log <button class="danger" onclick="clearLog()" style="float: right; font-size: 0.85rem;">Clear</button></h2>
+            <div class="output" id="output"></div>
+        </div>
+
         <div class="grid">
             <div class="panel">
                 <h2>Connection Control</h2>
 
-                <div class="status-bar">
-                    <div class="status-indicator">
-                        <div class="status-dot" id="statusDot"></div>
-                        <span id="statusText">Disconnected</span>
-                    </div>
-                    <span id="queueBadge" class="badge">Queue: 0</span>
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab(event, 'connection-controls')">Controls</button>
+                    <button class="tab" onclick="switchTab(event, 'connection-code')">View Code</button>
                 </div>
 
-                <div>
-                    <button onclick="connect()" id="connectBtn">Connect</button>
-                    <button onclick="disconnect()" id="disconnectBtn" disabled>Disconnect</button>
-                    <button class="secondary" onclick="simulateNetworkIssue()">Simulate Network Issue</button>
+                <div id="connection-controls" class="tab-content active">
+                    <div class="status-bar">
+                        <div class="status-indicator">
+                            <div class="status-dot" id="statusDot"></div>
+                            <span id="statusText">Disconnected</span>
+                        </div>
+                        <span id="queueBadge" class="badge">Queue: 0</span>
+                    </div>
+
+                    <div>
+                        <button onclick="connect()" id="connectBtn">Connect</button>
+                        <button onclick="disconnect()" id="disconnectBtn" disabled>Disconnect</button>
+                        <button class="secondary" onclick="simulateNetworkIssue()">Simulate Network Issue</button>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="stat-value" id="messagesSent">0</div>
+                            <div class="stat-label">Sent</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="messagesReceived">0</div>
+                            <div class="stat-label">Received</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="messagesQueued">0</div>
+                            <div class="stat-label">Queued</div>
+                        </div>
+                    </div>
+
+                    <h3 style="margin-top: 20px; color: #667eea;">Message Queue</h3>
+                    <p style="color: #718096; font-size: 0.9rem; margin: 10px 0;">Messages sent while disconnected are automatically queued</p>
+
+                    <div class="queue-list" id="queueList">
+                        <em style="color: #a0aec0;">Queue is empty</em>
+                    </div>
                 </div>
 
-                <div class="stats-grid">
-                    <div class="stat-box">
-                        <div class="stat-value" id="messagesSent">0</div>
-                        <div class="stat-label">Sent</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value" id="messagesReceived">0</div>
-                        <div class="stat-label">Received</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value" id="messagesQueued">0</div>
-                        <div class="stat-label">Queued</div>
-                    </div>
-                </div>
+                <div id="connection-code" class="tab-content">
+                    <div class="code-block">// Create ConnectionManager
+const connectionManager = new ConnectionManager(evem);
 
-                <h3 style="margin-top: 20px; color: #667eea;">Message Queue</h3>
-                <p style="color: #718096; font-size: 0.9rem; margin: 10px 0;">Messages sent while disconnected are automatically queued</p>
+// Setup WebSocket with auto-wiring
+const ws = new WebSocket('wss://api.example.com');
 
-                <div class="queue-list" id="queueList">
-                    <em style="color: #a0aec0;">Queue is empty</em>
+ws.onopen = async () => {
+    await connectionManager.transitionTo('connected');
+};
+
+ws.onclose = async () => {
+    await connectionManager.transitionTo('disconnected');
+};
+
+// Subscribe to connection state changes
+evem.subscribe('ws.connection.state', (event) => {
+    console.log(`State: ${event.from} → ${event.to}`);
+});</div>
                 </div>
             </div>
 
             <div class="panel">
                 <h2>Send Messages</h2>
-                <p style="color: #718096; margin-bottom: 15px;">Try sending messages while connected and disconnected</p>
 
-                <input type="text" class="message-input" id="messageInput" placeholder="Type a message...">
-                <button onclick="sendMessage()" class="secondary">Send Message</button>
-                <button onclick="sendMultiple()">Send 5 Messages</button>
-
-                <h3 style="margin-top: 25px; color: #667eea;">Request-Response Pattern</h3>
-                <p style="color: #718096; margin: 10px 0;">RPC-style requests with automatic timeout handling</p>
-
-                <div style="margin-top: 15px;">
-                    <button onclick="requestUserData()" class="secondary">Request User Data</button>
-                    <button onclick="requestWithTimeout()">Request (2s timeout)</button>
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab(event, 'messages-controls')">Controls</button>
+                    <button class="tab" onclick="switchTab(event, 'messages-code')">View Code</button>
                 </div>
 
-                <div class="server-sim">
-                    <h3>📡 Simulated Server Activity</h3>
-                    <div id="serverActivity" style="font-size: 0.85rem; color: #cbd5e0;"></div>
+                <div id="messages-controls" class="tab-content active">
+                    <p style="color: #718096; margin-bottom: 15px;">Try sending messages while connected and disconnected</p>
+
+                    <input type="text" class="message-input" id="messageInput" placeholder="Type a message...">
+                    <button onclick="sendMessage()" class="secondary">Send Message</button>
+                    <button onclick="sendMultiple()">Send 5 Messages</button>
+
+                    <h3 style="margin-top: 25px; color: #667eea;">Request-Response Pattern</h3>
+                    <p style="color: #718096; margin: 10px 0;">RPC-style requests with automatic timeout handling</p>
+
+                    <div style="margin-top: 15px;">
+                        <button onclick="requestUserData()" class="secondary">Request User Data</button>
+                        <button onclick="requestWithTimeout()">Request (2s timeout)</button>
+                    </div>
+
+                    <div class="server-sim">
+                        <h3>📡 Simulated Server Activity</h3>
+                        <div id="serverActivity" style="font-size: 0.85rem; color: #cbd5e0;"></div>
+                    </div>
+                </div>
+
+                <div id="messages-code" class="tab-content">
+                    <div class="code-block">// Enable message queue with auto-flush
+messageQueue.enable(100, { autoFlush: true });
+
+// Send a message - automatically queued if offline
+await evem.publish('ws.send', {
+    type: 'message',
+    text: 'Hello from EvEm!',
+    timestamp: Date.now()
+});
+
+// Request-Response pattern
+const reqId = 'req-123';
+await evem.publish('ws.send', {
+    type: 'request',
+    id: reqId,
+    method: 'getUser',
+    params: { id: 123 }
+});
+
+// Listen for response
+evem.subscribe('ws.response', (message) => {
+    if (message.id === reqId) {
+        console.log('Response:', message.result);
+    }
+});</div>
                 </div>
             </div>
-        </div>
-
-        <div class="panel">
-            <h2>Event Log <button class="danger" onclick="clearLog()" style="float: right; font-size: 0.85rem;">Clear</button></h2>
-            <div class="output" id="output"></div>
         </div>
     </div>
 
     <script>
+        // Tab switching function
+        function switchTab(event, tabId) {
+            const button = event.target;
+            const section = button.closest('.panel');
+
+            // Remove active class from all tabs and contents in this section
+            section.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            section.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            // Add active class to clicked tab and corresponding content
+            button.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        }
+
         // Simplified WebSocket adapter implementation for demo
         class EvEm {
             constructor() {

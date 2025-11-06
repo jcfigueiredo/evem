@@ -114,13 +114,14 @@
             background: #1a202c;
             color: #e2e8f0;
             padding: 20px;
-            border-radius: 6px;
+            border-radius: 8px;
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 13px;
             line-height: 1.6;
-            max-height: 400px;
+            height: 300px;
             overflow-y: auto;
-            margin-top: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .output .log-entry {
@@ -162,15 +163,52 @@
             color: #f093fb;
         }
 
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .tab {
+            background: none;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            color: #718096;
+            font-size: 14px;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s ease;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
         .code-block {
             background: #2d3748;
             padding: 15px;
             border-radius: 6px;
-            margin: 10px 0;
             color: #e2e8f0;
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 12px;
             overflow-x: auto;
+            line-height: 1.5;
         }
 
         .stats {
@@ -263,66 +301,195 @@
             <a href="../index.html" class="nav-link">← Back to demos</a>
         </header>
 
+        <div class="output" id="output"></div>
+
         <div class="demo-section">
             <h2>1. Cancelable Events</h2>
             <p>Handlers can prevent event propagation</p>
-            <div class="code-block">evem.publishCancelable('user.delete', data).then(result => {
-    if (result.cancelled) {
-        console.log('Event was cancelled by:', result.cancelledBy);
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'cancelable-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'cancelable-code')">View Code</button>
+            </div>
+            <div id="cancelable-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="setupCancelable()">Setup Cancelable Event</button>
+                    <button class="secondary" onclick="publishAllowed()">Publish Allowed</button>
+                    <button class="secondary" onclick="publishDenied()">Publish Denied</button>
+                </div>
+            </div>
+            <div id="cancelable-code" class="tab-content">
+                <div class="code-block">// Publish a cancelable event
+const result = await evem.publishCancelable('user.delete', {
+    userId: 123,
+    confirmed: true
+});
+
+if (result.cancelled) {
+    console.log('Event was cancelled by:', result.cancelledBy);
+}
+
+// Handler can cancel the event
+evem.subscribe('user.delete', (event) => {
+    if (!event.data.confirmed) {
+        event.cancel('Deletion not confirmed');
     }
 });</div>
-            <div class="controls">
-                <button onclick="setupCancelable()">Setup Cancelable Event</button>
-                <button class="secondary" onclick="publishAllowed()">Publish Allowed</button>
-                <button class="secondary" onclick="publishDenied()">Publish Denied</button>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>2. Error Policies</h2>
             <p>Configure how errors in handlers are managed</p>
-            <div class="code-block">// continue: Continue to next handlers
-// stop: Stop at first error
-// collect: Collect all errors and report</div>
-            <div class="controls">
-                <button onclick="setPolicy('continue')">Policy: Continue</button>
-                <button onclick="setPolicy('stop')">Policy: Stop</button>
-                <button onclick="setPolicy('collect')">Policy: Collect</button>
-                <button class="secondary" onclick="publishWithErrors()">Publish with Errors</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'policy-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'policy-code')">View Code</button>
             </div>
-            <div id="policyDisplay" style="margin-top: 10px; color: #667eea; font-weight: bold;">
-                Current Policy: continue
+            <div id="policy-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="setPolicy('continue')">Policy: Continue</button>
+                    <button onclick="setPolicy('stop')">Policy: Stop</button>
+                    <button onclick="setPolicy('collect')">Policy: Collect</button>
+                    <button class="secondary" onclick="publishWithErrors()">Publish with Errors</button>
+                </div>
+                <div id="policyDisplay" style="margin-top: 10px; color: #667eea; font-weight: bold;">
+                    Current Policy: continue
+                </div>
+            </div>
+            <div id="policy-code" class="tab-content">
+                <div class="code-block">// Set error handling policy
+evem.setErrorPolicy('continue'); // Continue to next handlers (default)
+evem.setErrorPolicy('stop');     // Stop at first error
+evem.setErrorPolicy('collect');  // Collect all errors and report
+
+// When policy is 'continue', errors are logged but execution continues
+evem.subscribe('event', () => {
+    throw new Error('Handler 1 failed');
+});
+
+evem.subscribe('event', () => {
+    console.log('Handler 2 still runs');
+});</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>3. Validation Chains</h2>
             <p>Multiple validators in sequence, any can cancel</p>
-            <div id="validationChain" class="handler-chain"></div>
-            <div class="controls">
-                <button onclick="setupValidationChain()">Setup Chain</button>
-                <button class="secondary" onclick="testValidChain()">Valid Data</button>
-                <button class="secondary" onclick="testInvalidChain()">Invalid Data</button>
-                <button class="danger" onclick="resetChain()">Reset</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'validation-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'validation-code')">View Code</button>
+            </div>
+            <div id="validation-controls" class="tab-content active">
+                <div id="validationChain" class="handler-chain"></div>
+                <div class="controls">
+                    <button onclick="setupValidationChain()">Setup Chain</button>
+                    <button class="secondary" onclick="testValidChain()">Valid Data</button>
+                    <button class="secondary" onclick="testInvalidChain()">Invalid Data</button>
+                    <button class="danger" onclick="resetChain()">Reset</button>
+                </div>
+            </div>
+            <div id="validation-code" class="tab-content">
+                <div class="code-block">// Chain multiple validators together
+evem.subscribe('data.validate', (event) => {
+    if (event.data.value.length < 3) {
+        event.cancel('Value too short');
+    }
+});
+
+evem.subscribe('data.validate', (event) => {
+    if (!/^[a-zA-Z]+$/.test(event.data.value)) {
+        event.cancel('Invalid format (letters only)');
+    }
+});
+
+evem.subscribe('data.validate', (event) => {
+    const forbidden = ['admin', 'root', 'system'];
+    if (forbidden.includes(event.data.value.toLowerCase())) {
+        event.cancel('Reserved word');
+    }
+});
+
+// All validators must pass before final handler runs
+evem.subscribe('data.validate', (event) => {
+    console.log('Data saved:', event.data.value);
+});</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>4. Permission Checks</h2>
             <p>Use cancelable events for permission validation</p>
-            <div class="controls">
-                <button onclick="setupPermissions()">Setup Permissions</button>
-                <button class="secondary" onclick="adminAction()">Admin Action</button>
-                <button class="secondary" onclick="userAction()">User Action</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'permission-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'permission-code')">View Code</button>
+            </div>
+            <div id="permission-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="setupPermissions()">Setup Permissions</button>
+                    <button class="secondary" onclick="adminAction()">Admin Action</button>
+                    <button class="secondary" onclick="userAction()">User Action</button>
+                </div>
+            </div>
+            <div id="permission-code" class="tab-content">
+                <div class="code-block">// Use cancelable events for authorization checks
+evem.subscribe('admin.action', (event) => {
+    // Permission check
+    if (event.data.role !== 'admin') {
+        event.cancel('Insufficient permissions');
+        return;
+    }
+});
+
+evem.subscribe('admin.action', (event) => {
+    // Only runs if permission check passed
+    console.log('Executing admin action:', event.data.action);
+});
+
+// Publish with different roles
+await evem.publishCancelable('admin.action', {
+    role: 'admin',  // Will execute
+    action: 'Delete database'
+});
+
+await evem.publishCancelable('admin.action', {
+    role: 'user',   // Will be cancelled
+    action: 'Delete database'
+});</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>5. Error Recovery</h2>
             <p>Handle errors gracefully with fallback logic</p>
-            <div class="controls">
-                <button onclick="setupErrorRecovery()">Setup Recovery</button>
-                <button class="secondary" onclick="triggerRecovery()">Trigger with Error</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'recovery-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'recovery-code')">View Code</button>
+            </div>
+            <div id="recovery-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="setupErrorRecovery()">Setup Recovery</button>
+                    <button class="secondary" onclick="triggerRecovery()">Trigger with Error</button>
+                </div>
+            </div>
+            <div id="recovery-code" class="tab-content">
+                <div class="code-block">// Set policy to continue so fallback handlers run
+evem.setErrorPolicy('continue');
+
+// Primary handler that might fail
+evem.subscribe('api.call', async (data) => {
+    console.log('Attempting primary API...');
+    throw new Error('Primary API unavailable');
+});
+
+// Fallback handler runs even if primary fails
+evem.subscribe('api.call', async (data) => {
+    console.log('Attempting fallback API...');
+    // Fallback logic here
+    return await fallbackApi.call(data);
+});
+
+// With 'continue' policy, errors don't stop execution
+await evem.publish('api.call', { endpoint: '/users' });</div>
             </div>
         </div>
 
@@ -340,11 +507,23 @@
                 <div class="value" id="errorCount">0</div>
             </div>
         </div>
-
-        <div class="output" id="output"></div>
     </div>
 
     <script type="module">
+        // Tab switching function
+        window.switchTab = (event, tabId) => {
+            const button = event.target;
+            const section = button.closest('.demo-section');
+
+            // Remove active class from all tabs and contents in this section
+            section.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            section.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            // Add active class to clicked tab and corresponding content
+            button.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        };
+
         class CancelableEvent {
             constructor(name, data) {
                 this.name = name;

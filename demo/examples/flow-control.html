@@ -82,12 +82,14 @@
             background: #1a202c;
             color: #e2e8f0;
             padding: 20px;
-            border-radius: 6px;
-            font-family: 'Monaco', monospace;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Courier New', monospace;
             font-size: 13px;
-            max-height: 300px;
+            line-height: 1.6;
+            height: 300px;
             overflow-y: auto;
-            margin-top: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .visualizer {
@@ -175,6 +177,54 @@
             font-size: 0.9rem;
             margin-top: 5px;
         }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .tab {
+            background: none;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            color: #718096;
+            font-size: 14px;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s ease;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .code-block {
+            background: #2d3748;
+            padding: 15px;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            line-height: 1.5;
+        }
     </style>
 </head>
 <body>
@@ -185,123 +235,217 @@
             <a href="../index.html" class="nav-link">← Back to demos</a>
         </header>
 
+        <div class="output" id="output"></div>
+
         <div class="demo-section">
             <h2>1. Throttling</h2>
             <p>Limits execution to once per time window (first event is processed immediately)</p>
-
-            <div class="rapid-fire-area">
-                <button class="rapid-fire-button" onmousedown="startRapidFire('throttle')" onmouseup="stopRapidFire()">
-                    Hold to Fire Events Rapidly
-                </button>
-                <p style="margin-top: 15px; color: #718096;">Events are throttled to 500ms intervals</p>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'throttle-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'throttle-code')">View Code</button>
             </div>
+            <div id="throttle-controls" class="tab-content active">
+                <div class="rapid-fire-area">
+                    <button class="rapid-fire-button" onmousedown="startRapidFire('throttle')" onmouseup="stopRapidFire()">
+                        Hold to Fire Events Rapidly
+                    </button>
+                    <p style="margin-top: 15px; color: #718096;">Events are throttled to 500ms intervals</p>
+                </div>
 
-            <div class="stats-grid">
-                <div class="stat-box">
-                    <div class="stat-value" id="throttlePublished">0</div>
-                    <div class="stat-label">Published</div>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-value" id="throttlePublished">0</div>
+                        <div class="stat-label">Published</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="throttleHandled">0</div>
+                        <div class="stat-label">Handled</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="throttleIgnored">0</div>
+                        <div class="stat-label">Throttled</div>
+                    </div>
                 </div>
-                <div class="stat-box">
-                    <div class="stat-value" id="throttleHandled">0</div>
-                    <div class="stat-label">Handled</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-value" id="throttleIgnored">0</div>
-                    <div class="stat-label">Throttled</div>
+
+                <div class="visualizer" id="throttleViz">
+                    <strong>Event Timeline:</strong>
+                    <div id="throttleTimeline" style="margin-top: 10px;"></div>
                 </div>
             </div>
+            <div id="throttle-code" class="tab-content">
+                <div class="code-block">// Subscribe with throttle
+evem.subscribe('mouse.move', (data) => {
+    console.log('Handling event:', data);
+}, {
+    throttleTime: 500  // Execute at most once per 500ms
+});
 
-            <div class="visualizer" id="throttleViz">
-                <strong>Event Timeline:</strong>
-                <div id="throttleTimeline" style="margin-top: 10px;"></div>
+// Publish events rapidly
+evem.publish('mouse.move', { x: 100, y: 200 });
+evem.publish('mouse.move', { x: 101, y: 201 });  // Throttled
+evem.publish('mouse.move', { x: 102, y: 202 });  // Throttled
+// ... 500ms passes ...
+evem.publish('mouse.move', { x: 150, y: 250 });  // Executed</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>2. Debouncing</h2>
             <p>Waits for events to stop before processing (only the last event in a window is processed)</p>
-
-            <div class="rapid-fire-area">
-                <button class="rapid-fire-button" onmousedown="startRapidFire('debounce')" onmouseup="stopRapidFire()">
-                    Hold to Fire Events Rapidly
-                </button>
-                <p style="margin-top: 15px; color: #718096;">Events are debounced to 500ms intervals</p>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'debounce-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'debounce-code')">View Code</button>
             </div>
+            <div id="debounce-controls" class="tab-content active">
+                <div class="rapid-fire-area">
+                    <button class="rapid-fire-button" onmousedown="startRapidFire('debounce')" onmouseup="stopRapidFire()">
+                        Hold to Fire Events Rapidly
+                    </button>
+                    <p style="margin-top: 15px; color: #718096;">Events are debounced to 500ms intervals</p>
+                </div>
 
-            <div class="stats-grid">
-                <div class="stat-box">
-                    <div class="stat-value" id="debouncePublished">0</div>
-                    <div class="stat-label">Published</div>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-value" id="debouncePublished">0</div>
+                        <div class="stat-label">Published</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="debounceHandled">0</div>
+                        <div class="stat-label">Handled</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="debounceIgnored">0</div>
+                        <div class="stat-label">Debounced</div>
+                    </div>
                 </div>
-                <div class="stat-box">
-                    <div class="stat-value" id="debounceHandled">0</div>
-                    <div class="stat-label">Handled</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-value" id="debounceIgnored">0</div>
-                    <div class="stat-label">Debounced</div>
+
+                <div class="visualizer" id="debounceViz">
+                    <strong>Event Timeline:</strong>
+                    <div id="debounceTimeline" style="margin-top: 10px;"></div>
                 </div>
             </div>
+            <div id="debounce-code" class="tab-content">
+                <div class="code-block">// Subscribe with debounce
+evem.subscribe('search.query', (data) => {
+    console.log('Performing search:', data.query);
+}, {
+    debounceTime: 500  // Wait 500ms after last event
+});
 
-            <div class="visualizer" id="debounceViz">
-                <strong>Event Timeline:</strong>
-                <div id="debounceTimeline" style="margin-top: 10px;"></div>
+// Publish events rapidly
+evem.publish('search.query', { query: 'h' });      // Ignored
+evem.publish('search.query', { query: 'he' });     // Ignored
+evem.publish('search.query', { query: 'hel' });    // Ignored
+evem.publish('search.query', { query: 'hello' });  // Ignored
+// ... 500ms passes with no new events ...
+// Now 'hello' is processed</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>3. Once-Only Events</h2>
             <p>Subscription automatically removed after first trigger</p>
-
-            <div style="margin: 20px 0;">
-                <button onclick="setupOnce()">Setup Once-Only Subscription</button>
-                <button class="secondary" onclick="publishOnceEvent()">Trigger Event</button>
-                <button class="danger" onclick="resetOnce()">Reset</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'once-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'once-code')">View Code</button>
             </div>
+            <div id="once-controls" class="tab-content active">
+                <div style="margin: 20px 0;">
+                    <button onclick="setupOnce()">Setup Once-Only Subscription</button>
+                    <button class="secondary" onclick="publishOnceEvent()">Trigger Event</button>
+                    <button class="danger" onclick="resetOnce()">Reset</button>
+                </div>
 
-            <div class="stats-grid">
-                <div class="stat-box">
-                    <div class="stat-value" id="oncePublished">0</div>
-                    <div class="stat-label">Published</div>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-value" id="oncePublished">0</div>
+                        <div class="stat-label">Published</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="onceHandled">0</div>
+                        <div class="stat-label">Handled</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="onceActive">0</div>
+                        <div class="stat-label">Active Subs</div>
+                    </div>
                 </div>
-                <div class="stat-box">
-                    <div class="stat-value" id="onceHandled">0</div>
-                    <div class="stat-label">Handled</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-value" id="onceActive">0</div>
-                    <div class="stat-label">Active Subs</div>
-                </div>
+            </div>
+            <div id="once-code" class="tab-content">
+                <div class="code-block">// Subscribe with once option
+evem.subscribe('app.initialized', (data) => {
+    console.log('App initialized:', data);
+    // This will only run once
+}, {
+    once: true  // Auto-unsubscribe after first execution
+});
+
+// First publish - handler executes and unsubscribes
+evem.publish('app.initialized', { timestamp: Date.now() });
+
+// Second publish - handler does NOT execute (already unsubscribed)
+evem.publish('app.initialized', { timestamp: Date.now() });</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>4. Combined: Throttle + Debounce</h2>
             <p>Process first event immediately, then wait for pause</p>
-
-            <div class="rapid-fire-area">
-                <button class="rapid-fire-button" onmousedown="startRapidFire('combined')" onmouseup="stopRapidFire()">
-                    Hold to Fire Events Rapidly
-                </button>
-                <p style="margin-top: 15px; color: #718096;">Throttle 300ms + Debounce 300ms</p>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'combined-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'combined-code')">View Code</button>
             </div>
+            <div id="combined-controls" class="tab-content active">
+                <div class="rapid-fire-area">
+                    <button class="rapid-fire-button" onmousedown="startRapidFire('combined')" onmouseup="stopRapidFire()">
+                        Hold to Fire Events Rapidly
+                    </button>
+                    <p style="margin-top: 15px; color: #718096;">Throttle 300ms + Debounce 300ms</p>
+                </div>
 
-            <div class="stats-grid">
-                <div class="stat-box">
-                    <div class="stat-value" id="combinedPublished">0</div>
-                    <div class="stat-label">Published</div>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-value" id="combinedPublished">0</div>
+                        <div class="stat-label">Published</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="combinedHandled">0</div>
+                        <div class="stat-label">Handled</div>
+                    </div>
                 </div>
-                <div class="stat-box">
-                    <div class="stat-value" id="combinedHandled">0</div>
-                    <div class="stat-label">Handled</div>
-                </div>
+            </div>
+            <div id="combined-code" class="tab-content">
+                <div class="code-block">// Combine throttle and debounce
+evem.subscribe('window.resize', (data) => {
+    console.log('Handling resize:', data);
+}, {
+    throttleTime: 300,  // At most once per 300ms
+    debounceTime: 300   // Wait 300ms after last event
+});
+
+// Benefits:
+// - Throttle: Provides immediate feedback on first event
+// - Debounce: Ensures final event is processed after activity stops
+// - Combined: Responsive UX with guaranteed final state processing</div>
             </div>
         </div>
-
-        <div class="output" id="output"></div>
     </div>
 
     <script>
+        // Tab switching function
+        window.switchTab = (event, tabId) => {
+            const button = event.target;
+            const section = button.closest('.demo-section');
+
+            // Remove active class from all tabs and contents in this section
+            section.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            section.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            // Add active class to clicked tab and corresponding content
+            button.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        };
+
         // Simplified EvEm with flow control
         class EvEm {
             constructor() {

@@ -48,6 +48,51 @@
             opacity: 1;
         }
 
+        .output {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            height: 300px;
+            overflow-y: auto;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .output .log-entry {
+            margin-bottom: 8px;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .output .timestamp {
+            color: #718096;
+        }
+
+        .output .event-name {
+            color: #48bb78;
+            font-weight: bold;
+        }
+
+        .output .data {
+            color: #fbd38d;
+        }
+
+        .output .info {
+            color: #63b3ed;
+        }
+
+        .output .warning {
+            color: #f6ad55;
+        }
+
+        .output .error {
+            color: #fc8181;
+        }
+
         .demo-section {
             background: white;
             padding: 25px;
@@ -66,6 +111,43 @@
             color: #666;
             margin-bottom: 15px;
             line-height: 1.6;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .tab {
+            background: none;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            color: #718096;
+            font-size: 14px;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s ease;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
         }
 
         .controls {
@@ -110,48 +192,15 @@
             background: #e53e3e;
         }
 
-        .output {
-            background: #1a202c;
-            color: #e2e8f0;
-            padding: 20px;
+        .code-block {
+            background: #2d3748;
+            padding: 15px;
             border-radius: 6px;
+            color: #e2e8f0;
             font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 13px;
-            line-height: 1.6;
-            max-height: 400px;
-            overflow-y: auto;
-            margin-top: 15px;
-        }
-
-        .output .log-entry {
-            margin-bottom: 8px;
-            padding: 4px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-
-        .output .timestamp {
-            color: #718096;
-        }
-
-        .output .event-name {
-            color: #48bb78;
-            font-weight: bold;
-        }
-
-        .output .data {
-            color: #fbd38d;
-        }
-
-        .output .info {
-            color: #63b3ed;
-        }
-
-        .output .warning {
-            color: #f6ad55;
-        }
-
-        .output .error {
-            color: #fc8181;
+            font-size: 12px;
+            overflow-x: auto;
+            line-height: 1.5;
         }
 
         .stats {
@@ -180,16 +229,6 @@
             font-weight: bold;
         }
 
-        .clear-btn {
-            background: #718096;
-            font-size: 12px;
-            padding: 8px 16px;
-        }
-
-        .clear-btn:hover {
-            background: #4a5568;
-        }
-
         input[type="text"] {
             padding: 10px;
             border: 2px solid #e2e8f0;
@@ -213,70 +252,184 @@
             <a href="../index.html" class="nav-link">← Back to demos</a>
         </header>
 
+        <div class="output" id="output"></div>
+
         <div class="demo-section">
             <h2>1. Basic Pub/Sub</h2>
             <p>Simple event subscription and publishing</p>
-            <div class="controls">
-                <button onclick="basicPubSub()">Publish "user.login" Event</button>
-                <button onclick="publishMultiple()">Publish Multiple Events</button>
-                <button class="danger" onclick="clearOutput()">Clear Output</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'pubsub-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'pubsub-code')">View Code</button>
             </div>
-            <div class="stats">
-                <div class="stat-box">
-                    <div class="label">Events Published</div>
-                    <div class="value" id="eventsPublished">0</div>
+            <div id="pubsub-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="basicPubSub()">Publish "user.login" Event</button>
+                    <button onclick="publishMultiple()">Publish Multiple Events</button>
+                    <button class="danger" onclick="clearOutput()">Clear Output</button>
                 </div>
-                <div class="stat-box">
-                    <div class="label">Total Subscriptions</div>
-                    <div class="value" id="totalSubs">0</div>
+                <div class="stats">
+                    <div class="stat-box">
+                        <div class="label">Events Published</div>
+                        <div class="value" id="eventsPublished">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="label">Total Subscriptions</div>
+                        <div class="value" id="totalSubs">0</div>
+                    </div>
                 </div>
+            </div>
+            <div id="pubsub-code" class="tab-content">
+                <div class="code-block">// Subscribe to an event
+evem.subscribe('user.login', (data) => {
+    console.log('User logged in:', data.username);
+});
+
+// Publish an event
+evem.publish('user.login', {
+    username: 'Alice',
+    id: 123
+});</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>2. Wildcard Patterns</h2>
             <p>Subscribe to multiple events using wildcard patterns</p>
-            <div class="controls">
-                <button onclick="wildcardDemo()">Subscribe to user.* Events</button>
-                <button class="secondary" onclick="publishUserEvents()">Publish User Events</button>
-                <button class="secondary" onclick="publishSystemEvents()">Publish System Events</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'wildcard-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'wildcard-code')">View Code</button>
+            </div>
+            <div id="wildcard-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="wildcardDemo()">Subscribe to user.* Events</button>
+                    <button class="secondary" onclick="publishUserEvents()">Publish User Events</button>
+                    <button class="secondary" onclick="publishSystemEvents()">Publish System Events</button>
+                </div>
+            </div>
+            <div id="wildcard-code" class="tab-content">
+                <div class="code-block">// Subscribe to all user events
+evem.subscribe('user.*', (data) => {
+    console.log('User event:', data);
+});
+
+// These will all match user.*
+evem.publish('user.login', { user: 'Alice' });
+evem.publish('user.logout', { user: 'Alice' });
+evem.publish('user.update', { user: 'Alice' });
+
+// This will NOT match user.*
+evem.publish('system.startup', {});</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>3. Event Filtering</h2>
             <p>Filter events based on data properties</p>
-            <div class="controls">
-                <button onclick="filterDemo()">Setup Admin Filter</button>
-                <button class="secondary" onclick="publishWithRole('admin')">Publish Admin Event</button>
-                <button class="secondary" onclick="publishWithRole('user')">Publish User Event</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'filter-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'filter-code')">View Code</button>
+            </div>
+            <div id="filter-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="filterDemo()">Setup Admin Filter</button>
+                    <button class="secondary" onclick="publishWithRole('admin')">Publish Admin Event</button>
+                    <button class="secondary" onclick="publishWithRole('user')">Publish User Event</button>
+                </div>
+            </div>
+            <div id="filter-code" class="tab-content">
+                <div class="code-block">// Only receive events where role === 'admin'
+evem.subscribe('user.action', (data) => {
+    console.log('Admin action:', data.action);
+}, {
+    filter: (data) => data.role === 'admin'
+});
+
+// This will trigger the handler
+evem.publish('user.action', {
+    role: 'admin',
+    action: 'delete'
+});
+
+// This will be filtered out
+evem.publish('user.action', {
+    role: 'user',
+    action: 'delete'
+});</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>4. Priority Handling</h2>
             <p>Control execution order with priorities</p>
-            <div class="controls">
-                <button onclick="priorityDemo()">Setup Priority Handlers</button>
-                <button class="secondary" onclick="publishPriorityEvent()">Trigger Priority Event</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'priority-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'priority-code')">View Code</button>
+            </div>
+            <div id="priority-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="priorityDemo()">Setup Priority Handlers</button>
+                    <button class="secondary" onclick="publishPriorityEvent()">Trigger Priority Event</button>
+                </div>
+            </div>
+            <div id="priority-code" class="tab-content">
+                <div class="code-block">// High priority executes first
+evem.subscribe('app.startup', () => {
+    console.log('HIGH - Critical services');
+}, { priority: 'high' });
+
+// Normal priority executes second
+evem.subscribe('app.startup', () => {
+    console.log('NORMAL - UI components');
+}, { priority: 'normal' });
+
+// Low priority executes last
+evem.subscribe('app.startup', () => {
+    console.log('LOW - Analytics');
+}, { priority: 'low' });</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>5. Namespaces</h2>
             <p>Organize events with namespace patterns</p>
-            <div class="controls">
-                <input type="text" id="namespaceInput" placeholder="e.g., api.user.create" />
-                <button onclick="publishNamespaced()">Publish Namespaced Event</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'namespace-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'namespace-code')">View Code</button>
+            </div>
+            <div id="namespace-controls" class="tab-content active">
+                <div class="controls">
+                    <input type="text" id="namespaceInput" placeholder="e.g., api.user.create" />
+                    <button onclick="publishNamespaced()">Publish Namespaced Event</button>
+                </div>
+            </div>
+            <div id="namespace-code" class="tab-content">
+                <div class="code-block">// Subscribe to all API events with 3 segments
+evem.subscribe('api.*.*', (data) => {
+    console.log('API event:', data);
+});
+
+// These will match
+evem.publish('api.user.create', { data });
+evem.publish('api.post.update', { data });
+evem.publish('api.auth.login', { data });</div>
             </div>
         </div>
-
-        <div class="output" id="output"></div>
     </div>
 
     <script type="module">
-        // Import EvEm (in a real scenario, this would come from a built bundle)
-        // For demo purposes, we'll create a simplified version inline
+        // Tab switching function
+        window.switchTab = (event, tabId) => {
+            const button = event.target;
+            const section = button.closest('.demo-section');
+
+            // Remove active class from all tabs and contents in this section
+            section.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            section.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            // Add active class to clicked tab and corresponding content
+            button.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        };
 
         class EvEm {
             constructor() {

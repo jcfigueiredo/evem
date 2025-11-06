@@ -114,13 +114,14 @@
             background: #1a202c;
             color: #e2e8f0;
             padding: 20px;
-            border-radius: 6px;
+            border-radius: 8px;
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 13px;
             line-height: 1.6;
-            max-height: 400px;
+            height: 300px;
             overflow-y: auto;
-            margin-top: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .output .log-entry {
@@ -225,11 +226,48 @@
             background: #2d3748;
             padding: 15px;
             border-radius: 6px;
-            margin: 10px 0;
             color: #e2e8f0;
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 12px;
             overflow-x: auto;
+            line-height: 1.5;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .tab {
+            background: none;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            color: #718096;
+            font-size: 14px;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s ease;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
         }
     </style>
 </head>
@@ -241,56 +279,170 @@
             <a href="../index.html" class="nav-link">← Back to demos</a>
         </header>
 
+        <div class="output" id="output"></div>
+
         <div class="demo-section">
             <h2>1. Event History Recording</h2>
             <p>Enable history tracking for specific events</p>
-            <div class="code-block">evem.enableHistory('user.*', { maxSize: 10 });</div>
-            <div class="controls">
-                <button onclick="enableHistory()">Enable History</button>
-                <button class="secondary" onclick="publishHistoryEvents()">Publish 5 Events</button>
-                <button class="secondary" onclick="showHistory()">Show History</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'history-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'history-code')">View Code</button>
+            </div>
+            <div id="history-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="enableHistory()">Enable History</button>
+                    <button class="secondary" onclick="publishHistoryEvents()">Publish 5 Events</button>
+                    <button class="secondary" onclick="showHistory()">Show History</button>
+                </div>
+            </div>
+            <div id="history-code" class="tab-content">
+                <div class="code-block">// Enable history tracking for events matching pattern
+evem.enableHistory('user.*', { maxSize: 10 });
+
+// Publish events - they will be recorded
+evem.publish('user.action', {
+    action: 'login',
+    userId: 123
+});
+
+// View history
+const history = evem.getHistory('user.action');
+console.log(history); // Array of event records</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>2. Replay Last Event</h2>
             <p>Late subscribers automatically receive the most recent event</p>
-            <div class="code-block">evem.subscribe('status.update', handler, {
-    replayLast: true  // Receive last event immediately
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'replayLast-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'replayLast-code')">View Code</button>
+            </div>
+            <div id="replayLast-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="publishStatus()">Publish Status</button>
+                    <button class="secondary" onclick="subscribeLate()">Subscribe Late (replay last)</button>
+                </div>
+            </div>
+            <div id="replayLast-code" class="tab-content">
+                <div class="code-block">// Enable history first
+evem.enableHistory('status.*', { maxSize: 5 });
+
+// Publish an event
+evem.publish('status.update', {
+    status: 'online',
+    server: 'main-01'
+});
+
+// Late subscriber gets the last event immediately
+evem.subscribe('status.update', (data) => {
+    console.log('Received:', data);
+}, {
+    replayLast: true  // Automatically receive most recent event
 });</div>
-            <div class="controls">
-                <button onclick="publishStatus()">Publish Status</button>
-                <button class="secondary" onclick="subscribeLate()">Subscribe Late (replay last)</button>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>3. Replay Full History</h2>
             <p>New subscribers receive all historical events</p>
-            <div class="code-block">evem.subscribe('chat.message', handler, {
-    replayHistory: true  // Receive all history
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'replayHistory-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'replayHistory-code')">View Code</button>
+            </div>
+            <div id="replayHistory-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="publishMessages()">Publish 3 Messages</button>
+                    <button class="secondary" onclick="subscribeLateHistory()">Subscribe Late (full history)</button>
+                </div>
+            </div>
+            <div id="replayHistory-code" class="tab-content">
+                <div class="code-block">// Enable history
+evem.enableHistory('chat.*', { maxSize: 20 });
+
+// Publish multiple events
+evem.publish('chat.message', { user: 'Alice', text: 'Hello!' });
+evem.publish('chat.message', { user: 'Bob', text: 'Hi!' });
+evem.publish('chat.message', { user: 'Charlie', text: 'Hey!' });
+
+// Late subscriber receives ALL historical events
+evem.subscribe('chat.message', (data) => {
+    console.log(`${data.user}: ${data.text}`);
+}, {
+    replayHistory: true  // Receive entire event history
 });</div>
-            <div class="controls">
-                <button onclick="publishMessages()">Publish 3 Messages</button>
-                <button class="secondary" onclick="subscribeLateHistory()">Subscribe Late (full history)</button>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>4. Event Timeline</h2>
             <p>Visual representation of event history</p>
-            <div id="timeline" class="timeline"></div>
-            <div class="controls">
-                <button onclick="addTimelineEvent()">Add Event</button>
-                <button class="danger" onclick="clearTimeline()">Clear Timeline</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'timeline-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'timeline-code')">View Code</button>
+            </div>
+            <div id="timeline-controls" class="tab-content active">
+                <div id="timeline" class="timeline"></div>
+                <div class="controls">
+                    <button onclick="addTimelineEvent()">Add Event</button>
+                    <button class="danger" onclick="clearTimeline()">Clear Timeline</button>
+                </div>
+            </div>
+            <div id="timeline-code" class="tab-content">
+                <div class="code-block">// Event history visualization
+const history = evem.getHistory('user.action');
+
+history.forEach(record => {
+    console.log(`[${new Date(record.timestamp).toLocaleTimeString()}]`,
+                record.event,
+                record.data);
+});
+
+// Example output:
+// [10:30:45] user.action { action: 'login', userId: 123 }
+// [10:31:02] user.action { action: 'update', userId: 123 }
+// [10:31:15] user.action { action: 'logout', userId: 123 }</div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>5. Late Subscriber Sync</h2>
             <p>Simulate a component joining late and catching up</p>
-            <div class="controls">
-                <button onclick="simulateLateJoin()">Simulate Late Join</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(event, 'lateSync-controls')">Controls</button>
+                <button class="tab" onclick="switchTab(event, 'lateSync-code')">View Code</button>
+            </div>
+            <div id="lateSync-controls" class="tab-content active">
+                <div class="controls">
+                    <button onclick="simulateLateJoin()">Simulate Late Join</button>
+                </div>
+            </div>
+            <div id="lateSync-code" class="tab-content">
+                <div class="code-block">// Complete late subscriber example
+class ChatComponent {
+    constructor() {
+        // Component joins late but needs to catch up
+        evem.subscribe('chat.message', (data) => {
+            this.displayMessage(data);
+        }, {
+            replayHistory: true  // Get all missed messages
+        });
+    }
+
+    displayMessage(data) {
+        console.log(`${data.user}: ${data.text}`);
+    }
+}
+
+// Publish some messages before component exists
+evem.enableHistory('chat.*', { maxSize: 20 });
+evem.publish('chat.message', { user: 'Alice', text: 'Hello!' });
+evem.publish('chat.message', { user: 'Bob', text: 'Hi there!' });
+
+// Component joins late and receives all history
+const chat = new ChatComponent();
+// Output: Alice: Hello!
+//         Bob: Hi there!</div>
             </div>
         </div>
 
@@ -308,11 +460,23 @@
                 <div class="value" id="lateSubCount">0</div>
             </div>
         </div>
-
-        <div class="output" id="output"></div>
     </div>
 
     <script type="module">
+        // Tab switching function
+        window.switchTab = (event, tabId) => {
+            const button = event.target;
+            const section = button.closest('.demo-section');
+
+            // Remove active class from all tabs and contents in this section
+            section.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            section.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            // Add active class to clicked tab and corresponding content
+            button.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        };
+
         class EvEm {
             constructor() {
                 this.events = new Map();
