@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EvEm - Schema Validation Demo</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <style>
         * {
             margin: 0;
@@ -160,13 +161,18 @@
         }
 
         .code-block {
-            background: #2d3748;
-            padding: 15px;
             border-radius: 6px;
-            color: #e2e8f0;
+            overflow-x: auto;
+        }
+
+        .code-block pre {
+            margin: 0;
+            padding: 0;
+        }
+
+        .code-block code {
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 12px;
-            overflow-x: auto;
             line-height: 1.5;
         }
 
@@ -293,7 +299,7 @@
                 </div>
             </div>
             <div id="simple-code" class="tab-content">
-                <div class="code-block">// Setup a simple validator for user creation
+                <div class="code-block"><pre><code class="language-javascript">// Setup a simple validator for user creation
 evem.setSchema('user.create', {
     validate: (data) => {
         if (!data.username) throw new Error('username required');
@@ -312,7 +318,7 @@ evem.subscribe('user.create', (data) => {
 evem.publish('user.create', {
     username: 'alice123',
     email: 'alice@example.com'
-});</div>
+});</code></pre></div>
             </div>
         </div>
 
@@ -331,7 +337,7 @@ evem.publish('user.create', {
                 </div>
             </div>
             <div id="advanced-code" class="tab-content">
-                <div class="code-block">// Advanced multi-field validation
+                <div class="code-block"><pre><code class="language-javascript">// Advanced multi-field validation
 evem.setSchema('payment.process', {
     validate: (data) => {
         const errors = [];
@@ -358,7 +364,7 @@ evem.setSchema('payment.process', {
 
         return true;
     }
-});</div>
+});</code></pre></div>
             </div>
         </div>
 
@@ -381,7 +387,7 @@ evem.setSchema('payment.process', {
                 </div>
             </div>
             <div id="policy-code" class="tab-content">
-                <div class="code-block">// Set error policy to control validation failure behavior
+                <div class="code-block"><pre><code class="language-javascript">// Set error policy to control validation failure behavior
 evem.setErrorPolicy('throw');  // Stop execution and throw error (default)
 evem.setErrorPolicy('log');    // Log error to console and skip event
 evem.setErrorPolicy('ignore'); // Silently skip invalid events
@@ -397,7 +403,7 @@ evem.setSchema('test.event', {
 });
 
 // This will log an error but won't throw
-evem.publish('test.event', { valid: false });</div>
+evem.publish('test.event', { valid: false });</code></pre></div>
             </div>
         </div>
 
@@ -416,7 +422,7 @@ evem.publish('test.event', { valid: false });</div>
                 </div>
             </div>
             <div id="type-code" class="tab-content">
-                <div class="code-block">// Type checking validation
+                <div class="code-block"><pre><code class="language-javascript">// Type checking validation
 evem.setSchema('data.submit', {
     validate: (data) => {
         const errors = [];
@@ -451,7 +457,7 @@ evem.publish('data.submit', {
     name: 'Test Item',
     tags: ['tag1', 'tag2'],
     active: true
-});</div>
+});</code></pre></div>
             </div>
         </div>
 
@@ -469,7 +475,7 @@ evem.publish('data.submit', {
                 </div>
             </div>
             <div id="custom-code" class="tab-content">
-                <div class="code-block">// Create reusable validator functions
+                <div class="code-block"><pre><code class="language-javascript">// Create reusable validator functions
 const validators = {
     email: (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
     url: (value) => /^https?:\/\/.+/.test(value),
@@ -504,7 +510,7 @@ evem.setSchema('contact.add', {
 
         return true;
     }
-});</div>
+});</code></pre></div>
             </div>
         </div>
 
@@ -893,5 +899,7 @@ evem.setSchema('contact.add', {
         log('EvEm Schema Validation Demo loaded. Click buttons to test features!', 'info');
         updateStats();
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
 </body>
 </html>

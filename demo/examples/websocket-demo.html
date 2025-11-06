@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EvEm - WebSocket Adapter Demo</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <style>
         * {
             margin: 0;
@@ -304,13 +305,20 @@
         }
 
         .code-block {
-            background: #2d3748;
-            padding: 15px;
             border-radius: 6px;
-            color: #e2e8f0;
+            overflow-x: auto;
+        }
+
+        .code-block pre {
+            margin: 0;
+            padding: 15px;
+            background: #282c34;
+            border-radius: 6px;
+        }
+
+        .code-block code {
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 12px;
-            overflow-x: auto;
             line-height: 1.5;
         }
     </style>
@@ -376,7 +384,7 @@
                 </div>
 
                 <div id="connection-code" class="tab-content">
-                    <div class="code-block">// Create ConnectionManager
+                    <div class="code-block"><pre><code class="language-javascript">// Create ConnectionManager
 const connectionManager = new ConnectionManager(evem);
 
 // Setup WebSocket with auto-wiring
@@ -393,7 +401,7 @@ ws.onclose = async () => {
 // Subscribe to connection state changes
 evem.subscribe('ws.connection.state', (event) => {
     console.log(`State: ${event.from} → ${event.to}`);
-});</div>
+});</code></pre></div>
                 </div>
             </div>
 
@@ -427,7 +435,7 @@ evem.subscribe('ws.connection.state', (event) => {
                 </div>
 
                 <div id="messages-code" class="tab-content">
-                    <div class="code-block">// Enable message queue with auto-flush
+                    <div class="code-block"><pre><code class="language-javascript">// Enable message queue with auto-flush
 messageQueue.enable(100, { autoFlush: true });
 
 // Send a message - automatically queued if offline
@@ -451,7 +459,7 @@ evem.subscribe('ws.response', (message) => {
     if (message.id === reqId) {
         console.log('Response:', message.result);
     }
-});</div>
+});</code></pre></div>
                 </div>
             </div>
         </div>
@@ -839,5 +847,8 @@ evem.subscribe('ws.response', (message) => {
         updateQueueDisplay();
         log('WebSocket Adapter Demo loaded! Click "Connect" to start.', 'system');
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
+    <script>hljs.highlightAll();</script>
 </body>
 </html>

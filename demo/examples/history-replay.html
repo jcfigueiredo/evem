@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EvEm - History & Replay Demo</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <style>
         * {
             margin: 0;
@@ -223,13 +224,19 @@
         }
 
         .code-block {
-            background: #2d3748;
-            padding: 15px;
             border-radius: 6px;
-            color: #e2e8f0;
+            overflow: hidden;
+        }
+
+        .code-block pre {
+            margin: 0;
+            padding: 15px;
+            overflow-x: auto;
+        }
+
+        .code-block code {
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 12px;
-            overflow-x: auto;
             line-height: 1.5;
         }
 
@@ -296,7 +303,8 @@
                 </div>
             </div>
             <div id="history-code" class="tab-content">
-                <div class="code-block">// Enable history tracking for events matching pattern
+                <div class="code-block">
+                    <pre><code class="language-javascript">// Enable history tracking for events matching pattern
 evem.enableHistory('user.*', { maxSize: 10 });
 
 // Publish events - they will be recorded
@@ -307,7 +315,8 @@ evem.publish('user.action', {
 
 // View history
 const history = evem.getHistory('user.action');
-console.log(history); // Array of event records</div>
+console.log(history); // Array of event records</code></pre>
+                </div>
             </div>
         </div>
 
@@ -325,7 +334,8 @@ console.log(history); // Array of event records</div>
                 </div>
             </div>
             <div id="replayLast-code" class="tab-content">
-                <div class="code-block">// Enable history first
+                <div class="code-block">
+                    <pre><code class="language-javascript">// Enable history first
 evem.enableHistory('status.*', { maxSize: 5 });
 
 // Publish an event
@@ -339,7 +349,8 @@ evem.subscribe('status.update', (data) => {
     console.log('Received:', data);
 }, {
     replayLast: true  // Automatically receive most recent event
-});</div>
+});</code></pre>
+                </div>
             </div>
         </div>
 
@@ -357,7 +368,8 @@ evem.subscribe('status.update', (data) => {
                 </div>
             </div>
             <div id="replayHistory-code" class="tab-content">
-                <div class="code-block">// Enable history
+                <div class="code-block">
+                    <pre><code class="language-javascript">// Enable history
 evem.enableHistory('chat.*', { maxSize: 20 });
 
 // Publish multiple events
@@ -370,7 +382,8 @@ evem.subscribe('chat.message', (data) => {
     console.log(`${data.user}: ${data.text}`);
 }, {
     replayHistory: true  // Receive entire event history
-});</div>
+});</code></pre>
+                </div>
             </div>
         </div>
 
@@ -389,7 +402,8 @@ evem.subscribe('chat.message', (data) => {
                 </div>
             </div>
             <div id="timeline-code" class="tab-content">
-                <div class="code-block">// Event history visualization
+                <div class="code-block">
+                    <pre><code class="language-javascript">// Event history visualization
 const history = evem.getHistory('user.action');
 
 history.forEach(record => {
@@ -401,7 +415,8 @@ history.forEach(record => {
 // Example output:
 // [10:30:45] user.action { action: 'login', userId: 123 }
 // [10:31:02] user.action { action: 'update', userId: 123 }
-// [10:31:15] user.action { action: 'logout', userId: 123 }</div>
+// [10:31:15] user.action { action: 'logout', userId: 123 }</code></pre>
+                </div>
             </div>
         </div>
 
@@ -418,7 +433,8 @@ history.forEach(record => {
                 </div>
             </div>
             <div id="lateSync-code" class="tab-content">
-                <div class="code-block">// Complete late subscriber example
+                <div class="code-block">
+                    <pre><code class="language-javascript">// Complete late subscriber example
 class ChatComponent {
     constructor() {
         // Component joins late but needs to catch up
@@ -442,7 +458,8 @@ evem.publish('chat.message', { user: 'Bob', text: 'Hi there!' });
 // Component joins late and receives all history
 const chat = new ChatComponent();
 // Output: Alice: Hello!
-//         Bob: Hi there!</div>
+//         Bob: Hi there!</code></pre>
+                </div>
             </div>
         </div>
 
@@ -753,5 +770,7 @@ const chat = new ChatComponent();
         // Enable history by default
         window.evem.enableHistory('*', { maxSize: 50 });
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
 </body>
 </html>

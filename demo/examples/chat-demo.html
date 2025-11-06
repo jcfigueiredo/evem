@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EvEm - Real-time Chat Demo</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <style>
         * {
             margin: 0;
@@ -346,15 +347,21 @@
         }
 
         .code-block {
-            background: #2d3748;
-            padding: 20px;
-            border-radius: 0;
-            color: #e2e8f0;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 12px;
             overflow-y: auto;
-            line-height: 1.5;
             flex: 1;
+            margin: 0;
+            padding: 0;
+        }
+
+        .code-block pre {
+            margin: 0;
+            height: 100%;
+            border-radius: 0;
+        }
+
+        .code-block code {
+            font-size: 12px;
+            line-height: 1.5;
         }
 
         @media (max-width: 768px) {
@@ -432,7 +439,7 @@
         </div>
 
         <div id="code-view" class="tab-content">
-            <div class="code-block">// WebSocket Chat with EvEm - Complete Example
+            <div class="code-block"><pre><code class="language-javascript">// WebSocket Chat with EvEm - Complete Example
 
 // 1. Setup: Initialize EvEm and core components
 const evem = new EvEm();
@@ -586,7 +593,7 @@ async function disconnect() {
 // ✓ Queue flushes automatically when reconnected
 // ✓ Clean separation of concerns (connection, queue, UI)
 // ✓ Event-driven architecture makes it easy to add features
-// ✓ All WebSocket logic is centralized and testable</div>
+// ✓ All WebSocket logic is centralized and testable</code></pre></div>
         </div>
     </div>
 
@@ -949,6 +956,13 @@ async function disconnect() {
         updateConnectionUI('disconnected');
         updateQueueUI();
         log('EvEm Chat Demo loaded. Try connecting and sending messages!', 'info');
+
+        // Initialize syntax highlighting
+        document.addEventListener('DOMContentLoaded', function() {
+            hljs.highlightAll();
+        });
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
 </body>
 </html>

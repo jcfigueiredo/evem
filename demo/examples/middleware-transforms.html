@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EvEm - Middleware & Transforms Demo</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <style>
         * {
             margin: 0;
@@ -193,13 +194,19 @@
         }
 
         .code-block {
-            background: #2d3748;
-            padding: 15px;
             border-radius: 6px;
-            color: #e2e8f0;
+            overflow: hidden;
+        }
+
+        .code-block pre {
+            margin: 0;
+            padding: 15px;
+            overflow-x: auto;
+        }
+
+        .code-block code {
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 12px;
-            overflow-x: auto;
             line-height: 1.5;
         }
 
@@ -254,7 +261,7 @@
                 </div>
             </div>
             <div id="global-code" class="tab-content">
-                <div class="code-block">// Global middleware intercepts ALL events
+                <div class="code-block"><pre><code class="language-javascript">// Global middleware intercepts ALL events
 evem.use(async (event, data, next) => {
     console.log('Middleware:', event);
     await next(); // Continue to handlers
@@ -267,7 +274,7 @@ evem.subscribe('user.login', (data) => {
 
 // Publish events - middleware runs first
 await evem.publish('user.login', { user: 'Alice' });
-await evem.publish('system.update', { version: '2.0' });</div>
+await evem.publish('system.update', { version: '2.0' });</code></pre></div>
             </div>
         </div>
 
@@ -285,7 +292,7 @@ await evem.publish('system.update', { version: '2.0' });</div>
                 </div>
             </div>
             <div id="pattern-code" class="tab-content">
-                <div class="code-block">// Pattern-based middleware only runs for matching events
+                <div class="code-block"><pre><code class="language-javascript">// Pattern-based middleware only runs for matching events
 evem.use('api.*', async (event, data, next) => {
     data.timestamp = Date.now();
     data.requestId = Math.random().toString(36).substr(2, 9);
@@ -299,7 +306,7 @@ evem.subscribe('api.*', (data) => {
 
 // These will trigger the middleware
 await evem.publish('api.users.get', { userId: 123 });
-await evem.publish('api.posts.create', { title: 'Hello' });</div>
+await evem.publish('api.posts.create', { title: 'Hello' });</code></pre></div>
             </div>
         </div>
 
@@ -317,7 +324,7 @@ await evem.publish('api.posts.create', { title: 'Hello' });</div>
                 </div>
             </div>
             <div id="transform-code" class="tab-content">
-                <div class="code-block">// Transform modifies data before handler receives it
+                <div class="code-block"><pre><code class="language-javascript">// Transform modifies data before handler receives it
 evem.subscribe('user.input', (data) => {
     console.log('Received:', data.text); // "HELLO WORLD"
 }, {
@@ -332,7 +339,7 @@ evem.subscribe('user.input', (data) => {
 await evem.publish('user.input', {
     text: 'hello world',
     timestamp: Date.now()
-});</div>
+});</code></pre></div>
             </div>
         </div>
 
@@ -350,7 +357,7 @@ await evem.publish('user.input', {
                 </div>
             </div>
             <div id="chain-code" class="tab-content">
-                <div class="code-block">// Each subscriber can have its own transform
+                <div class="code-block"><pre><code class="language-javascript">// Each subscriber can have its own transform
 // Transforms are applied independently per handler
 
 // Handler 1: trim whitespace
@@ -385,7 +392,7 @@ evem.subscribe('data.process', (data) => {
 
 await evem.publish('data.process', {
     value: '  hello world  '
-});</div>
+});</code></pre></div>
             </div>
         </div>
 
@@ -404,7 +411,7 @@ await evem.publish('data.process', {
                 </div>
             </div>
             <div id="cancel-code" class="tab-content">
-                <div class="code-block">// Middleware can cancel events by throwing an error
+                <div class="code-block"><pre><code class="language-javascript">// Middleware can cancel events by throwing an error
 evem.use('user.delete', async (event, data, next) => {
     if (!data.confirmed) {
         // Cancel event by throwing with 'CANCEL' message
@@ -427,7 +434,7 @@ await evem.publish('user.delete', {
 await evem.publish('user.delete', {
     userId: 456,
     confirmed: false
-});</div>
+});</code></pre></div>
             </div>
         </div>
 
@@ -708,5 +715,7 @@ await evem.publish('user.delete', {
         log('EvEm Middleware & Transforms Demo loaded. Click buttons to test features!', 'info');
         updateStats();
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
 </body>
 </html>

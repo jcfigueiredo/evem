@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EvEm - Core Features Demo</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <style>
         * {
             margin: 0;
@@ -193,13 +194,20 @@
         }
 
         .code-block {
-            background: #2d3748;
-            padding: 15px;
             border-radius: 6px;
-            color: #e2e8f0;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 12px;
+            overflow: hidden;
+            margin: 0;
+        }
+
+        .code-block pre {
+            margin: 0;
+            padding: 15px;
             overflow-x: auto;
+        }
+
+        .code-block code {
+            font-family: 'Fira Code', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
             line-height: 1.5;
         }
 
@@ -279,7 +287,7 @@
                 </div>
             </div>
             <div id="pubsub-code" class="tab-content">
-                <div class="code-block">// Subscribe to an event
+                <div class="code-block"><pre><code class="language-javascript">// Subscribe to an event
 evem.subscribe('user.login', (data) => {
     console.log('User logged in:', data.username);
 });
@@ -288,7 +296,7 @@ evem.subscribe('user.login', (data) => {
 evem.publish('user.login', {
     username: 'Alice',
     id: 123
-});</div>
+});</code></pre></div>
             </div>
         </div>
 
@@ -307,7 +315,7 @@ evem.publish('user.login', {
                 </div>
             </div>
             <div id="wildcard-code" class="tab-content">
-                <div class="code-block">// Subscribe to all user events
+                <div class="code-block"><pre><code class="language-javascript">// Subscribe to all user events
 evem.subscribe('user.*', (data) => {
     console.log('User event:', data);
 });
@@ -318,7 +326,7 @@ evem.publish('user.logout', { user: 'Alice' });
 evem.publish('user.update', { user: 'Alice' });
 
 // This will NOT match user.*
-evem.publish('system.startup', {});</div>
+evem.publish('system.startup', {});</code></pre></div>
             </div>
         </div>
 
@@ -337,7 +345,7 @@ evem.publish('system.startup', {});</div>
                 </div>
             </div>
             <div id="filter-code" class="tab-content">
-                <div class="code-block">// Only receive events where role === 'admin'
+                <div class="code-block"><pre><code class="language-javascript">// Only receive events where role === 'admin'
 evem.subscribe('user.action', (data) => {
     console.log('Admin action:', data.action);
 }, {
@@ -354,7 +362,7 @@ evem.publish('user.action', {
 evem.publish('user.action', {
     role: 'user',
     action: 'delete'
-});</div>
+});</code></pre></div>
             </div>
         </div>
 
@@ -372,7 +380,7 @@ evem.publish('user.action', {
                 </div>
             </div>
             <div id="priority-code" class="tab-content">
-                <div class="code-block">// High priority executes first
+                <div class="code-block"><pre><code class="language-javascript">// High priority executes first
 evem.subscribe('app.startup', () => {
     console.log('HIGH - Critical services');
 }, { priority: 'high' });
@@ -385,7 +393,7 @@ evem.subscribe('app.startup', () => {
 // Low priority executes last
 evem.subscribe('app.startup', () => {
     console.log('LOW - Analytics');
-}, { priority: 'low' });</div>
+}, { priority: 'low' });</code></pre></div>
             </div>
         </div>
 
@@ -403,7 +411,7 @@ evem.subscribe('app.startup', () => {
                 </div>
             </div>
             <div id="namespace-code" class="tab-content">
-                <div class="code-block">// Subscribe to all API events with 3 segments
+                <div class="code-block"><pre><code class="language-javascript">// Subscribe to all API events with 3 segments
 evem.subscribe('api.*.*', (data) => {
     console.log('API event:', data);
 });
@@ -411,7 +419,7 @@ evem.subscribe('api.*.*', (data) => {
 // These will match
 evem.publish('api.user.create', { data });
 evem.publish('api.post.update', { data });
-evem.publish('api.auth.login', { data });</div>
+evem.publish('api.auth.login', { data });</code></pre></div>
             </div>
         </div>
     </div>
@@ -635,5 +643,7 @@ evem.publish('api.auth.login', { data });</div>
         log('EvEm Core Features Demo loaded. Click buttons to test features!', 'info');
         updateSubCount();
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
 </body>
 </html>

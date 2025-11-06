@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EvEm - Flow Control Demo</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <style>
         * {
             margin: 0;
@@ -216,13 +217,20 @@
         }
 
         .code-block {
-            background: #2d3748;
-            padding: 15px;
             border-radius: 6px;
-            color: #e2e8f0;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 12px;
+            overflow: hidden;
+            margin: 0;
+        }
+
+        .code-block pre {
+            margin: 0;
+            padding: 15px;
             overflow-x: auto;
+        }
+
+        .code-block code {
+            font-family: 'Fira Code', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
             line-height: 1.5;
         }
     </style>
@@ -273,7 +281,7 @@
                 </div>
             </div>
             <div id="throttle-code" class="tab-content">
-                <div class="code-block">// Subscribe with throttle
+                <div class="code-block"><pre><code class="language-javascript">// Subscribe with throttle
 evem.subscribe('mouse.move', (data) => {
     console.log('Handling event:', data);
 }, {
@@ -285,7 +293,7 @@ evem.publish('mouse.move', { x: 100, y: 200 });
 evem.publish('mouse.move', { x: 101, y: 201 });  // Throttled
 evem.publish('mouse.move', { x: 102, y: 202 });  // Throttled
 // ... 500ms passes ...
-evem.publish('mouse.move', { x: 150, y: 250 });  // Executed</div>
+evem.publish('mouse.move', { x: 150, y: 250 });  // Executed</code></pre></div>
             </div>
         </div>
 
@@ -325,7 +333,7 @@ evem.publish('mouse.move', { x: 150, y: 250 });  // Executed</div>
                 </div>
             </div>
             <div id="debounce-code" class="tab-content">
-                <div class="code-block">// Subscribe with debounce
+                <div class="code-block"><pre><code class="language-javascript">// Subscribe with debounce
 evem.subscribe('search.query', (data) => {
     console.log('Performing search:', data.query);
 }, {
@@ -338,7 +346,7 @@ evem.publish('search.query', { query: 'he' });     // Ignored
 evem.publish('search.query', { query: 'hel' });    // Ignored
 evem.publish('search.query', { query: 'hello' });  // Ignored
 // ... 500ms passes with no new events ...
-// Now 'hello' is processed</div>
+// Now 'hello' is processed</code></pre></div>
             </div>
         </div>
 
@@ -372,7 +380,7 @@ evem.publish('search.query', { query: 'hello' });  // Ignored
                 </div>
             </div>
             <div id="once-code" class="tab-content">
-                <div class="code-block">// Subscribe with once option
+                <div class="code-block"><pre><code class="language-javascript">// Subscribe with once option
 evem.subscribe('app.initialized', (data) => {
     console.log('App initialized:', data);
     // This will only run once
@@ -384,7 +392,7 @@ evem.subscribe('app.initialized', (data) => {
 evem.publish('app.initialized', { timestamp: Date.now() });
 
 // Second publish - handler does NOT execute (already unsubscribed)
-evem.publish('app.initialized', { timestamp: Date.now() });</div>
+evem.publish('app.initialized', { timestamp: Date.now() });</code></pre></div>
             </div>
         </div>
 
@@ -415,7 +423,7 @@ evem.publish('app.initialized', { timestamp: Date.now() });</div>
                 </div>
             </div>
             <div id="combined-code" class="tab-content">
-                <div class="code-block">// Combine throttle and debounce
+                <div class="code-block"><pre><code class="language-javascript">// Combine throttle and debounce
 evem.subscribe('window.resize', (data) => {
     console.log('Handling resize:', data);
 }, {
@@ -426,7 +434,7 @@ evem.subscribe('window.resize', (data) => {
 // Benefits:
 // - Throttle: Provides immediate feedback on first event
 // - Debounce: Ensures final event is processed after activity stops
-// - Combined: Responsive UX with guaranteed final state processing</div>
+// - Combined: Responsive UX with guaranteed final state processing</code></pre></div>
             </div>
         </div>
     </div>
@@ -675,5 +683,7 @@ evem.subscribe('window.resize', (data) => {
 
         log('Flow Control Demo loaded. Try the interactive demos above!');
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
 </body>
 </html>

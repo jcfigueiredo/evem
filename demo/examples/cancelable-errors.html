@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EvEm - Cancelable Events & Errors Demo</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <style>
         * {
             margin: 0;
@@ -201,13 +202,18 @@
         }
 
         .code-block {
-            background: #2d3748;
-            padding: 15px;
             border-radius: 6px;
-            color: #e2e8f0;
+            overflow-x: auto;
+        }
+
+        .code-block pre {
+            margin: 0;
+            padding: 0;
+        }
+
+        .code-block code {
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 12px;
-            overflow-x: auto;
             line-height: 1.5;
         }
 
@@ -318,7 +324,7 @@
                 </div>
             </div>
             <div id="cancelable-code" class="tab-content">
-                <div class="code-block">// Publish a cancelable event
+                <div class="code-block"><pre><code class="language-javascript">// Publish a cancelable event
 const result = await evem.publishCancelable('user.delete', {
     userId: 123,
     confirmed: true
@@ -333,7 +339,7 @@ evem.subscribe('user.delete', (event) => {
     if (!event.data.confirmed) {
         event.cancel('Deletion not confirmed');
     }
-});</div>
+});</code></pre></div>
             </div>
         </div>
 
@@ -356,7 +362,7 @@ evem.subscribe('user.delete', (event) => {
                 </div>
             </div>
             <div id="policy-code" class="tab-content">
-                <div class="code-block">// Set error handling policy
+                <div class="code-block"><pre><code class="language-javascript">// Set error handling policy
 evem.setErrorPolicy('continue'); // Continue to next handlers (default)
 evem.setErrorPolicy('stop');     // Stop at first error
 evem.setErrorPolicy('collect');  // Collect all errors and report
@@ -368,7 +374,7 @@ evem.subscribe('event', () => {
 
 evem.subscribe('event', () => {
     console.log('Handler 2 still runs');
-});</div>
+});</code></pre></div>
             </div>
         </div>
 
@@ -389,7 +395,7 @@ evem.subscribe('event', () => {
                 </div>
             </div>
             <div id="validation-code" class="tab-content">
-                <div class="code-block">// Chain multiple validators together
+                <div class="code-block"><pre><code class="language-javascript">// Chain multiple validators together
 evem.subscribe('data.validate', (event) => {
     if (event.data.value.length < 3) {
         event.cancel('Value too short');
@@ -412,7 +418,7 @@ evem.subscribe('data.validate', (event) => {
 // All validators must pass before final handler runs
 evem.subscribe('data.validate', (event) => {
     console.log('Data saved:', event.data.value);
-});</div>
+});</code></pre></div>
             </div>
         </div>
 
@@ -431,7 +437,7 @@ evem.subscribe('data.validate', (event) => {
                 </div>
             </div>
             <div id="permission-code" class="tab-content">
-                <div class="code-block">// Use cancelable events for authorization checks
+                <div class="code-block"><pre><code class="language-javascript">// Use cancelable events for authorization checks
 evem.subscribe('admin.action', (event) => {
     // Permission check
     if (event.data.role !== 'admin') {
@@ -454,7 +460,7 @@ await evem.publishCancelable('admin.action', {
 await evem.publishCancelable('admin.action', {
     role: 'user',   // Will be cancelled
     action: 'Delete database'
-});</div>
+});</code></pre></div>
             </div>
         </div>
 
@@ -472,7 +478,7 @@ await evem.publishCancelable('admin.action', {
                 </div>
             </div>
             <div id="recovery-code" class="tab-content">
-                <div class="code-block">// Set policy to continue so fallback handlers run
+                <div class="code-block"><pre><code class="language-javascript">// Set policy to continue so fallback handlers run
 evem.setErrorPolicy('continue');
 
 // Primary handler that might fail
@@ -489,7 +495,7 @@ evem.subscribe('api.call', async (data) => {
 });
 
 // With 'continue' policy, errors don't stop execution
-await evem.publish('api.call', { endpoint: '/users' });</div>
+await evem.publish('api.call', { endpoint: '/users' });</code></pre></div>
             </div>
         </div>
 
@@ -905,5 +911,8 @@ await evem.publish('api.call', { endpoint: '/users' });</div>
         log('EvEm Cancelable Events & Errors Demo loaded. Click buttons to test features!', 'info');
         updateStats();
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
+    <script>hljs.highlightAll();</script>
 </body>
 </html>
