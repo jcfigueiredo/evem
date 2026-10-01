@@ -101,6 +101,7 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
 - **🌀 Customizable Recursion Depth**: Set a custom maximum recursion depth for event publishing to prevent stack overflow errors and infinite loops.
 
   - Constructor parameter to set the maximum recursion depth (default is 3).
+  - Depth counts publishes of the same event started from inside its own handlers (callbacks, middleware or transforms); independent concurrent publishes of the same event are not limited. A publish a handler starts only after awaiting other work can't be traced back to it and starts a new chain.
 
 - **🛠️ Error Handling**: Robust error handling for empty event names and exceptions in callbacks.
 
@@ -707,6 +708,8 @@ await evem.publish('user.action', { role: 'user', action: 'view' });
 await evem.publish('user.action', { role: 'admin', action: 'delete' });
 // Output: Admin action (redirected): { role: 'admin', action: 'delete' }
 ```
+
+A redirect is a new object with exactly two properties, `event` (a string) and `data`. Returning the original data unchanged, or a copy with extra properties, never redirects — even when the payload itself has `event` and `data` fields, like `{ event: 'chat.send', data: {...} }` messages sent over `ws.send`.
 
 ### Event Filtering with Middleware
 

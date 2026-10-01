@@ -186,7 +186,9 @@ export interface MemoryLeakOptions {
 
 class EvEm implements IEventEmitter {
   private events = new Map<string, Map<string, CallbackInfo>>();
-  private recursionDepth = new Map<string, number>();
+  // Per-event depths of the publish chain whose handler is currently running.
+  // A publish started from inside a handler inherits it; unrelated (concurrent) publishes start fresh.
+  private activePublishChain: Map<string, number> | null = null;
   private debounceTimers = new Map<string, NodeJS.Timeout>();
   private throttleTimers = new Map<string, { timer: NodeJS.Timeout, expiresAt: number }>();
   private middleware: Array<{ pattern?: string; handler: MiddlewareFunction }> = [];
@@ -337,16 +339,42 @@ class EvEm implements IEventEmitter {
     }
   }
 
-  private incrementRecursionDepth(event: string): void {
-    const depth = (this.recursionDepth.get(event) || 0) + 1;
+  /**
+   * Start a publish chain for an event, nested in the chain of the handler that is publishing it (if any)
+   * @throws If the event is already nested maxRecursionDepth times in the current chain
+   */
+  private enterPublishChain(event: string): Map<string, number> {
+    const parentChain = this.activePublishChain;
+    const depth = (parentChain?.get(event) ?? 0) + 1;
     if (depth > this.maxRecursionDepth) {
       throw new Error(`Max recursion depth of ${this.maxRecursionDepth} exceeded for event '${event}'`);
     }
-    this.recursionDepth.set(event, depth);
+    const chain = new Map(parentChain ?? []);
+    chain.set(event, depth);
+    return chain;
   }
 
-  private resetRecursionDepth(event: string): void {
-    this.recursionDepth.set(event, 0);
+  /**
+   * Run a handler with a publish chain active, so any publish it starts synchronously is counted as nested.
+   * Publishes started after the handler's own awaits can't be attributed to the chain and start fresh.
+   */
+  private runInPublishChain<R>(chain: Map<string, number> | null, fn: () => R): R {
+    const previousChain = this.activePublishChain;
+    this.activePublishChain = chain;
+    try {
+      return fn();
+    } finally {
+      this.activePublishChain = previousChain;
+    }
+  }
+
+  /**
+   * Bind a continuation to the currently active publish chain, so internal async steps
+   * (async filters and validators) still run the subscriber inside the chain that triggered it
+   */
+  private bindToActivePublishChain<A, R>(fn: (arg: A) => R): (arg: A) => R {
+    const chain = this.activePublishChain;
+    return (arg: A) => this.runInPublishChain(chain, () => fn(arg));
   }
 
   /**
@@ -430,6 +458,7 @@ class EvEm implements IEventEmitter {
     
     if (filters) {
       const originalCallback = finalCallback;
+      const self = this; // Store reference to 'this' for the closure
       
       // Create a function that checks all filters first
       const checkFilters = async (args: T): Promise<boolean> => {
@@ -454,14 +483,14 @@ class EvEm implements IEventEmitter {
         
         // If filterResult is a promise (async filter)
         if (filterResult instanceof Promise) {
-          return filterResult.then(passes => {
+          return filterResult.then(self.bindToActivePublishChain(passes => {
             // If all filters passed, call the original callback
             if (passes) {
               return originalCallback(args);
             }
             // Otherwise return undefined (without calling the callback)
             return undefined;
-          });
+          }));
         } else if (filterResult) {
           // If all filters passed synchronously, call the original callback
           return originalCallback(args);
@@ -476,6 +505,7 @@ class EvEm implements IEventEmitter {
       const schemaValidator = options.schema;
       const originalCallback = finalCallback;
       const schemaErrorPolicy = options.schemaErrorPolicy ?? ErrorPolicy.CANCEL_ON_ERROR;
+      const self = this; // Store reference to 'this' for the closure
       
       // Wrap the callback with schema validation logic
       finalCallback = function schemaValidationWrapper(args: T) {
@@ -509,69 +539,28 @@ class EvEm implements IEventEmitter {
           }
         };
         
-        try {
-          // Determine if this is a simple or advanced validator by checking function signature
-          const validationResult = schemaValidator(args);
-          
-          // Handle both synchronous and asynchronous validators
-          if (validationResult instanceof Promise) {
-            // Async validator
-            return validationResult.then(result => {
-              if (typeof result === 'boolean') {
-                // Simple validator returned a boolean
-                if (result) {
-                  // Data is valid, continue with callback
-                  return originalCallback(args);
-                } else {
-                  // Data is invalid, handle according to error policy
-                  return handleSchemaValidationError(
-                    `Schema validation failed for event '${event}'`, 
-                    schemaErrorPolicy,
-                    null
-                  );
-                }
-              } else {
-                // Advanced validator returned an object with validation errors
-                if (result.valid) {
-                  // Data is valid, continue with callback
-                  return originalCallback(args);
-                } else {
-                  // Data is invalid, handle according to error policy
-                  return handleSchemaValidationError(
-                    `Schema validation failed for event '${event}'`,
-                    schemaErrorPolicy,
-                    result.errors
-                  );
-                }
-              }
-            });
-          } else if (typeof validationResult === 'boolean') {
-            // Synchronous simple validator
-            if (validationResult) {
-              // Data is valid, continue with callback
-              return originalCallback(args);
-            } else {
-              // Data is invalid, handle according to error policy
-              return handleSchemaValidationError(
-                `Schema validation failed for event '${event}'`,
-                schemaErrorPolicy,
-                null
-              );
-            }
-          } else {
-            // Synchronous advanced validator
-            if (validationResult.valid) {
-              // Data is valid, continue with callback
-              return originalCallback(args);
-            } else {
-              // Data is invalid, handle according to error policy
-              return handleSchemaValidationError(
-                `Schema validation failed for event '${event}'`,
-                schemaErrorPolicy,
-                validationResult.errors
-              );
-            }
+        // Call the callback for valid data, or apply the error policy for invalid data.
+        // Works for both simple (boolean) and advanced ({ valid, errors }) validator results.
+        const handleValidationResult = (
+          result: boolean | { valid: boolean, errors?: SchemaValidationError[] }
+        ) => {
+          const isSimpleResult = typeof result === 'boolean';
+          const valid = isSimpleResult ? result : result.valid;
+          if (valid) {
+            return originalCallback(args);
           }
+          return handleSchemaValidationError(
+            `Schema validation failed for event '${event}'`,
+            schemaErrorPolicy,
+            isSimpleResult ? null : result.errors ?? null
+          );
+        };
+        
+        // Only errors thrown by the validator itself are schema errors; errors thrown by the
+        // callback must reach the publish error policy, so the callback runs outside this try
+        let validationResult: ReturnType<typeof schemaValidator>;
+        try {
+          validationResult = schemaValidator(args);
         } catch (error) {
           // Schema validator threw an error, handle according to error policy
           return handleSchemaValidationError(
@@ -580,6 +569,12 @@ class EvEm implements IEventEmitter {
             error instanceof Error ? [{ message: error.message }] : null
           );
         }
+        
+        // Handle both synchronous and asynchronous validators
+        if (validationResult instanceof Promise) {
+          return validationResult.then(self.bindToActivePublishChain(handleValidationResult));
+        }
+        return handleValidationResult(validationResult);
       };
     }
     
@@ -850,9 +845,14 @@ class EvEm implements IEventEmitter {
    * Apply middleware to an event
    * @param event - The event name
    * @param data - The event data
+   * @param publishChain - The publish chain to run middleware in (for recursion detection)
    * @returns An object with potentially modified event and data, or null if the event was canceled
    */
-  private async applyMiddleware<T = unknown>(event: string, data: T): Promise<{ event: string, data: T } | null> {
+  private async applyMiddleware<T = unknown>(
+    event: string,
+    data: T,
+    publishChain: Map<string, number>
+  ): Promise<{ event: string, data: T } | null> {
     let currentEvent = event;
     let currentData = data;
     
@@ -864,7 +864,7 @@ class EvEm implements IEventEmitter {
       }
       
       try {
-        const result = handler(currentEvent, currentData);
+        const result = this.runInPublishChain(publishChain, () => handler(currentEvent, currentData));
         const processedResult = result instanceof Promise ? await result : result;
         
         // If middleware returns null, cancel the event
@@ -872,8 +872,10 @@ class EvEm implements IEventEmitter {
           return null;
         }
         
-        // If middleware returns an object with event and data properties, update both
-        if (processedResult && typeof processedResult === 'object' && 'event' in processedResult && 'data' in processedResult) {
+        // If middleware returns a new { event, data } object, update both.
+        // Data returned unchanged (or enriched) is never a reroute, even if the payload
+        // itself happens to have `event` and `data` fields (e.g. WebSocket messages).
+        if (processedResult !== currentData && this.isMiddlewareReroute(processedResult)) {
           currentEvent = processedResult.event;
           currentData = processedResult.data;
         } 
@@ -889,6 +891,20 @@ class EvEm implements IEventEmitter {
     }
     
     return { event: currentEvent, data: currentData };
+  }
+
+  /**
+   * Checks if a middleware result is a reroute: an object with exactly `event` (a string) and `data`
+   */
+  private isMiddlewareReroute(result: unknown): result is { event: string, data: any } {
+    if (!result || typeof result !== 'object') {
+      return false;
+    }
+    const keys = Object.keys(result);
+    return keys.length === 2 &&
+      'event' in result &&
+      'data' in result &&
+      typeof result.event === 'string';
   }
 
   async publish<T = unknown>(
@@ -913,7 +929,8 @@ class EvEm implements IEventEmitter {
       errorPolicy = options.errorPolicy ?? ErrorPolicy.LOG_AND_CONTINUE;
     }
 
-    this.incrementRecursionDepth(event);
+    // Track nesting for recursion detection (throws if this event is nested too deeply)
+    const publishChain = this.enterPublishChain(event);
 
     // Create event data (with or without cancel function)
     let eventData: any = args ?? ({} as T);
@@ -921,11 +938,10 @@ class EvEm implements IEventEmitter {
     
     // Apply middleware to the event
     if (this.middleware.length > 0) {
-      const middlewareResult = await this.applyMiddleware(event, eventData);
+      const middlewareResult = await this.applyMiddleware(event, eventData, publishChain);
       
       // If middleware canceled the event, return false
       if (middlewareResult === null) {
-        this.resetRecursionDepth(event);
         return false;
       }
       
@@ -973,7 +989,6 @@ class EvEm implements IEventEmitter {
       // Special handling for schema validation errors with THROW policy
       if (error && error.message && error.message.includes('Schema validation failed')) {
         if (errorPolicy === ErrorPolicy.THROW) {
-          this.resetRecursionDepth(event);
           throw error;
         }
       }
@@ -992,7 +1007,6 @@ class EvEm implements IEventEmitter {
           
         case ErrorPolicy.THROW:
           // Rethrow the error to the caller
-          this.resetRecursionDepth(event);
           throw error;
           
         case ErrorPolicy.LOG_AND_CONTINUE:
@@ -1014,7 +1028,7 @@ class EvEm implements IEventEmitter {
       
       try {
         // Call the current callback with the current event data
-        const callbackPromise = callback(currentEventData);
+        const callbackPromise = this.runInPublishChain(publishChain, () => callback(currentEventData));
         if (callbackPromise instanceof Promise) {
           try {
             // For async callbacks, wait for them to complete before proceeding to the next one
@@ -1023,7 +1037,6 @@ class EvEm implements IEventEmitter {
             // Special handling for schema validation errors with THROW policy
             if (error && error.message && error.message.includes('Schema validation failed')) {
               if (errorPolicy === ErrorPolicy.THROW) {
-                this.resetRecursionDepth(event);
                 throw error;
               }
               
@@ -1045,7 +1058,7 @@ class EvEm implements IEventEmitter {
         // Apply transformations if this callback has a transform function
         if (transform) {
           try {
-            const transformResult = transform(currentEventData);
+            const transformResult = this.runInPublishChain(publishChain, () => transform(currentEventData));
             if (transformResult instanceof Promise) {
               // For async transformations, wait for them to complete
               currentEventData = await this.handlePromiseWithTimeout(transformResult, timeout);
@@ -1067,7 +1080,6 @@ class EvEm implements IEventEmitter {
                 
               case ErrorPolicy.THROW:
                 // Rethrow the error to the caller
-                this.resetRecursionDepth(event);
                 throw transformError;
                 
               case ErrorPolicy.LOG_AND_CONTINUE:
@@ -1082,8 +1094,6 @@ class EvEm implements IEventEmitter {
         handleCallbackError(error);
       }
     }
-
-    this.resetRecursionDepth(event);
     
     // Return whether the event completed without being canceled
     return !isCanceled;

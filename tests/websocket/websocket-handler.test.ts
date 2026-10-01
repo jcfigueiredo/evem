@@ -646,3 +646,165 @@ describe('WebSocketHandler', () => {
     });
   });
 });
+
+describe('WebSocketHandler - regressions', () => {
+  let evem: EvEm;
+  let mockWs: MockWebSocket;
+  let handler: WebSocketHandler;
+  const tick = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
+  const sentMessages = () => mockWs.sentMessages.map(message => JSON.parse(message));
+
+  beforeEach(() => {
+    evem = new EvEm();
+    mockWs = new MockWebSocket('wss://test.example.com');
+  });
+
+  afterEach(async () => {
+    await handler?.disconnect();
+    vi.restoreAllMocks();
+  });
+
+  describe('disconnect()', () => {
+    it('should remove all of its subscriptions', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateOpen();
+      expect(evem.info().filter(info => !info.isMiddleware).length).toBeGreaterThan(0);
+
+      await handler.disconnect();
+
+      expect(evem.info().filter(info => !info.isMiddleware)).toEqual([]);
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should leave the connection state disconnected', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateOpen();
+      expect(handler.isConnected()).toBe(true);
+
+      const pending = handler.disconnect();
+      expect(handler.isConnected()).toBe(false);
+      await pending;
+
+      expect(handler.getConnectionState()).toBe('disconnected');
+    });
+
+    it('should emit disconnecting and disconnected state changes', async () => {
+      const states: string[] = [];
+      evem.subscribe('ws.connection.state', (change: any) => {
+        states.push(`${change.from}->${change.to}`);
+      });
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateOpen();
+      await tick();
+
+      await handler.disconnect();
+
+      expect(states).toEqual([
+        'disconnected->connected',
+        'connected->disconnecting',
+        'disconnecting->disconnected'
+      ]);
+    });
+
+    it('should not emit state changes when already disconnected', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateClose();
+      await tick();
+      const stateHandler = vi.fn();
+      evem.subscribe('ws.connection.state', stateHandler);
+
+      await handler.disconnect();
+
+      expect(stateHandler).not.toHaveBeenCalled();
+      expect(handler.getConnectionState()).toBe('disconnected');
+    });
+  });
+
+  describe('queued requests', () => {
+    it('should send requests queued while offline in request format after reconnecting', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateClose();
+      await tick();
+
+      await evem.publish('ws.send.request', { id: 'req-1', method: 'getUser', params: { id: 7 }, timestamp: 1 });
+      expect(handler.getQueueSize()).toBe(1);
+
+      mockWs.simulateOpen();
+      await tick();
+
+      expect(sentMessages()).toEqual([
+        { type: 'request', id: 'req-1', method: 'getUser', params: { id: 7 }, timestamp: 1 }
+      ]);
+    });
+
+    it('should send plain messages queued while offline unchanged', async () => {
+      const flushed: any[] = [];
+      evem.subscribe('ws.send.queued', (data: any) => {
+        flushed.push(data);
+      });
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateClose();
+      await tick();
+
+      await evem.publish('ws.send', { kind: 'chat', text: 'hello' });
+      mockWs.simulateOpen();
+      await tick();
+
+      expect(sentMessages()).toEqual([{ kind: 'chat', text: 'hello' }]);
+      expect(flushed).toEqual([{ kind: 'chat', text: 'hello' }]);
+    });
+
+    it('should stop formatting requests after disconnect()', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      await handler.disconnect();
+      const requestHandler = vi.fn();
+      evem.subscribe('ws.send.request', requestHandler);
+
+      await evem.publish('ws.send.request', { id: 'req-2', method: 'ping', timestamp: 1 });
+
+      expect(requestHandler).toHaveBeenCalledWith({ id: 'req-2', method: 'ping', timestamp: 1 });
+    });
+  });
+
+  describe('message flow', () => {
+    it('should send messages shaped as { event, data } to the socket', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateOpen();
+
+      for (let i = 0; i < 4; i++) {
+        await evem.publish('ws.send', { event: 'client.chat.send', data: { i } });
+      }
+
+      expect(sentMessages()).toEqual([0, 1, 2, 3].map(i => ({ event: 'client.chat.send', data: { i } })));
+    });
+
+    it('should send every message when several are published without awaiting', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateOpen();
+
+      const results = await Promise.all([1, 2, 3, 4, 5].map(n => evem.publish('ws.send', { n })));
+
+      expect(results.every(Boolean)).toBe(true);
+      expect(sentMessages()).toEqual([1, 2, 3, 4, 5].map(n => ({ n })));
+    });
+
+    it('should deliver a burst of server events while an async handler is still busy', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateOpen();
+      const received: number[] = [];
+      evem.subscribe('server.price', async (data: any) => {
+        await tick(20);
+        received.push(data.n);
+      });
+
+      for (let n = 1; n <= 5; n++) {
+        mockWs.simulateMessage(JSON.stringify({ event: 'price', data: { n } }));
+        await tick(1);
+      }
+      await tick(60);
+
+      expect(received).toEqual([1, 2, 3, 4, 5]);
+    });
+  });
+});

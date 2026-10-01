@@ -127,12 +127,12 @@ export class RequestResponseManager {
    */
   cleanup(): void {
     if (this.responseSubscriptionId) {
-      this.evem.unsubscribe(this.responseSubscriptionId);
+      this.evem.unsubscribeById(this.responseSubscriptionId);
       this.responseSubscriptionId = undefined;
     }
 
     if (this.errorSubscriptionId) {
-      this.evem.unsubscribe(this.errorSubscriptionId);
+      this.evem.unsubscribeById(this.errorSubscriptionId);
       this.errorSubscriptionId = undefined;
     }
 

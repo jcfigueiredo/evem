@@ -1,4 +1,4 @@
-import type { EvEm } from '../eventEmitter';
+import type { EvEm, MiddlewareConfig } from '../eventEmitter';
 import { ConnectionManager } from './ConnectionManager';
 import { MessageQueue } from './MessageQueue';
 import { RequestResponseManager } from './RequestResponseManager';
@@ -39,6 +39,15 @@ export class WebSocketHandler {
   private isDisconnecting = false;
 
   /**
+   * Puts outgoing requests in wire format before the MessageQueue sees them,
+   * so requests queued while offline are still sent as requests when the queue flushes
+   */
+  private readonly requestFormatMiddleware: MiddlewareConfig = {
+    pattern: 'ws.send.request',
+    handler: (_event: string, request: any) => ({ type: 'request', ...request }),
+  };
+
+  /**
    * Create a new WebSocketHandler
    *
    * @param urlOrSocket - WebSocket URL string or WebSocket instance
@@ -69,6 +78,11 @@ export class WebSocketHandler {
 
     // Initialize ConnectionManager
     this.connectionManager = new ConnectionManager(evem);
+
+    // Must be registered before the MessageQueue middleware so queued requests are already formatted
+    if (this.options.enableRequestResponse) {
+      this.evem.use(this.requestFormatMiddleware);
+    }
 
     // Initialize MessageQueue if enabled
     if (this.options.enableQueue) {
@@ -266,8 +280,10 @@ export class WebSocketHandler {
 
   /**
    * Disconnect and clean up all resources
+   * The connection state leaves 'connected' immediately; the returned promise resolves
+   * once the 'disconnecting' and 'disconnected' state changes have been handled
    */
-  disconnect(): void {
+  async disconnect(): Promise<void> {
     if (this.isDisconnecting) {
       return;
     }
@@ -277,12 +293,13 @@ export class WebSocketHandler {
     // Unsubscribe from all EvEm events
     for (const subId of this.subscriptionIds) {
       try {
-        this.evem.unsubscribe(subId);
+        this.evem.unsubscribeById(subId);
       } catch (error) {
         // Ignore unsubscribe errors during cleanup
       }
     }
     this.subscriptionIds = [];
+    this.evem.removeMiddleware(this.requestFormatMiddleware);
 
     // Clean up MessageQueue
     if (this.messageQueue) {
@@ -309,5 +326,11 @@ export class WebSocketHandler {
     this.ws.onclose = null;
     this.ws.onerror = null;
     this.ws.onmessage = null;
+
+    // onclose is detached above, so report the disconnect ourselves
+    if (!this.connectionManager.isDisconnected()) {
+      await this.connectionManager.transitionTo('disconnecting');
+      await this.connectionManager.transitionTo('disconnected');
+    }
   }
 }

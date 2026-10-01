@@ -328,3 +328,52 @@ describe('Middleware', () => {
     });
   });
 });
+describe('Middleware - payloads shaped like a reroute', () => {
+  let evem: EvEm;
+
+  beforeEach(() => {
+    evem = new EvEm();
+  });
+
+  it('should not reroute when a pass-through middleware returns an {event, data} payload unchanged', async () => {
+    evem.use((_event, data) => data);
+    const handler = vi.fn();
+    const reroutedHandler = vi.fn();
+    evem.subscribe('ws.send', handler);
+    evem.subscribe('client.chat.send', reroutedHandler);
+
+    const payload = { event: 'client.chat.send', data: { text: 'hi' } };
+    await evem.publish('ws.send', payload);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(payload);
+    expect(reroutedHandler).not.toHaveBeenCalled();
+  });
+
+  it('should not reroute when a middleware enriches an {event, data} payload', async () => {
+    evem.use((_event, data: any) => ({ ...data, traceId: 'abc' }));
+    const handler = vi.fn();
+    evem.subscribe('ws.send', handler);
+
+    await evem.publish('ws.send', { event: 'client.chat.send', data: { text: 'hi' } });
+
+    expect(handler).toHaveBeenCalledWith({
+      event: 'client.chat.send',
+      data: { text: 'hi' },
+      traceId: 'abc'
+    });
+  });
+
+  it('should still reroute when a middleware returns a new { event, data } object', async () => {
+    evem.use((event, data) => (event === 'old.name' ? { event: 'new.name', data } : data));
+    const oldHandler = vi.fn();
+    const newHandler = vi.fn();
+    evem.subscribe('old.name', oldHandler);
+    evem.subscribe('new.name', newHandler);
+
+    await evem.publish('old.name', { value: 1 });
+
+    expect(oldHandler).not.toHaveBeenCalled();
+    expect(newHandler).toHaveBeenCalledWith({ value: 1 });
+  });
+});

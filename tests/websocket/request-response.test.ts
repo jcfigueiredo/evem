@@ -394,3 +394,19 @@ describe('RequestResponseManager', () => {
     });
   });
 });
+
+describe('RequestResponseManager - cleanup', () => {
+  it('should remove its response subscriptions on cleanup()', () => {
+    const evem = new EvEm();
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const manager = new RequestResponseManager(evem);
+    expect(evem.info('ws.response').length + evem.info('ws.response.error').length).toBe(2);
+
+    manager.cleanup();
+
+    expect(evem.info('ws.response')).toEqual([]);
+    expect(evem.info('ws.response.error')).toEqual([]);
+    expect(consoleWarnSpy).not.toHaveBeenCalled();
+    consoleWarnSpy.mockRestore();
+  });
+});

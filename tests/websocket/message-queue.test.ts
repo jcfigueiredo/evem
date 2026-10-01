@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EvEm } from '../../src/eventEmitter';
 import { MessageQueue } from '../../src/websocket/MessageQueue';
 import { ConnectionManager } from '../../src/websocket/ConnectionManager';
@@ -462,5 +462,46 @@ describe('MessageQueue', () => {
 
       expect(executionOrder).toEqual(['high', 'normal', 'low']);
     });
+  });
+});
+
+describe('MessageQueue - cleanup', () => {
+  let evem: EvEm;
+  let connectionManager: ConnectionManager;
+  let messageQueue: MessageQueue;
+
+  const stateSubscriptionCount = () =>
+    evem.info('ws.connection.state').filter(info => !info.isMiddleware).length;
+
+  beforeEach(() => {
+    evem = new EvEm();
+    connectionManager = new ConnectionManager(evem);
+    messageQueue = new MessageQueue(evem, connectionManager);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should remove its auto-flush subscription on disable()', () => {
+    messageQueue.enable();
+    expect(stateSubscriptionCount()).toBe(1);
+
+    messageQueue.disable();
+
+    expect(stateSubscriptionCount()).toBe(0);
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it('should not keep auto-flushing after being re-enabled with autoFlush: false', async () => {
+    messageQueue.enable(100, { autoFlush: true });
+    messageQueue.enable(100, { autoFlush: false });
+    expect(stateSubscriptionCount()).toBe(0);
+
+    await evem.publish('ws.send', { id: 1 });
+    await connectionManager.transitionTo('connected');
+
+    expect(messageQueue.getQueueSize()).toBe(1);
   });
 });

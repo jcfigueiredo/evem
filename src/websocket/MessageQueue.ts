@@ -105,7 +105,7 @@ export class MessageQueue {
 
     // Unsubscribe from state changes
     if (this.stateSubscriptionId) {
-      this.evem.unsubscribe(this.stateSubscriptionId);
+      this.evem.unsubscribeById(this.stateSubscriptionId);
       this.stateSubscriptionId = undefined;
     }
   }

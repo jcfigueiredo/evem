@@ -200,7 +200,7 @@ class WebSocketClient {
   }
 
   off(subscriptionId: string): void {
-    this.evem.unsubscribe(subscriptionId);
+    this.evem.unsubscribeById(subscriptionId);
   }
 
   disconnect(): void {
@@ -594,7 +594,7 @@ class ChatClient {
   }
 
   off(subscriptionId: string): void {
-    this.evem.unsubscribe(subscriptionId);
+    this.evem.unsubscribeById(subscriptionId);
   }
 
   disconnect(): void {

@@ -399,3 +399,78 @@ describe('Event Schema Validation', () => {
     });
   });
 });
+describe('Schema validation - errors thrown by the handler itself', () => {
+  let evem: EvEm;
+
+  beforeEach(() => {
+    evem = new EvEm();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should honor the publish errorPolicy for handler errors when data is valid', async () => {
+    evem.subscribe('user.created', () => {
+      throw new Error('handler bug');
+    }, { schema: () => true });
+
+    await expect(
+      evem.publish('user.created', { id: 1 }, { errorPolicy: ErrorPolicy.THROW })
+    ).rejects.toThrow('handler bug');
+  });
+
+  it('should call the handler only once when it throws under LOG_AND_CONTINUE schema policy', async () => {
+    const handler = vi.fn(() => {
+      throw new Error('handler bug');
+    });
+    evem.subscribe('user.created', handler, {
+      schema: () => true,
+      schemaErrorPolicy: ErrorPolicy.LOG_AND_CONTINUE
+    });
+
+    await evem.publish('user.created', { id: 1 });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('should report handler errors as handler errors, not schema errors', async () => {
+    const handlerError = new Error('handler bug');
+    evem.subscribe('user.created', () => {
+      throw handlerError;
+    }, { schema: () => ({ valid: true }) });
+
+    await evem.publish('user.created', { id: 1 });
+
+    expect(console.error).toHaveBeenCalledWith('Error in event handler for "user.created":', handlerError);
+    expect(
+      vi.mocked(console.error).mock.calls.some(args => String(args[0]).includes('schema validation'))
+    ).toBe(false);
+  });
+
+  it('should still apply schemaErrorPolicy when the validator itself throws', async () => {
+    const handler = vi.fn();
+    evem.subscribe('user.created', handler, {
+      schema: () => {
+        throw new Error('validator bug');
+      },
+      schemaErrorPolicy: ErrorPolicy.SILENT
+    });
+
+    await expect(evem.publish('user.created', { id: 1 })).resolves.toBe(true);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('should attach the validator errors when the THROW schema policy rejects', async () => {
+    const errors = [{ message: 'name is required', path: 'name' }];
+    evem.subscribe('user.created', vi.fn(), {
+      schema: () => ({ valid: false, errors }),
+      schemaErrorPolicy: ErrorPolicy.THROW
+    });
+
+    await expect(
+      evem.publish('user.created', { id: 1 }, { errorPolicy: ErrorPolicy.THROW })
+    ).rejects.toMatchObject({ validationErrors: errors });
+  });
+});
