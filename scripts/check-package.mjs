@@ -46,7 +46,11 @@ try {
       "dist/index.js",
       "dist/index.d.ts",
       "dist/websocket/index.js",
-      "dist/websocket/index.d.ts"
+      "dist/websocket/index.d.ts",
+      "dist/sse/index.js",
+      "dist/sse/index.d.ts",
+      "dist/sse/server.js",
+      "dist/sse/server.d.ts"
     ]) {
       if (!files.includes(required)) throw new Error(`missing ${required}; packed: ${files.join(", ")}`);
     }
@@ -61,27 +65,36 @@ try {
     run("npm", ["install", tarball, "--offline", "--no-audit", "--no-fund", "--ignore-scripts"], consumer);
   });
 
-  check("both entry points import as ES modules and work", () => {
+  check("every entry point imports as an ES module and works", () => {
     const script = `
       import { EvEm, ErrorPolicy, Priority } from "${pkg.name}";
       import { WebSocketHandler, MessageQueue, RequestTimeoutError } from "${pkg.name}/websocket";
+      import { SseHandler, SseParser } from "${pkg.name}/sse";
+      import { formatSseMessage, SSE_HEADERS } from "${pkg.name}/sse/server";
       const evem = new EvEm();
       let received;
       evem.subscribe("user.*", data => { received = data; });
       await evem.publish("user.login", { id: 1 });
       if (received?.id !== 1) throw new Error("publish did not reach the subscriber");
-      for (const value of [ErrorPolicy, Priority, WebSocketHandler, MessageQueue, RequestTimeoutError]) {
+      for (const value of [ErrorPolicy, Priority, WebSocketHandler, MessageQueue, RequestTimeoutError, SseHandler, SSE_HEADERS]) {
         if (!value) throw new Error("missing export");
       }
+      const parsed = [];
+      new SseParser({ onEvent: event => parsed.push(event) }).feed(formatSseMessage({ event: "e", data: { n: 1 } }));
+      if (parsed[0]?.data !== '{"n":1}') throw new Error("SSE round trip failed");
     `;
     run(process.execPath, ["--input-type=module", "-e", script], consumer);
   });
 
-  check("both entry points load with require()", () => {
+  check("every entry point loads with require()", () => {
     const script = `
       const { EvEm } = require("${pkg.name}");
       const { WebSocketHandler } = require("${pkg.name}/websocket");
-      if (typeof EvEm !== "function" || typeof WebSocketHandler !== "function") throw new Error("missing export");
+      const { SseHandler } = require("${pkg.name}/sse");
+      const { formatSseMessage } = require("${pkg.name}/sse/server");
+      for (const value of [EvEm, WebSocketHandler, SseHandler, formatSseMessage]) {
+        if (typeof value !== "function") throw new Error("missing export");
+      }
     `;
     run(process.execPath, ["-e", script], consumer);
   });
@@ -91,12 +104,19 @@ try {
       writeFileSync(join(consumer, "index.ts"), `
         import { EvEm, ErrorPolicy, type EventRecord, type MemoryLeakOptions } from "${pkg.name}";
         import { WebSocketHandler, type WebSocketHandlerOptions } from "${pkg.name}/websocket";
+        import { SseHandler, type SseEvents, type SseHandlerOptions } from "${pkg.name}/sse";
+        import { formatSseMessage, type SseMessage } from "${pkg.name}/sse/server";
         const evem = new EvEm();
         evem.subscribe<{ id: number }>("user.login", user => { user.id.toFixed(); });
         const history: EventRecord<{ id: number }>[] = evem.getEventHistory();
         const leakOptions: Partial<MemoryLeakOptions> = { threshold: 20 };
         const options: WebSocketHandlerOptions = { reconnect: true };
-        export { history, leakOptions, options, ErrorPolicy, WebSocketHandler };
+        const sseOptions: SseHandlerOptions = { headers: () => ({ Authorization: "Bearer t" }), autoConnect: false };
+        const sse = new SseHandler("/events", evem, sseOptions);
+        const message: SseMessage = { event: "order.updated", id: 1, data: { id: 7 } };
+        const wire: string = formatSseMessage(message);
+        const failure: SseEvents["sse.reconnect.failed"] = { attempts: 3 };
+        export { history, leakOptions, options, sse, wire, failure, ErrorPolicy, WebSocketHandler };
       `);
       writeFileSync(join(consumer, "tsconfig.json"), JSON.stringify({
         compilerOptions: {

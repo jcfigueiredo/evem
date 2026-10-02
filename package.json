@@ -1,7 +1,7 @@
 {
   "name": "@jcfigueiredo/evem",
   "version": "0.2.0",
-  "description": "Lightweight TypeScript event emitter with wildcards, priorities, middleware, filters, throttle/debounce, schema validation, event history, and an optional WebSocket adapter",
+  "description": "Lightweight TypeScript event emitter with wildcards, priorities, middleware, filters, throttle/debounce, schema validation, event history, and optional WebSocket and Server-Sent Events adapters",
   "keywords": [
     "event-emitter",
     "events",
@@ -9,6 +9,8 @@
     "wildcard",
     "middleware",
     "websocket",
+    "server-sent-events",
+    "sse",
     "typescript"
   ],
   "license": "MIT",
@@ -31,6 +33,14 @@
     "./websocket": {
       "types": "./dist/websocket/index.d.ts",
       "default": "./dist/websocket/index.js"
+    },
+    "./sse": {
+      "types": "./dist/sse/index.d.ts",
+      "default": "./dist/sse/index.js"
+    },
+    "./sse/server": {
+      "types": "./dist/sse/server.d.ts",
+      "default": "./dist/sse/server.js"
     },
     "./package.json": "./package.json"
   },

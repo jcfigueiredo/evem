@@ -1,3 +1,4 @@
+import type { ConnectionStateChangeEvent } from '../shared/types.js';
 import type { SseParsedEvent } from './SseParser.js';
 
 /**
@@ -65,3 +66,19 @@ export type SseHeaders = Record<string, string> | (() => Record<string, string> 
 
 /** Request body, or a function called before every connection attempt */
 export type SseBody = BodyInit | (() => BodyInit | Promise<BodyInit>);
+
+/**
+ * Events published by SseHandler, with their payloads
+ * Server events are published as `<serverEventPrefix>.<name>` (e.g. `server.order.updated`) with the
+ * parsed data; their names depend on the server, so they aren't listed here.
+ */
+export interface SseEvents {
+  'sse.connection.state': ConnectionStateChangeEvent;
+  /** An unnamed event that isn't a `{ event, data }` envelope */
+  'sse.message': unknown;
+  /** Every event, with its metadata (only with `rawEvents: true`) */
+  'sse.event': { type: string; data: unknown; rawData: string; lastEventId: string };
+  'sse.parse.error': { error: Error; rawData: string; eventType: string; lastEventId: string };
+  'sse.error': { error: Error; reason: SseCloseInfo['reason']; status?: number; contentType?: string | null };
+  'sse.reconnect.failed': { attempts: number };
+}
