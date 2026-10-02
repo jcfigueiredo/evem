@@ -654,7 +654,7 @@ evem.subscribe('ws.response', (message) => {
 
                 // Simulate server processing
                 setTimeout(() => {
-                    logServer('Received: ' + data);
+                    logServer('Received: ' + escapeHtml(data));
 
                     // Simulate server response
                     const parsed = JSON.parse(data);
@@ -725,10 +725,10 @@ evem.subscribe('ws.response', (message) => {
 
             if (message.type === 'response') {
                 evem.publish('ws.response', message);
-                log(`Response received: ${JSON.stringify(message.result)}`, 'in');
+                log(`Response received: ${escapeHtml(JSON.stringify(message.result))}`, 'in');
             } else if (message.event) {
                 evem.publish(message.event, message.data);
-                log(`Server event: ${message.event}`, 'in');
+                log(`Server event: ${escapeHtml(message.event)}`, 'in');
             }
         };
 
@@ -738,7 +738,7 @@ evem.subscribe('ws.response', (message) => {
                 ws.send(JSON.stringify(data));
                 stats.sent++;
                 updateStats();
-                log(`Sent: ${JSON.stringify(data)}`, 'out');
+                log(`Sent: ${escapeHtml(JSON.stringify(data))}`, 'out');
             }
         });
 
@@ -749,10 +749,15 @@ evem.subscribe('ws.response', (message) => {
 
         // Subscribe to server events
         evem.subscribe('server.*', (data) => {
-            log(`Server event received: ${JSON.stringify(data)}`, 'in');
+            log(`Server event received: ${escapeHtml(JSON.stringify(data))}`, 'in');
         });
 
         // UI Functions
+        // Escape message text before passing it to log()/logServer(), which render HTML
+        const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[char]);
+
         function log(message, type = 'info') {
             const output = document.getElementById('output');
             const timestamp = new Date().toLocaleTimeString();
@@ -800,7 +805,7 @@ evem.subscribe('ws.response', (message) => {
                 queueList.innerHTML = '<em style="color: #a0aec0;">Queue is empty</em>';
             } else {
                 queueList.innerHTML = queue.map((item, i) =>
-                    `<div class="queue-item">#${i + 1}: ${JSON.stringify(item.data)}</div>`
+                    `<div class="queue-item">#${i + 1}: ${escapeHtml(JSON.stringify(item.data))}</div>`
                 ).join('');
             }
 
@@ -884,9 +889,9 @@ evem.subscribe('ws.response', (message) => {
 
             try {
                 const result = await requestManager.request('getUser', { id: 123 }, { id: reqId, timeout: 2000 });
-                log(`Request ${reqId} answered in ${Date.now() - sentAt}ms: ${JSON.stringify(result)}`, 'in');
+                log(`Request ${reqId} answered in ${Date.now() - sentAt}ms: ${escapeHtml(JSON.stringify(result))}`, 'in');
             } catch (error) {
-                log(`Request timed out! ${error.message}`, 'error');
+                log(`Request timed out! ${escapeHtml(error.message)}`, 'error');
             }
         }
 
