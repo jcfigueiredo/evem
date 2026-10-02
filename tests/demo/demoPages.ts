@@ -33,6 +33,7 @@ export const INLINE_EVEM_PAGES: Record<string, InlineEvEmFeatures> = {
   "history-replay.html": { wildcards: true, priority: false, transforms: false },
   "middleware-transforms.html": { wildcards: true, priority: true, transforms: true },
   "schema-validation.html": { wildcards: false, priority: false, transforms: false },
+  "sse-demo.html": { wildcards: true, priority: false, transforms: false },
   "websocket-demo.html": { wildcards: true, priority: false, transforms: false },
 };
 
@@ -111,6 +112,44 @@ export function extractClassSource(html: string, className: string): string | nu
   return null;
 }
 
+const CLOSING_BRACKETS: Record<string, string> = { "(": ")", "{": "}", "[": "]" };
+
+/**
+ * Source of a top-level declaration in a page's inline scripts, or null if there is none:
+ * `class <name> { ... }`, `function <name>(...) { ... }`, or `const <name> = <value>;` where the
+ * value is a call or literal that ends with its first bracket's match (e.g. `Object.freeze({ ... })`).
+ */
+export function extractDeclarationSource(html: string, name: string): string | null {
+  const classSource = extractClassSource(html, name);
+  if (classSource) return classSource;
+
+  for (const script of inlineScripts(html)) {
+    const fn = new RegExp(`\\bfunction\\s+${name}\\s*\\(`).exec(script);
+    if (fn) {
+      const closeParen = findMatchingBrace(script, fn.index + fn[0].length - 1, "(", ")");
+      const openBrace = script.indexOf("{", closeParen);
+      return script.slice(fn.index, findMatchingBrace(script, openBrace) + 1);
+    }
+    const constant = new RegExp(`\\bconst\\s+${name}\\s*=`).exec(script);
+    if (constant) {
+      const valueStart = constant.index + constant[0].length;
+      const open = script.slice(valueStart).search(/[({[]/) + valueStart;
+      const opening = script[open] ?? "";
+      const close = findMatchingBrace(script, open, opening, CLOSING_BRACKETS[opening]);
+      return `${script.slice(constant.index, close + 1)};`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Evaluate a mix of a demo page's inline classes, functions and constants together in Node (see
+ * loadInlineClasses); returns them by name, loosely typed
+ */
+export function loadInlineDeclarations(file: string, names: string[]): Record<string, any> {
+  return loadInlineClasses(file, names).classes;
+}
+
 /** Evaluate a demo page's inline `class EvEm` in Node, with the page globals it uses stubbed out */
 export function loadInlineEvEm(file: string): LoadedInlineEvEm {
   const { classes, logs } = loadInlineClasses(file, ["EvEm"]);
@@ -127,13 +166,14 @@ export interface LoadedInlineClasses {
 /**
  * Evaluate several of a demo page's inline classes together in Node (e.g. its EvEm plus the classes
  * built on it), with the page globals they use stubbed out. Throws if the page lacks one of them.
+ * Functions and constants (see extractDeclarationSource) can be loaded the same way.
  */
 export function loadInlineClasses(file: string, classNames: string[]): LoadedInlineClasses {
   const html = readDemoPage(file);
   const sources = classNames.map(name => {
-    const source = extractClassSource(html, name);
+    const source = extractDeclarationSource(html, name);
     if (!source) {
-      throw new Error(`No inline class ${name} found in ${file}`);
+      throw new Error(`No inline class, function or constant ${name} found in ${file}`);
     }
     return source;
   });
@@ -171,10 +211,11 @@ function decodeHtmlEntities(text: string): string {
 }
 
 /**
- * Index of the `}` that closes the `{` at `openIndex`.
- * Skips braces inside strings, template literals (including nested `${...}`), comments and regex literals.
+ * Index of the `}` that closes the `{` at `openIndex` (or of the `close` that matches another `open`
+ * bracket, such as `(` and `)`).
+ * Skips brackets inside strings, template literals (including nested `${...}`), comments and regex literals.
  */
-export function findMatchingBrace(src: string, openIndex: number): number {
+export function findMatchingBrace(src: string, openIndex: number, open = "{", close = "}"): number {
   let depth = 0;
   // Last non-whitespace character, used to tell a regex literal from a division operator
   let previous = "";
@@ -210,9 +251,9 @@ export function findMatchingBrace(src: string, openIndex: number): number {
       continue;
     }
 
-    if (ch === "{") {
+    if (ch === open) {
       depth++;
-    } else if (ch === "}") {
+    } else if (ch === close) {
       depth--;
       if (depth === 0) return i;
     }
@@ -220,7 +261,7 @@ export function findMatchingBrace(src: string, openIndex: number): number {
     i++;
   }
 
-  throw new Error(`Unbalanced braces: no match for the brace at index ${openIndex}`);
+  throw new Error(`Unbalanced brackets: no match for the ${open} at index ${openIndex}`);
 }
 
 /** Index just past the string literal starting at `start` */
