@@ -64,11 +64,11 @@ handler.disconnect();
 ```
 
 **What WebSocketHandler handles automatically:**
-- ✅ Wires `ws.onopen` → ConnectionManager → `'connected'` state
-- ✅ Wires `ws.onclose` → ConnectionManager → `'disconnected'` state
+- ✅ Wires `ws.onopen` → ConnectionManager → `'connected'` state (a socket that is already open starts out `'connected'`)
+- ✅ Wires `ws.onclose` → ConnectionManager → `'disconnected'` state (or `'reconnecting'` with `reconnect: true`)
 - ✅ Wires `ws.onerror` → `'ws.error'` event
 - ✅ Wires `ws.onmessage` → parses and routes to `server.*` events
-- ✅ Wires `'ws.send'` events → `ws.send()` (with queueing when disconnected)
+- ✅ Wires `'ws.send'` events → `ws.send()` (with queueing when disconnected, or when the socket is no longer open but `onclose` hasn't fired yet)
 - ✅ Wires `'ws.send.queued'` events → `ws.send()` (when queue flushes)
 - ✅ Integrates ConnectionManager, MessageQueue, and RequestResponseManager
 - ✅ Provides customizable message parsing and formatting
@@ -88,6 +88,12 @@ const handler = new WebSocketHandler('wss://api.example.com', evem, {
   // Server event routing
   serverEventPrefix: 'server', // Prefix for server events (default: 'server')
 
+  // Automatic reconnection after an unexpected close (not after disconnect())
+  reconnect: true,            // Enable reconnection (default: false)
+  reconnectDelay: 1000,       // Delay before each attempt in ms (default: 1000)
+  maxReconnectAttempts: 5,    // Consecutive failed attempts before giving up (default: 5)
+  WebSocketConstructor: WebSocket, // Creates sockets from the URL (default: global WebSocket)
+
   // Custom parsing/formatting
   messageParser: (data: string) => JSON.parse(data),
   messageFormatter: (data: any) => JSON.stringify(data),
@@ -97,6 +103,11 @@ const handler = new WebSocketHandler('wss://api.example.com', evem, {
     console.error('WebSocket error:', error);
     logToSentry(error);
   }
+});
+
+// After maxReconnectAttempts failed attempts the state goes to 'disconnected'
+evem.subscribe('ws.reconnect.failed', ({ attempts }) => {
+  console.warn(`Gave up reconnecting after ${attempts} attempts`);
 });
 
 // Access integrated components
@@ -332,6 +343,7 @@ class MessageQueue {
   disable(): void;
 
   // Queue operations
+  enqueue(data: any): void; // Queue explicitly, whatever the connection state
   async flush(): Promise<void>;
   clear(): void;
 
@@ -691,6 +703,7 @@ console.log('History:', history);
 | `ws.response` | Incoming | `ResponseMessage` | Successful RPC responses |
 | `ws.response.error` | Incoming | `ResponseMessage` | Error RPC responses |
 | `ws.queue.overflow` | Internal | `{ maxSize, droppedMessage }` | Queue overflow notification |
+| `ws.reconnect.failed` | Internal | `{ attempts }` | WebSocketHandler gave up reconnecting |
 
 ## Real-World Integration Examples
 

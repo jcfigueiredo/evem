@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach, type Mock } from 'vitest';
 import { EvEm } from '../../src/eventEmitter';
 import { WebSocketHandler } from '../../src/websocket/WebSocketHandler';
-import { MockWebSocket } from './mocks/MockWebSocket';
+import type { WebSocketHandlerOptions } from '../../src/websocket/types';
+import { MockWebSocket, createMockWebSocketConstructor } from './mocks/MockWebSocket';
 
 describe('WebSocketHandler', () => {
   let evem: EvEm;
@@ -806,5 +807,331 @@ describe('WebSocketHandler - regressions', () => {
 
       expect(received).toEqual([1, 2, 3, 4, 5]);
     });
+  });
+
+  describe('already-open socket', () => {
+    it('should start connected when given a socket that is already open', async () => {
+      const states: string[] = [];
+      evem.subscribe('ws.connection.state', (change: any) => {
+        states.push(`${change.from}->${change.to}`);
+      });
+      mockWs.simulateOpen();
+
+      handler = new WebSocketHandler(mockWs, evem);
+      await tick();
+
+      expect(handler.isConnected()).toBe(true);
+      expect(states).toEqual(['disconnected->connected']);
+    });
+
+    it('should send messages without queueing them', async () => {
+      const overflowHandler = vi.fn();
+      evem.subscribe('ws.queue.overflow', overflowHandler);
+      mockWs.simulateOpen();
+      handler = new WebSocketHandler(mockWs, evem, { queueSize: 1 });
+
+      await evem.publish('ws.send', { n: 1 });
+      await evem.publish('ws.send', { n: 2 });
+
+      expect(sentMessages()).toEqual([{ n: 1 }, { n: 2 }]);
+      expect(handler.getQueueSize()).toBe(0);
+      expect(overflowHandler).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('messages the socket cannot take', () => {
+    // The socket stops being OPEN before its close event fires: the connection state still says 'connected'
+    const dropSocketBeforeCloseEvent = () => {
+      mockWs.readyState = mockWs.CLOSED;
+    };
+
+    it('should queue a message published after the socket closed but before onclose fired', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateOpen();
+      dropSocketBeforeCloseEvent();
+
+      await evem.publish('ws.send', { n: 1 });
+
+      expect(handler.isConnected()).toBe(true);
+      expect(handler.getQueueSize()).toBe(1);
+
+      mockWs.simulateClose();
+      mockWs.simulateOpen();
+      await tick();
+
+      expect(sentMessages()).toEqual([{ n: 1 }]);
+    });
+
+    it('should queue a request published after the socket closed but before onclose fired', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateOpen();
+      dropSocketBeforeCloseEvent();
+
+      await evem.publish('ws.send.request', { id: 'req-1', method: 'ping', timestamp: 1 });
+
+      expect(handler.getQueueSize()).toBe(1);
+
+      mockWs.simulateClose();
+      mockWs.simulateOpen();
+      await tick();
+
+      expect(sentMessages()).toEqual([{ type: 'request', id: 'req-1', method: 'ping', timestamp: 1 }]);
+    });
+
+    it('should put flushed messages back in the queue, in order, when the connection drops mid-flush', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateClose();
+      await tick();
+      for (let n = 1; n <= 3; n++) {
+        await evem.publish('ws.send', { n });
+      }
+      evem.subscribe('ws.send.queued', (data: any) => {
+        if (data.n === 1) {
+          dropSocketBeforeCloseEvent();
+        }
+      });
+
+      mockWs.simulateOpen();
+      await tick();
+
+      expect(sentMessages()).toEqual([{ n: 1 }]);
+      expect(handler.getQueueSize()).toBe(2);
+
+      // Sent while the connection is down: queued once, after the messages put back
+      await evem.publish('ws.send', { n: 4 });
+      mockWs.simulateClose();
+      await evem.publish('ws.send', { n: 5 });
+      expect(handler.getQueueSize()).toBe(4);
+
+      mockWs.simulateOpen();
+      await tick();
+
+      expect(sentMessages()).toEqual([1, 2, 3, 4, 5].map(n => ({ n })));
+      expect(handler.getQueueSize()).toBe(0);
+    });
+
+    it('should drop the message without throwing when the queue is disabled', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      handler = new WebSocketHandler(mockWs, evem, { enableQueue: false });
+      mockWs.simulateOpen();
+      dropSocketBeforeCloseEvent();
+
+      await expect(evem.publish('ws.send', { n: 1 })).resolves.toBe(true);
+      await expect(evem.publish('ws.send.queued', { n: 2 })).resolves.toBe(true);
+
+      expect(sentMessages()).toEqual([]);
+      expect(handler.getQueueSize()).toBe(0);
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('server event routing', () => {
+    it('should route the legacy type format without a prefix when serverEventPrefix is empty', async () => {
+      handler = new WebSocketHandler(mockWs, evem, { serverEventPrefix: '' });
+      mockWs.simulateOpen();
+      const notificationHandler = vi.fn();
+      const prefixedHandler = vi.fn();
+      evem.subscribe('notification', notificationHandler);
+      evem.subscribe('.notification', prefixedHandler);
+
+      mockWs.simulateMessage(JSON.stringify({ type: 'notification', data: { message: 'hi' } }));
+      await tick();
+
+      expect(notificationHandler).toHaveBeenCalledWith({ message: 'hi' });
+      expect(prefixedHandler).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('WebSocketHandler - reconnect', () => {
+  const url = 'wss://test.example.com';
+  let evem: EvEm;
+  let handler: WebSocketHandler | undefined;
+  let states: string[];
+  let reconnectFailedHandler: Mock;
+  // Sockets created through SocketConstructor; they only open or fail when the test says so
+  let instances: MockWebSocket[];
+  let SocketConstructor: new (url: string) => MockWebSocket;
+
+  const advance = (ms: number) => vi.advanceTimersByTimeAsync(ms);
+  const socket = (index: number) => instances[index]!;
+  const createHandler = (urlOrSocket: string | MockWebSocket, options: WebSocketHandlerOptions = {}) =>
+    new WebSocketHandler(urlOrSocket, evem, {
+      reconnect: true,
+      reconnectDelay: 100,
+      WebSocketConstructor: SocketConstructor,
+      ...options
+    });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    evem = new EvEm();
+    ({ constructor: SocketConstructor, instances } = createMockWebSocketConstructor({ autoConnect: false }));
+    states = [];
+    evem.subscribe('ws.connection.state', (change: any) => {
+      states.push(change.to);
+    });
+    reconnectFailedHandler = vi.fn();
+    evem.subscribe('ws.reconnect.failed', reconnectFailedHandler);
+  });
+
+  afterEach(async () => {
+    await handler?.disconnect();
+    handler = undefined;
+    vi.useRealTimers();
+  });
+
+  it('should reconnect after an unexpected close and flush messages queued meanwhile', async () => {
+    handler = createHandler(new SocketConstructor(url), { reconnectDelay: 500 });
+    socket(0).simulateOpen();
+
+    socket(0).simulateClose(1006, 'Connection lost');
+    await advance(0);
+    expect(handler.getConnectionState()).toBe('reconnecting');
+
+    await evem.publish('ws.send', { n: 1 });
+    await advance(499);
+    expect(instances).toHaveLength(1);
+
+    await advance(1);
+    expect(instances).toHaveLength(2);
+    expect(socket(1).url).toBe(url);
+
+    socket(1).simulateOpen();
+    await advance(0);
+
+    expect(handler.isConnected()).toBe(true);
+    expect(socket(1).sentMessages.map(message => JSON.parse(message))).toEqual([{ n: 1 }]);
+    expect(states).toEqual(['connected', 'reconnecting', 'connected']);
+  });
+
+  it('should create its sockets with WebSocketConstructor when given a URL', async () => {
+    handler = createHandler(url);
+    expect(instances).toHaveLength(1);
+    socket(0).simulateOpen();
+
+    socket(0).simulateClose(1006);
+    await advance(100);
+
+    expect(instances.map(instance => instance.url)).toEqual([url, url]);
+  });
+
+  it('should route messages from the new socket and send through it', async () => {
+    handler = createHandler(new SocketConstructor(url));
+    socket(0).simulateOpen();
+    socket(0).simulateClose(1006);
+    await advance(100);
+    socket(1).simulateOpen();
+    await advance(0);
+    const serverHandler = vi.fn();
+    evem.subscribe('server.ping', serverHandler);
+
+    socket(1).simulateMessage(JSON.stringify({ event: 'ping', data: { n: 1 } }));
+    await evem.publish('ws.send', { n: 2 });
+    await advance(0);
+
+    expect(serverHandler).toHaveBeenCalledWith({ n: 1 });
+    expect(socket(1).sentMessages.map(message => JSON.parse(message))).toEqual([{ n: 2 }]);
+  });
+
+  it('should give up after maxReconnectAttempts consecutive failures', async () => {
+    handler = createHandler(new SocketConstructor(url), { maxReconnectAttempts: 3 });
+    socket(0).simulateOpen();
+    socket(0).simulateClose(1006);
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await advance(100);
+      expect(instances).toHaveLength(attempt + 1);
+      socket(attempt).simulateClose(1006, 'Connection refused');
+    }
+    await advance(1000);
+
+    expect(instances).toHaveLength(4);
+    expect(handler.getConnectionState()).toBe('disconnected');
+    expect(states).toEqual(['connected', 'reconnecting', 'disconnected']);
+    expect(reconnectFailedHandler).toHaveBeenCalledTimes(1);
+    expect(reconnectFailedHandler).toHaveBeenCalledWith({ attempts: 3 });
+  });
+
+  it('should reset the attempt count when a reconnect succeeds', async () => {
+    handler = createHandler(new SocketConstructor(url), { maxReconnectAttempts: 2 });
+    socket(0).simulateOpen();
+    socket(0).simulateClose(1006);
+    await advance(100);
+    socket(1).simulateClose(1006);
+    await advance(100);
+    socket(2).simulateOpen();
+    await advance(0);
+
+    socket(2).simulateClose(1006);
+    await advance(100);
+    socket(3).simulateClose(1006);
+    await advance(100);
+
+    expect(instances).toHaveLength(5);
+    expect(handler.getConnectionState()).toBe('reconnecting');
+    expect(reconnectFailedHandler).not.toHaveBeenCalled();
+  });
+
+  it('should count a socket that cannot be created as a failed attempt', async () => {
+    const errorHandler = vi.fn();
+    evem.subscribe('ws.error', errorHandler);
+    const creationError = new Error('Cannot create socket');
+    const initialSocket = new SocketConstructor(url);
+    handler = createHandler(initialSocket, {
+      maxReconnectAttempts: 2,
+      WebSocketConstructor: class {
+        constructor() {
+          throw creationError;
+        }
+      } as unknown as new (url: string) => MockWebSocket
+    });
+    initialSocket.simulateOpen();
+
+    initialSocket.simulateClose(1006);
+    await advance(1000);
+
+    expect(errorHandler).toHaveBeenCalledTimes(2);
+    expect(errorHandler).toHaveBeenCalledWith(expect.objectContaining({ error: creationError }));
+    expect(handler.getConnectionState()).toBe('disconnected');
+    expect(reconnectFailedHandler).toHaveBeenCalledWith({ attempts: 2 });
+  });
+
+  it('should cancel a pending reconnect on disconnect()', async () => {
+    handler = createHandler(new SocketConstructor(url));
+    socket(0).simulateOpen();
+    socket(0).simulateClose(1006);
+    await advance(0);
+
+    await handler.disconnect();
+    await advance(1000);
+
+    expect(instances).toHaveLength(1);
+    expect(handler.getConnectionState()).toBe('disconnected');
+    expect(states).toEqual(['connected', 'reconnecting', 'disconnecting', 'disconnected']);
+  });
+
+  it('should not reconnect when reconnect is disabled', async () => {
+    handler = createHandler(new SocketConstructor(url), { reconnect: false });
+    socket(0).simulateOpen();
+
+    socket(0).simulateClose(1006);
+    await advance(5000);
+
+    expect(instances).toHaveLength(1);
+    expect(states).toEqual(['connected', 'disconnected']);
+  });
+
+  it('should not reconnect a socket that does not expose its url', async () => {
+    const socketWithoutUrl = new SocketConstructor(url);
+    (socketWithoutUrl as { url?: string }).url = undefined;
+    handler = createHandler(socketWithoutUrl);
+    socketWithoutUrl.simulateOpen();
+
+    socketWithoutUrl.simulateClose(1006);
+    await advance(5000);
+
+    expect(instances).toHaveLength(1);
+    expect(states).toEqual(['connected', 'disconnected']);
   });
 });

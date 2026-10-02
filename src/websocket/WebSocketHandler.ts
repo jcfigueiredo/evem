@@ -34,9 +34,16 @@ export class WebSocketHandler {
   private connectionManager: ConnectionManager;
   private messageQueue?: MessageQueue;
   private requestResponse?: RequestResponseManager;
-  private options: Required<WebSocketHandlerOptions>;
+  private options: Required<Omit<WebSocketHandlerOptions, 'onError' | 'WebSocketConstructor'>> &
+    Pick<WebSocketHandlerOptions, 'onError' | 'WebSocketConstructor'>;
   private subscriptionIds: string[] = [];
   private isDisconnecting = false;
+
+  /** URL for new sockets when reconnecting (undefined if the given socket doesn't expose one) */
+  private readonly url?: string;
+  /** Reconnection attempts since the last successful open */
+  private reconnectAttempts = 0;
+  private reconnectTimer?: ReturnType<typeof setTimeout>;
 
   /**
    * Puts outgoing requests in wire format before the MessageQueue sees them,
@@ -71,6 +78,7 @@ export class WebSocketHandler {
       reconnect: options.reconnect ?? false,
       reconnectDelay: options.reconnectDelay ?? 1000,
       maxReconnectAttempts: options.maxReconnectAttempts ?? 5,
+      WebSocketConstructor: options.WebSocketConstructor,
       onError: options.onError,
       messageParser: options.messageParser ?? ((data: string) => JSON.parse(data)),
       messageFormatter: options.messageFormatter ?? ((data: any) => JSON.stringify(data)),
@@ -99,14 +107,30 @@ export class WebSocketHandler {
 
     // Create or use provided WebSocket
     if (typeof urlOrSocket === 'string') {
-      this.ws = new WebSocket(urlOrSocket) as IWebSocket;
+      this.url = urlOrSocket;
+      this.ws = this.createWebSocket(urlOrSocket);
     } else {
+      this.url = urlOrSocket.url;
       this.ws = urlOrSocket;
     }
 
     // Auto-wire all events
     this.autoWireWebSocketEvents();
     this.autoWireOutgoingMessages();
+
+    // onopen won't fire for a socket that is already open
+    if (this.ws.readyState === this.ws.OPEN) {
+      this.connectionManager.transitionTo('connected');
+    }
+  }
+
+  /**
+   * Create a socket with the configured WebSocketConstructor (or the global WebSocket)
+   */
+  private createWebSocket(url: string): IWebSocket {
+    return this.options.WebSocketConstructor
+      ? new this.options.WebSocketConstructor(url)
+      : (new WebSocket(url) as IWebSocket);
   }
 
   /**
@@ -115,13 +139,14 @@ export class WebSocketHandler {
   private autoWireWebSocketEvents(): void {
     // Wire onopen
     this.ws.onopen = async (event) => {
+      this.reconnectAttempts = 0;
       await this.connectionManager.transitionTo('connected');
     };
 
     // Wire onclose
     this.ws.onclose = async (event) => {
       if (!this.isDisconnecting) {
-        await this.connectionManager.transitionTo('disconnected');
+        await this.handleUnexpectedClose();
       }
     };
 
@@ -146,6 +171,68 @@ export class WebSocketHandler {
   }
 
   /**
+   * Detach the lifecycle and message handlers from the current socket
+   */
+  private detachWebSocketEvents(): void {
+    this.ws.onopen = null;
+    this.ws.onclose = null;
+    this.ws.onerror = null;
+    this.ws.onmessage = null;
+  }
+
+  /**
+   * Handle a close that disconnect() didn't cause: schedule a reconnection attempt if enabled,
+   * otherwise (or once maxReconnectAttempts consecutive attempts have failed) go to 'disconnected'
+   */
+  private async handleUnexpectedClose(): Promise<void> {
+    if (!this.options.reconnect || !this.url) {
+      await this.connectionManager.transitionTo('disconnected');
+      return;
+    }
+
+    if (this.reconnectAttempts >= this.options.maxReconnectAttempts) {
+      await this.connectionManager.transitionTo('disconnected');
+      await this.evem.publish('ws.reconnect.failed', { attempts: this.reconnectAttempts });
+      return;
+    }
+
+    // Scheduled before the state change is announced, so a disconnect() from a state handler cancels it
+    this.reconnectTimer = setTimeout(() => this.reconnect(), this.options.reconnectDelay);
+    if (!this.connectionManager.isReconnecting()) {
+      await this.connectionManager.transitionTo('reconnecting');
+    }
+  }
+
+  /**
+   * Replace the closed socket with a new one to the same URL
+   * Its onopen leads to 'connected' (which flushes the queue); its onclose to the next attempt
+   */
+  private reconnect(): void {
+    this.reconnectTimer = undefined;
+    if (this.isDisconnecting || !this.url) {
+      return;
+    }
+
+    this.reconnectAttempts++;
+    this.detachWebSocketEvents();
+
+    try {
+      this.ws = this.createWebSocket(this.url);
+    } catch (caught) {
+      // A socket that can't even be created counts as a failed attempt
+      const error = caught instanceof Error ? caught : new Error(String(caught));
+      this.evem.publish('ws.error', { error });
+      if (this.options.onError) {
+        this.options.onError(error);
+      }
+      this.handleUnexpectedClose();
+      return;
+    }
+
+    this.autoWireWebSocketEvents();
+  }
+
+  /**
    * Auto-wire outgoing EvEm events to WebSocket.send()
    */
   private autoWireOutgoingMessages(): void {
@@ -153,41 +240,48 @@ export class WebSocketHandler {
     // Note: MessageQueue middleware passes through when connected, so we need to handle both:
     // - ws.send: Messages that pass through middleware when connected
     // - ws.send.queued: Messages flushed from queue after reconnection
-    const sendHandler = (data: any) => {
-      if (this.ws.readyState === this.ws.OPEN) {
-        try {
-          const formatted = this.options.messageFormatter(data);
-          this.ws.send(formatted);
-        } catch (error) {
-          console.error('Failed to send message:', error);
-        }
-      }
-    };
-
-    // Subscribe to ws.send for messages (middleware passes through when connected)
-    const sendSub = this.evem.subscribe('ws.send', sendHandler);
+    const sendSub = this.evem.subscribe('ws.send', (data: any) => {
+      this.sendOrQueue(data, false, 'Failed to send message:');
+    });
     this.subscriptionIds.push(sendSub);
 
     // Subscribe to ws.send.queued for flushed queue messages
-    const queuedSub = this.evem.subscribe('ws.send.queued', sendHandler);
+    const queuedSub = this.evem.subscribe('ws.send.queued', (data: any) => {
+      this.sendOrQueue(data, true, 'Failed to send message:');
+    });
     this.subscriptionIds.push(queuedSub);
 
     // Wire request messages if request-response is enabled
     if (this.options.enableRequestResponse) {
       const requestSub = this.evem.subscribe('ws.send.request', (request: any) => {
-        if (this.ws.readyState === this.ws.OPEN) {
-          try {
-            const formatted = this.options.messageFormatter({
-              type: 'request',
-              ...request,
-            });
-            this.ws.send(formatted);
-          } catch (error) {
-            console.error('Failed to send request:', error);
-          }
-        }
+        this.sendOrQueue({ type: 'request', ...request }, false, 'Failed to send request:');
       });
       this.subscriptionIds.push(requestSub);
+    }
+  }
+
+  /**
+   * Send a message if the socket is open, otherwise put it (back) in the queue if the queue is enabled
+   * The socket can stop being open before onclose updates the connection state, e.g. mid-flush
+   *
+   * @param data - Message to send
+   * @param fromQueue - Whether the message is being flushed from the queue
+   * @param errorLabel - Prefix for the error logged when sending fails
+   */
+  private sendOrQueue(data: any, fromQueue: boolean, errorLabel: string): void {
+    if (this.ws.readyState === this.ws.OPEN) {
+      try {
+        const formatted = this.options.messageFormatter(data);
+        this.ws.send(formatted);
+      } catch (error) {
+        console.error(errorLabel, error);
+      }
+      return;
+    }
+
+    // The queue middleware has already queued new messages unless the state says 'connected'
+    if (fromQueue || this.connectionManager.isConnected()) {
+      this.messageQueue?.enqueue(data);
     }
   }
 
@@ -236,7 +330,9 @@ export class WebSocketHandler {
 
       // Legacy format: use type field (but not for responses)
       if (message.type && message.type !== 'response') {
-        const eventName = `${this.options.serverEventPrefix}.${message.type}`;
+        const eventName = this.options.serverEventPrefix
+          ? `${this.options.serverEventPrefix}.${message.type}`
+          : message.type;
         this.evem.publish(eventName, message.data);
         return;
       }
@@ -290,6 +386,12 @@ export class WebSocketHandler {
 
     this.isDisconnecting = true;
 
+    // Cancel a pending reconnection attempt
+    if (this.reconnectTimer !== undefined) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = undefined;
+    }
+
     // Unsubscribe from all EvEm events
     for (const subId of this.subscriptionIds) {
       try {
@@ -322,10 +424,7 @@ export class WebSocketHandler {
     }
 
     // Clear handlers to prevent memory leaks
-    this.ws.onopen = null;
-    this.ws.onclose = null;
-    this.ws.onerror = null;
-    this.ws.onmessage = null;
+    this.detachWebSocketEvents();
 
     // onclose is detached above, so report the disconnect ourselves
     if (!this.connectionManager.isDisconnected()) {

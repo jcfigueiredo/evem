@@ -395,6 +395,61 @@ describe('RequestResponseManager', () => {
   });
 });
 
+describe('RequestResponseManager - regressions', () => {
+  let evem: EvEm;
+  let manager: RequestResponseManager;
+  // Settles like the promise, or with 'pending' if it is still pending after the current task,
+  // so a request that never settles fails fast
+  const settledOrPending = (promise: Promise<any>) =>
+    Promise.race([promise, new Promise(resolve => setTimeout(() => resolve('pending'), 0))]);
+
+  beforeEach(() => {
+    evem = new EvEm();
+    manager = new RequestResponseManager(evem);
+  });
+
+  describe('custom request ids', () => {
+    it('should reject a request whose id is already pending', async () => {
+      const requestHandler = vi.fn();
+      evem.subscribe('ws.send.request', requestHandler);
+      const first = manager.request('first', {}, { id: 'dup', timeout: 1000 });
+
+      const second = manager.request('second', {}, { id: 'dup', timeout: 1000 });
+
+      await expect(settledOrPending(second)).rejects.toThrow('A request with id "dup" is already pending');
+      expect(requestHandler).toHaveBeenCalledTimes(1);
+
+      await evem.publish('ws.response', { id: 'dup', result: 'first result', timestamp: 1 });
+      await expect(first).resolves.toBe('first result');
+    });
+
+    it('should accept an id again once its request has settled', async () => {
+      const first = manager.request('first', {}, { id: 'reused' });
+      await evem.publish('ws.response', { id: 'reused', result: 1, timestamp: 1 });
+      await expect(first).resolves.toBe(1);
+
+      const second = manager.request('second', {}, { id: 'reused' });
+      await evem.publish('ws.response', { id: 'reused', result: 2, timestamp: 2 });
+
+      await expect(second).resolves.toBe(2);
+    });
+  });
+
+  describe('error responses', () => {
+    it('should reject with a generic error when the error response has no error details', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const pending = manager.request('method', {}, { id: 'req-1' });
+
+      await evem.publish('ws.response.error', { id: 'req-1', timestamp: 1 });
+
+      await expect(settledOrPending(pending)).rejects.toThrow('Request failed');
+      expect(manager.getPendingRequestCount()).toBe(0);
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+      consoleErrorSpy.mockRestore();
+    });
+  });
+});
+
 describe('RequestResponseManager - cleanup', () => {
   it('should remove its response subscriptions on cleanup()', () => {
     const evem = new EvEm();

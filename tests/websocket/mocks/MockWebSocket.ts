@@ -32,13 +32,12 @@ export class MockWebSocket implements IWebSocket {
     public protocols?: string | string[]
   ) {
     // Simulate async connection in next tick
-    if (this.autoConnect) {
-      setTimeout(() => {
-        if (this.readyState === this.CONNECTING) {
-          this.simulateOpen();
-        }
-      }, 0);
-    }
+    // autoConnect is checked when the timer fires, so it can be disabled right after construction
+    setTimeout(() => {
+      if (this.autoConnect && this.readyState === this.CONNECTING) {
+        this.simulateOpen();
+      }
+    }, 0);
   }
 
   /**
@@ -141,8 +140,11 @@ export class MockWebSocket implements IWebSocket {
 
 /**
  * Create a mock WebSocket constructor for testing
+ *
+ * @param options.autoConnect - Whether created sockets open on their own (default: true);
+ *   with false, the test opens or fails each socket itself
  */
-export function createMockWebSocketConstructor(): {
+export function createMockWebSocketConstructor(options: { autoConnect?: boolean } = {}): {
   constructor: new (url: string, protocols?: string | string[]) => MockWebSocket;
   instances: MockWebSocket[];
 } {
@@ -151,6 +153,7 @@ export function createMockWebSocketConstructor(): {
   const constructor = class extends MockWebSocket {
     constructor(url: string, protocols?: string | string[]) {
       super(url, protocols);
+      this.autoConnect = options.autoConnect ?? true;
       instances.push(this);
     }
   };

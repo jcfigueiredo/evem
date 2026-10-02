@@ -8,6 +8,12 @@ export interface IWebSocket {
   readonly CLOSING: number;
   readonly CLOSED: number;
 
+  /**
+   * URL the socket connects to (exposed by browser WebSocket and Node.js `ws`)
+   * WebSocketHandler uses it to reconnect a socket it was given
+   */
+  readonly url?: string;
+
   send(data: string | ArrayBuffer | Blob | ArrayBufferView): void;
   close(code?: number, reason?: string): void;
 
@@ -150,6 +156,7 @@ export interface WebSocketEvents {
   'ws.connection.close': { code: number; reason: string };
   'ws.connection.error': Error;
   'ws.connection.state': ConnectionStateChangeEvent;
+  'ws.reconnect.failed': { attempts: number };
 
   // Message flow
   'ws.send': any;
@@ -242,22 +249,33 @@ export interface WebSocketHandlerOptions {
   serverEventPrefix?: string;
 
   /**
-   * Enable automatic reconnection on disconnect
+   * Enable automatic reconnection when the connection closes unexpectedly (not through disconnect())
+   * The state goes to 'reconnecting' and a new socket to the same URL is created after reconnectDelay;
+   * messages sent meanwhile are queued and flushed once it opens. Needs a URL: either the handler was
+   * created with one, or the given socket exposes `url`. Otherwise the state goes to 'disconnected'.
    * @default false
    */
   reconnect?: boolean;
 
   /**
-   * Reconnection delay in milliseconds
+   * Delay in milliseconds before each reconnection attempt
    * @default 1000
    */
   reconnectDelay?: number;
 
   /**
-   * Maximum number of reconnection attempts
+   * Maximum number of consecutive failed reconnection attempts (the count resets when a socket opens)
+   * When they are used up, the state goes to 'disconnected' and 'ws.reconnect.failed' is published
+   * with `{ attempts }`
    * @default 5
    */
   maxReconnectAttempts?: number;
+
+  /**
+   * WebSocket constructor used to create sockets from a URL (for testing or custom implementations)
+   * @default the global WebSocket
+   */
+  WebSocketConstructor?: new (url: string) => IWebSocket;
 
   /**
    * Custom error handler for WebSocket errors

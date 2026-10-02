@@ -120,7 +120,7 @@ describe('MessageQueue', () => {
 
     it('should handle multiple flushes', async () => {
       const flushed: any[] = [];
-      evem.subscribe('ws.send.queued', (data: any) => flushed.push(data));
+      evem.subscribe('ws.send.queued', (data: any) => { flushed.push(data); });
 
       await evem.publish('ws.send', { msg: 1 });
       await messageQueue.flush();
@@ -155,7 +155,7 @@ describe('MessageQueue', () => {
       expect(messageQueue.getQueueSize()).toBe(2);
 
       const flushed: any[] = [];
-      evem.subscribe('ws.send.queued', (data: any) => flushed.push(data));
+      evem.subscribe('ws.send.queued', (data: any) => { flushed.push(data); });
       await messageQueue.flush();
 
       // Should have ids 2 and 3, not 1
@@ -264,7 +264,7 @@ describe('MessageQueue', () => {
 
     it('should automatically flush queue when connecting to connected', async () => {
       const flushed: any[] = [];
-      evem.subscribe('ws.send.queued', (data: any) => flushed.push(data));
+      evem.subscribe('ws.send.queued', (data: any) => { flushed.push(data); });
 
       // Queue messages while disconnected
       await evem.publish('ws.send', { msg: 1 });
@@ -291,7 +291,7 @@ describe('MessageQueue', () => {
       freshQueue.enable(100, { autoFlush: false });
 
       const flushed: any[] = [];
-      freshEvem.subscribe('ws.send.queued', (data: any) => flushed.push(data));
+      freshEvem.subscribe('ws.send.queued', (data: any) => { flushed.push(data); });
 
       await freshEvem.publish('ws.send', { msg: 1 });
 
@@ -368,7 +368,7 @@ describe('MessageQueue', () => {
       expect(messageQueue.getQueueSize()).toBe(1);
 
       const flushed: any[] = [];
-      evem.subscribe('ws.send.queued', (data: any) => flushed.push(data));
+      evem.subscribe('ws.send.queued', (data: any) => { flushed.push(data); });
       await messageQueue.flush();
 
       expect(flushed[0].data).toHaveLength(10000);
@@ -402,7 +402,7 @@ describe('MessageQueue', () => {
 
       evem.subscribe(
         'ws.send.queued',
-        (data: any) => filtered.push(data),
+        (data: any) => { filtered.push(data); },
         {
           filter: (data: any) => data.priority === 'high',
         }
@@ -447,15 +447,15 @@ describe('MessageQueue', () => {
 
       evem.subscribe(
         'ws.send.queued',
-        () => executionOrder.push('high'),
+        () => { executionOrder.push('high'); },
         { priority: 'high' }
       );
       evem.subscribe(
         'ws.send.queued',
-        () => executionOrder.push('low'),
+        () => { executionOrder.push('low'); },
         { priority: 'low' }
       );
-      evem.subscribe('ws.send.queued', () => executionOrder.push('normal'));
+      evem.subscribe('ws.send.queued', () => { executionOrder.push('normal'); });
 
       await evem.publish('ws.send', { msg: 'test' });
       await messageQueue.flush();
@@ -503,5 +503,86 @@ describe('MessageQueue - cleanup', () => {
     await connectionManager.transitionTo('connected');
 
     expect(messageQueue.getQueueSize()).toBe(1);
+  });
+
+  it('should remove both of its middleware registrations on disable()', () => {
+    messageQueue.enable();
+    expect(evem.info().filter(info => info.isMiddleware)).toHaveLength(2);
+
+    messageQueue.disable();
+
+    expect(evem.info().filter(info => info.isMiddleware)).toEqual([]);
+  });
+
+  it('should queue a ws.send.* message once after being disabled and re-enabled', async () => {
+    messageQueue.enable();
+    messageQueue.disable();
+    messageQueue.enable();
+
+    await evem.publish('ws.send.message', { text: 'hello' });
+
+    expect(messageQueue.getQueueSize()).toBe(1);
+  });
+});
+
+describe('MessageQueue - enqueue()', () => {
+  let evem: EvEm;
+  let connectionManager: ConnectionManager;
+  let messageQueue: MessageQueue;
+
+  const flushAndCollect = async () => {
+    const flushed: any[] = [];
+    const subscriptionId = evem.subscribe('ws.send.queued', (data: any) => {
+      flushed.push(data);
+    });
+    await messageQueue.flush();
+    evem.unsubscribeById(subscriptionId);
+    return flushed;
+  };
+
+  beforeEach(() => {
+    evem = new EvEm();
+    connectionManager = new ConnectionManager(evem);
+    messageQueue = new MessageQueue(evem, connectionManager);
+  });
+
+  it('should queue a message even while connected', async () => {
+    messageQueue.enable(100, { autoFlush: false });
+    await connectionManager.transitionTo('connected');
+
+    messageQueue.enqueue({ id: 1 });
+
+    expect(messageQueue.getQueueSize()).toBe(1);
+    expect(await flushAndCollect()).toEqual([{ id: 1 }]);
+  });
+
+  it('should keep the order of queued messages', async () => {
+    messageQueue.enable(100, { autoFlush: false });
+
+    await evem.publish('ws.send', { id: 1 });
+    messageQueue.enqueue({ id: 2 });
+    await evem.publish('ws.send', { id: 3 });
+
+    expect(await flushAndCollect()).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
+  });
+
+  it('should respect the maximum queue size', async () => {
+    const overflowHandler = vi.fn();
+    evem.subscribe('ws.queue.overflow', overflowHandler);
+    messageQueue.enable(1);
+
+    messageQueue.enqueue({ id: 1 });
+    messageQueue.enqueue({ id: 2 });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(messageQueue.getQueueSize()).toBe(1);
+    expect(overflowHandler).toHaveBeenCalledWith({ maxSize: 1, droppedMessage: { id: 1 } });
+    expect(await flushAndCollect()).toEqual([{ id: 2 }]);
+  });
+
+  it('should not queue while disabled', () => {
+    messageQueue.enqueue({ id: 1 });
+
+    expect(messageQueue.getQueueSize()).toBe(0);
   });
 });

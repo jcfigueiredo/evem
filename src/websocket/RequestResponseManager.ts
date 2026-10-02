@@ -44,6 +44,7 @@ export class RequestResponseManager {
 
   /**
    * Send a request and wait for response
+   * Rejects immediately if a request with the same custom id is still pending
    */
   async request(
     method: string,
@@ -52,6 +53,11 @@ export class RequestResponseManager {
   ): Promise<any> {
     const timeout = options.timeout ?? 5000;
     const id = options.id ?? uuidv4();
+
+    // Responses are matched by id, so a second pending request with the same id can't be told apart
+    if (this.pendingRequests.has(id)) {
+      throw new Error(`A request with id "${id}" is already pending`);
+    }
 
     // Create the request message
     const requestMessage: RequestMessage = {
@@ -65,8 +71,10 @@ export class RequestResponseManager {
     return new Promise((resolve, reject) => {
       // Setup timeout
       const timeoutId = setTimeout(() => {
-        // Remove from pending requests
-        this.pendingRequests.delete(id);
+        // Remove from pending requests (only if the entry is still this request's)
+        if (this.pendingRequests.get(id)?.timeoutId === timeoutId) {
+          this.pendingRequests.delete(id);
+        }
 
         // Reject with timeout error
         reject(new RequestTimeoutError(id, method, timeout));
@@ -103,11 +111,11 @@ export class RequestResponseManager {
     this.pendingRequests.delete(response.id);
 
     if (isError) {
-      // Error response
-      const error = response.error!;
-      const err: any = new Error(error.message);
-      err.code = error.code;
-      err.data = error.data;
+      // Error response (the error details may be missing)
+      const error = response.error;
+      const err: any = new Error(error?.message ?? 'Request failed');
+      err.code = error?.code;
+      err.data = error?.data;
       pending.reject(err);
     } else {
       // Success response

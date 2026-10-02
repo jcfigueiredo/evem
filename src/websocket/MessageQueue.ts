@@ -96,10 +96,11 @@ export class MessageQueue {
    * Clean up middleware and subscriptions
    */
   private cleanup(): void {
-    // Remove middleware by passing the handler function
-    // This will remove both registrations (ws.send and ws.send.*)
+    // Remove both middleware registrations (ws.send and ws.send.*)
+    // removeMiddleware removes a single registration, so remove each one by its pattern
     if (this.middlewareHandler) {
-      this.evem.removeMiddleware(this.middlewareHandler);
+      this.evem.removeMiddleware({ pattern: 'ws.send', handler: this.middlewareHandler });
+      this.evem.removeMiddleware({ pattern: 'ws.send.*', handler: this.middlewareHandler });
       this.middlewareHandler = undefined;
     }
 
@@ -129,6 +130,15 @@ export class MessageQueue {
    */
   getMaxSize(): number {
     return this.maxSize;
+  }
+
+  /**
+   * Queue a message explicitly, whatever the connection state
+   * Use it for a message that could not be sent after all, e.g. because the socket closed
+   * before the connection state changed. The maximum queue size applies; does nothing while disabled.
+   */
+  enqueue(data: any): void {
+    this.enqueueSynchronous(data);
   }
 
   /**

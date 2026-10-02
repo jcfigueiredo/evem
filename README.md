@@ -210,6 +210,13 @@ const handler = new WebSocketHandler('wss://api.example.com', evem, {
   // Customize server event prefix (default: 'server')
   serverEventPrefix: 'server',
 
+  // Reconnect after an unexpected close (default: false); new sockets use the same URL.
+  // After maxReconnectAttempts consecutive failures the state goes to 'disconnected'
+  // and 'ws.reconnect.failed' is published with { attempts }
+  reconnect: true,
+  reconnectDelay: 1000,      // ms before each attempt (default: 1000)
+  maxReconnectAttempts: 5,   // (default: 5)
+
   // Custom message parsing/formatting
   messageParser: (data) => JSON.parse(data),
   messageFormatter: (data) => JSON.stringify(data),
