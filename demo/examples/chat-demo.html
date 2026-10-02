@@ -47,6 +47,18 @@
             font-size: 1.5rem;
         }
 
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            opacity: 0.9;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .nav-link:hover {
+            opacity: 1;
+        }
+
         .connection-status {
             display: flex;
             align-items: center;
@@ -393,6 +405,7 @@
                 <div>
                     <h1>💬 EvEm Chat</h1>
                     <div style="font-size: 0.85rem; opacity: 0.9; margin-top: 5px;">Real-time messaging with offline support</div>
+                    <a href="../index.html" class="nav-link">← Back to demos</a>
                 </div>
                 <div class="connection-status">
                     <div class="status-dot" id="statusDot"></div>
@@ -633,6 +646,11 @@ async function disconnect() {
             output.scrollTop = output.scrollHeight;
         };
 
+        // Escape user-supplied text before passing it to log(), which renders HTML
+        const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[char]);
+
         // Simplified implementations
         class EvEm {
             constructor() {
@@ -731,16 +749,63 @@ async function disconnect() {
                 const messages = [...this.queue];
                 this.queue = [];
 
-                for (const msg of messages) {
-                    await this.evem.publish('ws.send.queued', msg);
+                for (let i = 0; i < messages.length; i++) {
+                    // The connection dropped mid-flush: keep the rest for the next reconnect
+                    if (!this.connectionManager.isConnected()) {
+                        this.requeue(messages.slice(i));
+                        break;
+                    }
+                    await this.evem.publish('ws.send.queued', messages[i]);
                     await new Promise(r => setTimeout(r, 100));
                 }
 
                 updateQueueUI();
             }
 
+            // Put messages that were not delivered back in the queue, in the order they were sent
+            requeue(messages) {
+                this.queue.push(...messages);
+                this.queue.sort((a, b) => a.timestamp - b.timestamp);
+                updateQueueUI();
+            }
+
             getQueueSize() {
                 return this.queue.length;
+            }
+        }
+
+        // Simulated network link to the chat server: a sent message arrives after the simulated lag.
+        // Messages still in flight when the connection drops go back to the queue, so they are
+        // delivered after reconnecting instead of being lost
+        class SimulatedLink {
+            constructor(connectionManager, messageQueue, deliver) {
+                this.connectionManager = connectionManager;
+                this.messageQueue = messageQueue;
+                this.deliver = deliver;
+                this.inFlight = new Map(); // timer id -> message
+            }
+
+            send(message, lag) {
+                const timerId = setTimeout(() => {
+                    this.inFlight.delete(timerId);
+                    if (this.connectionManager.isConnected()) {
+                        this.deliver(message);
+                    } else {
+                        this.messageQueue.requeue([message]);
+                    }
+                }, lag);
+                this.inFlight.set(timerId, message);
+            }
+
+            // The connection dropped: cancel the deliveries in flight and queue those messages again
+            requeueInFlight() {
+                const messages = [...this.inFlight.values()];
+                this.inFlight.forEach((message, timerId) => clearTimeout(timerId));
+                this.inFlight.clear();
+                if (messages.length > 0) {
+                    this.messageQueue.requeue(messages);
+                }
+                return messages.length;
             }
         }
 
@@ -760,6 +825,24 @@ async function disconnect() {
 
         // Mock WebSocket
         let simulatedLag = 0;
+        const link = new SimulatedLink(connectionManager, messageQueue, (data) => {
+            addMessage(data.user, data.text, data.timestamp, true);
+
+            // Simulate server echo
+            setTimeout(() => {
+                const responses = [
+                    "That's interesting!",
+                    "I see what you mean",
+                    "Tell me more!",
+                    "Great point!",
+                    "👍"
+                ];
+                simulateIncomingMessage(
+                    users[Math.floor(Math.random() * 2) + 1].name,
+                    responses[Math.floor(Math.random() * responses.length)]
+                );
+            }, 1000 + Math.random() * 2000);
+        });
 
         // Setup handlers
         evem.subscribe('ws.connection.state', (event) => {
@@ -771,43 +854,30 @@ async function disconnect() {
             } else if (event.to === 'disconnected') {
                 addSystemMessage('Disconnected from chat server');
                 log(`<span class="event-name">ws.connection.state</span>: ${event.from} → ${event.to}`, 'info');
+
+                const requeued = link.requeueInFlight();
+                if (requeued > 0) {
+                    addSystemMessage(`${requeued} undelivered message(s) returned to the queue`);
+                    log(`Undelivered messages re-queued: <span class="data">${requeued}</span>`, 'data');
+                }
             } else if (event.to === 'connecting') {
                 log(`<span class="event-name">ws.connection.state</span>: ${event.from} → ${event.to}`, 'info');
             }
         });
 
         evem.subscribe('ws.send.queued', (data) => {
-            log(`<span class="event-name">ws.send.queued</span>: <span class="data">${data.text}</span>`, 'info');
-            setTimeout(() => {
-                if (connectionManager.isConnected()) {
-                    addMessage(data.user, data.text, data.timestamp, true);
-
-                    // Simulate server echo
-                    setTimeout(() => {
-                        const responses = [
-                            "That's interesting!",
-                            "I see what you mean",
-                            "Tell me more!",
-                            "Great point!",
-                            "👍"
-                        ];
-                        simulateIncomingMessage(
-                            users[Math.floor(Math.random() * 2) + 1].name,
-                            responses[Math.floor(Math.random() * responses.length)]
-                        );
-                    }, 1000 + Math.random() * 2000);
-                }
-            }, simulatedLag);
+            log(`<span class="event-name">ws.send.queued</span>: <span class="data">${escapeHtml(data.text)}</span>`, 'info');
+            link.send(data, simulatedLag);
         });
 
         evem.subscribe('server.message', (data) => {
             addMessage(data.user, data.text, data.timestamp);
-            log(`<span class="event-name">server.message</span>: from <span class="data">${data.user}</span>`, 'info');
+            log(`<span class="event-name">server.message</span>: from <span class="data">${escapeHtml(data.user)}</span>`, 'info');
         });
 
         evem.subscribe('server.user.typing', (data) => {
             showTypingIndicator(data.user);
-            log(`<span class="event-name">server.user.typing</span>: <span class="data">${data.user}</span>`, 'info');
+            log(`<span class="event-name">server.user.typing</span>: <span class="data">${escapeHtml(data.user)}</span>`, 'info');
         });
 
         // UI Functions
@@ -827,7 +897,7 @@ async function disconnect() {
             } else {
                 statusDot.classList.remove('connected');
                 statusText.textContent = 'Offline';
-                connectBtn.disabled = false;
+                connectBtn.disabled = state === 'connecting';
                 disconnectBtn.disabled = true;
                 sendBtn.disabled = false; // Can still queue messages
             }
@@ -863,25 +933,35 @@ async function disconnect() {
 
             const time = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-            message.innerHTML = `
-                ${!isOwn ? `<div class="user-avatar">${user[0]}</div>` : ''}
-                <div class="message-content">
-                    ${!isOwn ? `<div class="message-author">${user}</div>` : ''}
-                    <div class="message-text">${text}</div>
-                    <div class="message-time">${time}</div>
-                </div>
-                ${isOwn ? `<div class="user-avatar">${user[0]}</div>` : ''}
-            `;
+            // Built from DOM nodes with textContent, so user-supplied text is never parsed as HTML
+            const avatar = createTextElement('user-avatar', user[0]);
+            const content = createTextElement('message-content', '');
+            if (!isOwn) content.appendChild(createTextElement('message-author', user));
+            content.appendChild(createTextElement('message-text', text));
+            content.appendChild(createTextElement('message-time', time));
+
+            if (isOwn) {
+                message.append(content, avatar);
+            } else {
+                message.append(avatar, content);
+            }
 
             container.appendChild(message);
             container.scrollTop = container.scrollHeight;
+        }
+
+        function createTextElement(className, text) {
+            const element = document.createElement('div');
+            element.className = className;
+            element.textContent = text;
+            return element;
         }
 
         function addSystemMessage(text) {
             const container = document.getElementById('messagesContainer');
             const message = document.createElement('div');
             message.className = 'message system';
-            message.innerHTML = `<div class="message-content">${text}</div>`;
+            message.appendChild(createTextElement('message-content', text));
             container.appendChild(message);
             container.scrollTop = container.scrollHeight;
         }
@@ -916,6 +996,8 @@ async function disconnect() {
 
         // Control Functions
         async function connect() {
+            if (connectionManager.state !== 'disconnected') return;
+
             await connectionManager.transitionTo('connecting');
             setTimeout(async () => {
                 await connectionManager.transitionTo('connected');
@@ -932,7 +1014,7 @@ async function disconnect() {
 
             if (!text) return;
 
-            log(`<span class="event-name">ws.send</span>: <span class="data">${text}</span>`, 'info');
+            log(`<span class="event-name">ws.send</span>: <span class="data">${escapeHtml(text)}</span>`, 'info');
             await evem.publish('ws.send', {
                 user: currentUser,
                 text,

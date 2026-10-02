@@ -257,7 +257,7 @@
             </div>
             <div id="throttle-controls" class="tab-content active">
                 <div class="rapid-fire-area">
-                    <button class="rapid-fire-button" onmousedown="startRapidFire('throttle')" onmouseup="stopRapidFire()">
+                    <button class="rapid-fire-button" onmousedown="startRapidFire('throttle')" onmouseup="stopRapidFire()" onmouseleave="stopRapidFire()">
                         Hold to Fire Events Rapidly
                     </button>
                     <p style="margin-top: 15px; color: #718096;">Events are throttled to 500ms intervals</p>
@@ -309,7 +309,7 @@ evem.publish('mouse.move', { x: 150, y: 250 });  // Executed</code></pre></div>
             </div>
             <div id="debounce-controls" class="tab-content active">
                 <div class="rapid-fire-area">
-                    <button class="rapid-fire-button" onmousedown="startRapidFire('debounce')" onmouseup="stopRapidFire()">
+                    <button class="rapid-fire-button" onmousedown="startRapidFire('debounce')" onmouseup="stopRapidFire()" onmouseleave="stopRapidFire()">
                         Hold to Fire Events Rapidly
                     </button>
                     <p style="margin-top: 15px; color: #718096;">Events are debounced to 500ms intervals</p>
@@ -408,7 +408,7 @@ evem.publish('app.initialized', { timestamp: Date.now() });</code></pre></div>
             </div>
             <div id="combined-controls" class="tab-content active">
                 <div class="rapid-fire-area">
-                    <button class="rapid-fire-button" onmousedown="startRapidFire('combined')" onmouseup="stopRapidFire()">
+                    <button class="rapid-fire-button" onmousedown="startRapidFire('combined')" onmouseup="stopRapidFire()" onmouseleave="stopRapidFire()">
                         Hold to Fire Events Rapidly
                     </button>
                     <p style="margin-top: 15px; color: #718096;">Throttle 300ms + Debounce 300ms</p>
@@ -464,6 +464,8 @@ evem.subscribe('window.resize', (data) => {
                 this.subscriptionCounter = 0;
                 this.throttleTimers = new Map();
                 this.debounceTimers = new Map();
+                // Last time each throttle + debounce subscription handled an event immediately
+                this.lastThrottled = new Map();
             }
 
             subscribe(event, callback, options = {}) {
@@ -493,57 +495,74 @@ evem.subscribe('window.resize', (data) => {
                 const handlers = Array.from(this.events.get(event).entries());
 
                 for (const [id, handler] of handlers) {
-                    const { callback, options } = handler;
+                    const { options } = handler;
+                    const key = `${event}-${id}`;
+
+                    // Handle throttle + debounce together (like the real EvEm): an event is handled
+                    // immediately if the throttle window has expired; otherwise it is debounced, so
+                    // the last event of a burst is still handled once events stop for debounceTime
+                    if (options.throttleTime && options.debounceTime) {
+                        if (this.debounceTimers.has(key)) {
+                            clearTimeout(this.debounceTimers.get(key));
+                            this.debounceTimers.delete(key);
+                        }
+
+                        const now = Date.now();
+                        if (!this.lastThrottled.has(key) || now - this.lastThrottled.get(key) > options.throttleTime) {
+                            this.lastThrottled.set(key, now);
+                            await this.execute(id, handler, data);
+                        } else {
+                            const timerId = setTimeout(() => {
+                                this.debounceTimers.delete(key);
+                                this.execute(id, handler, data);
+                            }, options.debounceTime);
+                            this.debounceTimers.set(key, timerId);
+                        }
+                        continue;
+                    }
 
                     // Handle throttle
                     if (options.throttleTime) {
-                        const throttleKey = `${event}-${id}`;
-                        if (this.throttleTimers.has(throttleKey)) {
+                        if (this.throttleTimers.has(key)) {
                             continue; // Skip this execution
                         }
 
-                        this.throttleTimers.set(throttleKey, true);
+                        this.throttleTimers.set(key, true);
                         setTimeout(() => {
-                            this.throttleTimers.delete(throttleKey);
+                            this.throttleTimers.delete(key);
                         }, options.throttleTime);
                     }
 
                     // Handle debounce
                     if (options.debounceTime) {
-                        const debounceKey = `${event}-${id}`;
-                        if (this.debounceTimers.has(debounceKey)) {
-                            clearTimeout(this.debounceTimers.get(debounceKey));
+                        if (this.debounceTimers.has(key)) {
+                            clearTimeout(this.debounceTimers.get(key));
                         }
 
-                        const timerId = setTimeout(async () => {
-                            this.debounceTimers.delete(debounceKey);
-                            try {
-                                await callback(data);
-                            } catch (error) {
-                                console.error(error);
-                            }
-
-                            // Handle once option
-                            if (options.once) {
-                                this.unsubscribe(id);
-                            }
+                        const timerId = setTimeout(() => {
+                            this.debounceTimers.delete(key);
+                            this.execute(id, handler, data);
                         }, options.debounceTime);
 
-                        this.debounceTimers.set(debounceKey, timerId);
+                        this.debounceTimers.set(key, timerId);
                         continue; // Don't execute immediately
                     }
 
-                    // Execute callback
-                    try {
-                        await callback(data);
-                    } catch (error) {
-                        console.error(error);
-                    }
+                    await this.execute(id, handler, data);
+                }
+            }
 
-                    // Handle once option
-                    if (options.once) {
-                        this.unsubscribe(id);
-                    }
+            // Execute a subscription's callback, then remove it if it is once-only
+            async execute(id, { callback, options }, data) {
+                try {
+                    await callback(data);
+                } catch (error) {
+                    console.error(error);
+                }
+
+                // Handle once option
+                if (options.once) {
+                    this.unsubscribe(id);
                 }
             }
 
@@ -569,24 +588,21 @@ evem.subscribe('window.resize', (data) => {
             throttleStats.handled++;
             document.getElementById('throttleHandled').textContent = throttleStats.handled;
 
-            const timeline = document.getElementById('throttleTimeline');
-            const indicator = document.createElement('span');
-            indicator.className = 'event-indicator handled-indicator';
-            timeline.appendChild(indicator);
-
             log('<span style="color: #48bb78">✓ Throttle:</span> Event handled');
         }, { throttleTime: 500 });
 
         // Debounce demo
-        let debounceStats = { published: 0, handled: 0, ignored: 0 };
+        // pending: the timeline dot of the last published event while it waits for the pause
+        let debounceStats = { published: 0, handled: 0, ignored: 0, pending: null };
         evem.subscribe('debounce.event', () => {
             debounceStats.handled++;
             document.getElementById('debounceHandled').textContent = debounceStats.handled;
 
-            const timeline = document.getElementById('debounceTimeline');
-            const indicator = document.createElement('span');
-            indicator.className = 'event-indicator handled-indicator';
-            timeline.appendChild(indicator);
+            // The event that was waiting is the one handled: mark its timeline dot
+            if (debounceStats.pending) {
+                debounceStats.pending.className = 'event-indicator handled-indicator';
+                debounceStats.pending = null;
+            }
 
             log('<span style="color: #48bb78">✓ Debounce:</span> Event handled (after pause)');
         }, { debounceTime: 500 });
@@ -659,7 +675,8 @@ evem.subscribe('window.resize', (data) => {
                     evem.publish('throttle.event');
                 } else if (type === 'debounce') {
                     debounceStats.published++;
-                    debounceStats.ignored++;
+                    // A new event replaces the one still waiting, so that one is debounced (never handled)
+                    if (debounceStats.pending) debounceStats.ignored++;
                     document.getElementById('debouncePublished').textContent = debounceStats.published;
                     document.getElementById('debounceIgnored').textContent = debounceStats.ignored;
 
@@ -667,6 +684,7 @@ evem.subscribe('window.resize', (data) => {
                     const indicator = document.createElement('span');
                     indicator.className = 'event-indicator ignored-indicator';
                     timeline.appendChild(indicator);
+                    debounceStats.pending = indicator;
 
                     evem.publish('debounce.event');
                 } else if (type === 'combined') {
@@ -683,6 +701,13 @@ evem.subscribe('window.resize', (data) => {
                 rapidFireInterval = null;
             }
         };
+
+        // Stop however the press ends, not only on a mouseup over the button (which also has
+        // onmouseleave): releasing elsewhere, a touch ending, or the window losing focus
+        document.addEventListener('mouseup', stopRapidFire);
+        document.addEventListener('touchend', stopRapidFire);
+        document.addEventListener('touchcancel', stopRapidFire);
+        window.addEventListener('blur', stopRapidFire);
 
         log('Flow Control Demo loaded. Try the interactive demos above!');
     </script>

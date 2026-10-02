@@ -662,6 +662,9 @@ evem.publish('contact.add', { name: 'John Doe', email: 'john@example.com' });</c
                 }
             });
 
+            // Replace the handlers from an earlier click instead of adding duplicates
+            window.evem.events.set('user.create', new Map());
+
             window.evem.subscribe('user.create', (data) => {
                 log(`User created: <span class="data">${data.username} (${data.email})</span>`, 'success');
             });
@@ -714,6 +717,9 @@ evem.publish('contact.add', { name: 'John Doe', email: 'john@example.com' });</c
                 }
             });
 
+            // Replace the handlers from an earlier click instead of adding duplicates
+            window.evem.events.set('payment.process', new Map());
+
             window.evem.subscribe('payment.process', (data) => {
                 log(`Payment processed: <span class="data">${data.amount} ${data.currency} via ${data.method}</span>`, 'success');
             });
@@ -758,6 +764,9 @@ evem.publish('contact.add', { name: 'John Doe', email: 'john@example.com' });</c
                 }
             });
 
+            // Replace the handlers from an earlier click instead of adding duplicates
+            window.evem.events.set('test.event', new Map());
+
             window.evem.subscribe('test.event', (data) => {
                 log(`Handler executed with data: <span class="data">${JSON.stringify(data)}</span>`, 'success');
             });
@@ -799,6 +808,9 @@ evem.publish('contact.add', { name: 'John Doe', email: 'john@example.com' });</c
                     return true;
                 }
             });
+
+            // Replace the handlers from an earlier click instead of adding duplicates
+            window.evem.events.set('data.submit', new Map());
 
             window.evem.subscribe('data.submit', (data) => {
                 log(`Data submitted: <span class="data">${JSON.stringify(data)}</span>`, 'success');
@@ -867,6 +879,9 @@ evem.publish('contact.add', { name: 'John Doe', email: 'john@example.com' });</c
                     return true;
                 }
             });
+
+            // Replace the handlers from an earlier click instead of adding duplicates
+            window.evem.events.set('contact.add', new Map());
 
             window.evem.subscribe('contact.add', (data) => {
                 log(`Contact added: <span class="data">${data.name} - ${data.email}</span>`, 'success');

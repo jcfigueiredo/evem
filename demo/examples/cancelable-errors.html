@@ -685,6 +685,9 @@ await evem.publish('api.call', { endpoint: '/users' }, {
 
         // Demo functions
         window.setupCancelable = () => {
+            // Replace any handlers from an earlier click instead of adding duplicates
+            window.evem.events.set('user.delete', new Map());
+
             window.evem.subscribe('user.delete', (event) => {
                 log(`Validator 1: Checking if user exists...`, 'info');
                 if (!event.data.userId) {
@@ -841,7 +844,16 @@ await evem.publish('api.call', { endpoint: '/users' }, {
             log('Validation chain setup complete', 'info');
         };
 
+        // Put the validation chain's boxes back to "Waiting...", so a run only shows its own results
+        const resetChainBoxes = () => {
+            document.querySelectorAll('#validationChain .handler-box').forEach(box => {
+                box.className = 'handler-box';
+                box.querySelector('.handler-status').textContent = 'Waiting...';
+            });
+        };
+
         window.testValidChain = async () => {
+            resetChainBoxes();
             log('Testing with valid input: "TestUser"', 'info');
             const result = await window.evem.publishCancelable('data.validate', { value: 'TestUser' });
             if (result.cancelled) {
@@ -852,6 +864,7 @@ await evem.publish('api.call', { endpoint: '/users' }, {
         };
 
         window.testInvalidChain = async () => {
+            resetChainBoxes();
             log('Testing with invalid input: "ab"', 'info');
             const result = await window.evem.publishCancelable('data.validate', { value: 'ab' });
             if (result.cancelled) {
@@ -862,11 +875,7 @@ await evem.publish('api.call', { endpoint: '/users' }, {
         };
 
         window.resetChain = () => {
-            const boxes = document.querySelectorAll('.handler-box');
-            boxes.forEach(box => {
-                box.className = 'handler-box';
-                box.querySelector('.handler-status').textContent = 'Waiting...';
-            });
+            resetChainBoxes();
             log('Chain reset', 'info');
         };
 
@@ -911,16 +920,27 @@ await evem.publish('api.call', { endpoint: '/users' }, {
             });
 
             window.evem.subscribe('api.call', async (data) => {
-                log('Attempting fallback API...', 'info');
-                log('<span class="success">Fallback API succeeded!</span>', 'success');
+                callFallbackApi();
             });
 
             log('Error recovery setup complete', 'info');
         };
 
+        const callFallbackApi = () => {
+            log('Attempting fallback API...', 'info');
+            log('<span class="success">Fallback API succeeded!</span>', 'success');
+        };
+
         window.triggerRecovery = async () => {
             log('Making API call...', 'info');
-            await window.evem.publish('api.call', { endpoint: '/users' });
+            try {
+                await window.evem.publish('api.call', { endpoint: '/users' });
+            } catch (error) {
+                // The 'stop' policy rejects the publish at the first error, before the fallback
+                // handler runs, so fall back here instead
+                log(`<span class="error">API call failed:</span> ${error.message}`, 'error');
+                callFallbackApi();
+            }
         };
 
         // Initialize

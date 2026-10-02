@@ -704,6 +704,9 @@ const chat = new ChatComponent();
         };
 
         window.subscribeLate = () => {
+            // Replace the late subscriber from an earlier click instead of adding a duplicate
+            window.evem.events.set('status.update', new Map());
+
             window.evem.subscribe('status.update', (data) => {
                 log(`Late subscriber received: <span class="data">${JSON.stringify(data)}</span>`, 'replay');
             }, { replayLast: true });
@@ -725,6 +728,9 @@ const chat = new ChatComponent();
         };
 
         window.subscribeLateHistory = () => {
+            // Replace the late subscriber from an earlier click instead of adding a duplicate
+            window.evem.events.set('chat.message', new Map());
+
             window.evem.subscribe('chat.message', (data) => {
                 log(`Late subscriber received: <span class="data">${data.user}: ${data.text}</span>`, 'replay');
             }, { replayHistory: true });
@@ -748,6 +754,9 @@ const chat = new ChatComponent();
 
         window.simulateLateJoin = async () => {
             log('<span class="info">Simulating scenario:</span> Publishing events, then late subscriber joins...', 'info');
+
+            // Remove the subscriber from an earlier run, so only this run's late subscriber exists
+            window.evem.events.set('user.login', new Map());
 
             // Publish some events
             for (let i = 1; i <= 3; i++) {

@@ -543,9 +543,13 @@ evem.publish('api.auth.login', { data });</code></pre></div>
             output.appendChild(entry);
             output.scrollTop = output.scrollHeight;
 
-            // Update stats
-            document.getElementById('eventsPublished').textContent = ++window.eventCount;
             updateSubCount();
+        };
+
+        // Publish through the demo's EvEm, counting it in the "Events Published" stat
+        const publish = (event, data) => {
+            document.getElementById('eventsPublished').textContent = ++window.eventCount;
+            return window.evem.publish(event, data);
         };
 
         window.updateSubCount = () => {
@@ -556,22 +560,28 @@ evem.publish('api.auth.login', { data });</code></pre></div>
 
         // Demo functions
         window.basicPubSub = () => {
-            window.evem.subscribe('user.login', (data) => {
-                log(`Event received: <span class="event-name">user.login</span> | User: <span class="data">${data.username}</span>`);
-            });
+            // Subscribe on the first click only, so clicking again doesn't add duplicate handlers
+            if (!window.evem.events.has('user.login')) {
+                window.evem.subscribe('user.login', (data) => {
+                    log(`Event received: <span class="event-name">user.login</span> | User: <span class="data">${data.username}</span>`);
+                });
+            }
 
-            window.evem.publish('user.login', { username: 'Alice', id: 123 });
+            publish('user.login', { username: 'Alice', id: 123 });
             log('Published event: <span class="event-name">user.login</span>', 'info');
         };
 
         window.publishMultiple = async () => {
             for (let i = 1; i <= 3; i++) {
-                await window.evem.publish('user.login', { username: `User${i}`, id: i });
+                await publish('user.login', { username: `User${i}`, id: i });
                 log(`Published event ${i}: <span class="event-name">user.login</span>`, 'info');
             }
         };
 
         window.wildcardDemo = () => {
+            // Replace the handlers from an earlier click instead of adding duplicates
+            window.evem.events.set('user.*', new Map());
+
             window.evem.subscribe('user.*', (data) => {
                 log(`Wildcard caught: <span class="event-name">${data.event}</span> | <span class="data">${JSON.stringify(data.payload)}</span>`);
             });
@@ -579,18 +589,21 @@ evem.publish('api.auth.login', { data });</code></pre></div>
         };
 
         window.publishUserEvents = async () => {
-            await window.evem.publish('user.login', { event: 'user.login', payload: { user: 'Alice' } });
-            await window.evem.publish('user.logout', { event: 'user.logout', payload: { user: 'Alice' } });
-            await window.evem.publish('user.update', { event: 'user.update', payload: { user: 'Alice' } });
+            await publish('user.login', { event: 'user.login', payload: { user: 'Alice' } });
+            await publish('user.logout', { event: 'user.logout', payload: { user: 'Alice' } });
+            await publish('user.update', { event: 'user.update', payload: { user: 'Alice' } });
             log('Published 3 user.* events', 'info');
         };
 
         window.publishSystemEvents = async () => {
-            await window.evem.publish('system.startup', { event: 'system.startup' });
+            await publish('system.startup', { event: 'system.startup' });
             log('Published system.startup (should not be caught by user.* wildcard)', 'warning');
         };
 
         window.filterDemo = () => {
+            // Replace the handlers from an earlier click instead of adding duplicates
+            window.evem.events.set('user.action', new Map());
+
             window.evem.subscribe('user.action', (data) => {
                 log(`Admin action: <span class="data">${data.action}</span> by ${data.username}`, 'info');
             }, {
@@ -600,7 +613,7 @@ evem.publish('api.auth.login', { data });</code></pre></div>
         };
 
         window.publishWithRole = async (role) => {
-            await window.evem.publish('user.action', {
+            await publish('user.action', {
                 username: role === 'admin' ? 'AdminUser' : 'RegularUser',
                 role,
                 action: 'delete-file'
@@ -609,6 +622,9 @@ evem.publish('api.auth.login', { data });</code></pre></div>
         };
 
         window.priorityDemo = () => {
+            // Replace the handlers from an earlier click instead of adding duplicates
+            window.evem.events.set('app.startup', new Map());
+
             window.evem.subscribe('app.startup', () => {
                 log('Priority: <span class="data">HIGH</span> - Loading critical services', 'info');
             }, { priority: 'high' });
@@ -625,7 +641,7 @@ evem.publish('api.auth.login', { data });</code></pre></div>
         };
 
         window.publishPriorityEvent = async () => {
-            await window.evem.publish('app.startup');
+            await publish('app.startup');
             log('Published <span class="event-name">app.startup</span> - observe execution order', 'info');
         };
 
@@ -633,12 +649,14 @@ evem.publish('api.auth.login', { data });</code></pre></div>
             const input = document.getElementById('namespaceInput');
             const event = input.value || 'api.user.create';
 
-            // Subscribe to namespace pattern
-            window.evem.subscribe('api.*.*', (data) => {
-                log(`API event caught: <span class="event-name">${data.event}</span>`, 'info');
-            });
+            // Subscribe to namespace pattern (on the first click only, so clicking again doesn't add duplicate handlers)
+            if (!window.evem.events.has('api.*.*')) {
+                window.evem.subscribe('api.*.*', (data) => {
+                    log(`API event caught: <span class="event-name">${data.event}</span>`, 'info');
+                });
+            }
 
-            await window.evem.publish(event, { event, data: 'Sample data' });
+            await publish(event, { event, data: 'Sample data' });
             log(`Published: <span class="event-name">${event}</span>`, 'info');
             input.value = '';
         };

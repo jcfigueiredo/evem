@@ -603,6 +603,45 @@ evem.subscribe('ws.response', (message) => {
             }
         }
 
+        class RequestResponseManager {
+            constructor(evem) {
+                this.evem = evem;
+                this.pendingRequests = new Map();
+
+                // Settle the pending request a response belongs to (matched by its id)
+                this.evem.subscribe('ws.response', (response) => {
+                    const pending = this.pendingRequests.get(response.id);
+                    if (!pending) return; // Unknown or already timed out
+
+                    clearTimeout(pending.timeoutId);
+                    this.pendingRequests.delete(response.id);
+                    pending.resolve(response.result);
+                });
+            }
+
+            // Send a request and wait for the response with the same id;
+            // rejects if no response arrives within the timeout
+            request(method, params, options = {}) {
+                const timeout = options.timeout ?? 5000;
+                const id = options.id ?? `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+                return new Promise((resolve, reject) => {
+                    const timeoutId = setTimeout(() => {
+                        this.pendingRequests.delete(id);
+                        reject(new Error(`No response to ${id} within ${timeout}ms`));
+                    }, timeout);
+
+                    this.pendingRequests.set(id, { resolve, reject, timeoutId });
+
+                    this.evem.publish('ws.send', { type: 'request', id, method, params });
+                });
+            }
+
+            getPendingRequestCount() {
+                return this.pendingRequests.size;
+            }
+        }
+
         class MockWebSocket {
             constructor() {
                 this.connected = false;
@@ -655,10 +694,13 @@ evem.subscribe('ws.response', (message) => {
         const evem = new EvEm();
         const connectionManager = new ConnectionManager(evem);
         const messageQueue = new MessageQueue(evem, connectionManager);
+        const requestManager = new RequestResponseManager(evem);
         const ws = new MockWebSocket();
 
         let stats = { sent: 0, received: 0, queued: 0 };
         let requestCounter = 0;
+        // Pending automatic reconnect of the network-issue simulation
+        let autoReconnectTimer = null;
 
         // Enable queue
         messageQueue.enable(100, { autoFlush: true });
@@ -737,7 +779,7 @@ evem.subscribe('ws.response', (message) => {
             statusDot.className = `status-dot ${state}`;
             statusText.textContent = state.charAt(0).toUpperCase() + state.slice(1);
 
-            connectBtn.disabled = state === 'connected';
+            connectBtn.disabled = state !== 'disconnected';
             disconnectBtn.disabled = state !== 'connected';
         }
 
@@ -767,7 +809,18 @@ evem.subscribe('ws.response', (message) => {
         }
 
         // Control Functions
+        // Connecting or disconnecting by hand replaces a pending automatic reconnect
+        function cancelAutoReconnect() {
+            if (autoReconnectTimer) {
+                clearTimeout(autoReconnectTimer);
+                autoReconnectTimer = null;
+            }
+        }
+
         async function connect() {
+            cancelAutoReconnect();
+            if (connectionManager.getState() !== 'disconnected') return;
+
             log('Connecting...', 'system');
             await connectionManager.transitionTo('connecting');
             updateConnectionUI();
@@ -775,6 +828,7 @@ evem.subscribe('ws.response', (message) => {
         }
 
         async function disconnect() {
+            cancelAutoReconnect();
             log('Disconnecting...', 'system');
             ws.close();
         }
@@ -824,10 +878,16 @@ evem.subscribe('ws.response', (message) => {
         }
 
         async function requestWithTimeout() {
-            log('Request sent (will timeout in 2s)', 'out');
-            setTimeout(() => {
-                log('Request timed out!', 'error');
-            }, 2000);
+            const reqId = `req-${++requestCounter}`;
+            const sentAt = Date.now();
+            log(`Request sent: ${reqId} (will timeout in 2s)`, 'out');
+
+            try {
+                const result = await requestManager.request('getUser', { id: 123 }, { id: reqId, timeout: 2000 });
+                log(`Request ${reqId} answered in ${Date.now() - sentAt}ms: ${JSON.stringify(result)}`, 'in');
+            } catch (error) {
+                log(`Request timed out! ${error.message}`, 'error');
+            }
         }
 
         async function simulateNetworkIssue() {
@@ -835,7 +895,8 @@ evem.subscribe('ws.response', (message) => {
                 log('Simulating network disconnection...', 'error');
                 await disconnect();
 
-                setTimeout(async () => {
+                autoReconnectTimer = setTimeout(async () => {
+                    autoReconnectTimer = null;
                     log('Auto-reconnecting...', 'system');
                     await connect();
                 }, 3000);

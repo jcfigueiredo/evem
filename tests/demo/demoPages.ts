@@ -68,8 +68,8 @@ export interface LoadedInlineEvEm {
   logs: string[];
 }
 
-/** Page globals the inline EvEm copies touch, stubbed so the classes can run in Node */
-const STUBBED_PAGE_GLOBALS = ["window", "log", "updateStats", "updateQueueUI", "updateUI"] as const;
+/** Page globals the inline classes touch, stubbed so the classes can run in Node */
+const STUBBED_PAGE_GLOBALS = ["window", "log", "updateStats", "updateQueueUI", "updateQueueDisplay", "updateUI"] as const;
 
 /** All demo pages in demo/examples */
 export function listDemoPages(): string[] {
@@ -113,10 +113,30 @@ export function extractClassSource(html: string, className: string): string | nu
 
 /** Evaluate a demo page's inline `class EvEm` in Node, with the page globals it uses stubbed out */
 export function loadInlineEvEm(file: string): LoadedInlineEvEm {
-  const source = extractClassSource(readDemoPage(file), "EvEm");
-  if (!source) {
-    throw new Error(`No inline class EvEm found in ${file}`);
-  }
+  const { classes, logs } = loadInlineClasses(file, ["EvEm"]);
+  return { EvEm: classes.EvEm!, logs };
+}
+
+export interface LoadedInlineClasses {
+  /** The requested classes by name (their APIs differ per page, so they are loosely typed) */
+  classes: Record<string, new (...args: any[]) => any>;
+  /** Messages the classes passed to the page's `log()` helper */
+  logs: string[];
+}
+
+/**
+ * Evaluate several of a demo page's inline classes together in Node (e.g. its EvEm plus the classes
+ * built on it), with the page globals they use stubbed out. Throws if the page lacks one of them.
+ */
+export function loadInlineClasses(file: string, classNames: string[]): LoadedInlineClasses {
+  const html = readDemoPage(file);
+  const sources = classNames.map(name => {
+    const source = extractClassSource(html, name);
+    if (!source) {
+      throw new Error(`No inline class ${name} found in ${file}`);
+    }
+    return source;
+  });
 
   const logs: string[] = [];
   const noop = () => undefined;
@@ -125,13 +145,14 @@ export function loadInlineEvEm(file: string): LoadedInlineEvEm {
     log: (message: string) => { logs.push(message); },
     updateStats: noop,
     updateQueueUI: noop,
+    updateQueueDisplay: noop,
     updateUI: noop,
   };
 
-  const factory = new Function(...STUBBED_PAGE_GLOBALS, `${source}; return EvEm;`) as
-    (...args: unknown[]) => InlineEvEmClass;
-  const EvEm = factory(...STUBBED_PAGE_GLOBALS.map(name => pageGlobals[name]));
-  return { EvEm, logs };
+  const factory = new Function(...STUBBED_PAGE_GLOBALS, `${sources.join("\n")}; return { ${classNames.join(", ")} };`) as
+    (...args: unknown[]) => LoadedInlineClasses["classes"];
+  const classes = factory(...STUBBED_PAGE_GLOBALS.map(name => pageGlobals[name]));
+  return { classes, logs };
 }
 
 /** The "View Code" samples of a page: the text of each <pre><code> block, with HTML entities decoded */

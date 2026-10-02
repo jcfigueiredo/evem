@@ -622,6 +622,9 @@ await evem.publish('user.delete', {
 
         // Demo functions
         window.setupGlobalMiddleware = () => {
+            // Replace the logger from an earlier click instead of adding a duplicate
+            window.evem.middleware = window.evem.middleware.filter(mw => mw.pattern !== '*');
+
             window.evem.use(async (event, data, next) => {
                 log(`<span class="middleware">Global middleware</span> intercepted: <span class="event-name">${event}</span>`, 'middleware');
                 await next();
@@ -636,6 +639,10 @@ await evem.publish('user.delete', {
         };
 
         window.setupPatternMiddleware = () => {
+            // Replace the middleware and handler from an earlier click instead of adding duplicates
+            window.evem.middleware = window.evem.middleware.filter(mw => mw.pattern !== 'api.*');
+            window.evem.events.set('api.*', new Map());
+
             window.evem.use('api.*', async (event, data, next) => {
                 data.timestamp = Date.now();
                 data.requestId = Math.random().toString(36).substr(2, 9);
@@ -657,6 +664,9 @@ await evem.publish('user.delete', {
         };
 
         window.setupTransform = () => {
+            // Replace the handlers from an earlier click instead of adding duplicates
+            window.evem.events.set('user.input', new Map());
+
             // High priority runs first and sees the original data; its transform runs after it
             window.evem.subscribe('user.input', (data) => {
                 log(`Original input: <span class="data">${data.text}</span>`, 'info');
@@ -682,6 +692,9 @@ await evem.publish('user.delete', {
         };
 
         window.setupTransformChain = () => {
+            // Replace the handlers from an earlier click instead of adding duplicates
+            window.evem.events.set('data.process', new Map());
+
             // First subscriber: receives the raw input, then trims whitespace
             window.evem.subscribe('data.process', (data) => {
                 log(`Step 1 received: <span class="data">${JSON.stringify(data.value)}</span>`, 'info');
@@ -721,6 +734,10 @@ await evem.publish('user.delete', {
         };
 
         window.setupCancelMiddleware = () => {
+            // Replace the middleware and handler from an earlier click instead of adding duplicates
+            window.evem.middleware = window.evem.middleware.filter(mw => mw.pattern !== 'user.delete');
+            window.evem.events.set('user.delete', new Map());
+
             window.evem.use('user.delete', async (event, data, next) => {
                 if (!data.confirmed) {
                     log(`<span class="middleware">Validation middleware</span> rejected: missing confirmation`, 'middleware');
