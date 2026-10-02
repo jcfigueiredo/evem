@@ -1472,10 +1472,6 @@ import { EvEm } from '@jcfigueiredo/evem';
 import { SseHandler } from '@jcfigueiredo/evem/sse';
 
 const evem = new EvEm();
-const sse = new SseHandler('/api/events', evem, {
-  // Called before every connection attempt, so reconnects send the current token
-  headers: () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` }),
-});
 
 // `event: order.updated` + `data: {"id":7}`, or an unnamed {"event":"order.updated","data":{...}},
 // is published as 'server.order.updated'
@@ -1485,6 +1481,12 @@ evem.subscribe<{ id: number }>('server.order.updated', (order) => {
 
 evem.subscribe<{ to: string }>('sse.connection.state', ({ to }) => {
   console.log('Stream:', to); // connecting, connected, reconnecting, disconnecting, disconnected
+});
+
+// Created after the subscriptions, which then see its first state change (connecting)
+const sse = new SseHandler('/api/events', evem, {
+  // Called before every connection attempt, so reconnects send the current token
+  headers: () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` }),
 });
 
 // Abort the stream and cancel any pending reconnect

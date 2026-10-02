@@ -145,9 +145,7 @@ describe("sse-demo.html: inline SseParser", () => {
   });
 
   it("parses the same chunks like SseParser, empty chunks included", () => {
-    // SseParser.feed('') forgets that the previous chunk ended with CR, so an LF that follows reads
-    // as a blank line: ["data: a\r", "", "\ndata: b\n\n"] dispatches "a" and "b" instead of "a\nb".
-    // The copy behaves the same; were SseParser fixed, this test would flag the copy to update.
+    // An empty chunk between a chunk ending in CR and one starting with LF must not split the CRLF
     const random = prng(99);
     const text = longStream.replace(/\r\n|\r|\n/g, "\r\n");
     for (let run = 0; run < 150; run++) {
@@ -156,6 +154,7 @@ describe("sse-demo.html: inline SseParser", () => {
     }
     const split = ["data: a\r", "", "\ndata: b\n\n"];
     expect(parseWith(page.SseParser, split)).toEqual(parseWith(SseParser, split));
+    expect(parseWith(page.SseParser, split).events).toEqual([{ type: "message", data: "a\nb", lastEventId: "" }]);
   });
 
   it("parses what the formatter writes like SseParser, whichever formatter wrote it", () => {

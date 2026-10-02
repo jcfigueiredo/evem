@@ -65,10 +65,6 @@ declare function getToken(): string;
 declare function render(order: Order): void;
 
 const evem = new EvEm();
-const sse = new SseHandler('/api/events', evem, {
-  // A function is called before every connection attempt, so a reconnect sends a fresh token
-  headers: () => ({ Authorization: `Bearer ${getToken()}` }),
-});
 
 // The server sends `event: order.updated` and `data: {"id":7,...}`; it's published as 'server.order.updated'
 evem.subscribe<Order>('server.order.updated', (order) => render(order));
@@ -79,6 +75,12 @@ evem.subscribe<ConnectionStateChangeEvent>('sse.connection.state', ({ from, to }
 
 evem.subscribe<SseEvents['sse.error']>('sse.error', ({ error, reason }) => {
   console.warn(`stream problem (${reason}): ${error.message}`);
+});
+
+// Created after the subscriptions, which then see its first state change (connecting)
+const sse = new SseHandler('/api/events', evem, {
+  // A function is called before every connection attempt, so a reconnect sends a fresh token
+  headers: () => ({ Authorization: `Bearer ${getToken()}` }),
 });
 
 // When you're done: aborts the request and cancels any pending reconnect
@@ -94,7 +96,7 @@ data: {"id":7,"status":"shipped"}
 
 ```
 
-- **Connecting:** the handler connects as soon as it's created. Pass `autoConnect: false` and call `sse.connect()` to start later.
+- **Connecting:** the handler connects as soon as it's created, and the first `connecting` state change is published right away, so subscribe to `sse.connection.state` before creating it. Or pass `autoConnect: false` and call `sse.connect()` once you're ready.
 - **Types:** callbacks receive `unknown` unless you give a type argument (`subscribe<Order>(...)`). The type argument isn't checked at runtime; use the `schema` subscription option if you need validation.
 - **Payloads:** subscribers receive only the parsed data. The event's metadata (its type and id) is available with [`rawEvents`](#options).
 

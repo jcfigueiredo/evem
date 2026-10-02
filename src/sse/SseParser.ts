@@ -53,13 +53,14 @@ export class SseParser {
    * Parse the next chunk of the stream
    */
   feed(chunk: string): void {
+    // An empty chunk changes nothing (and mustn't forget a CR that ended the previous chunk)
+    if (chunk.length === 0) {
+      return;
+    }
     let text = chunk;
 
     // A byte order mark is only allowed at the very start of the stream
     if (!this.started) {
-      if (text.length === 0) {
-        return;
-      }
       if (text.charCodeAt(0) === 0xfeff) {
         text = text.slice(1);
       }

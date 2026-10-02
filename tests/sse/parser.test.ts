@@ -102,6 +102,10 @@ describe('SseParser - line endings and chunking', () => {
     expect(parse(['data: a\r', '\n\r', '\ndata: b\n\n']).events).toEqual([message('a'), message('b')]);
   });
 
+  it('remembers a CR at the end of a chunk across empty chunks', () => {
+    expect(parse(['data: a\r', '', '\ndata: b\n\n']).events).toEqual([message('a\nb')]);
+  });
+
   it('skips a leading byte order mark, even when it arrives on its own', () => {
     expect(parse(['﻿data: a\n\n']).events).toEqual([message('a')]);
     expect(parse(['﻿', 'data: a\n\n']).events).toEqual([message('a')]);
