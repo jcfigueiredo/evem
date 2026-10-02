@@ -1,294 +1,41 @@
 # EvEm - Simple Event Emitter Library 📢
 
-EvEm is a lightweight and flexible event emitter library for TypeScript, providing a simple yet powerful pub/sub system. It's designed to handle both synchronous and asynchronous event callbacks with ease.
+EvEm is a lightweight and flexible event emitter library for TypeScript, providing a simple yet powerful pub/sub system. It handles both synchronous and asynchronous callbacks, and adds wildcards, priorities, middleware, filters, throttling, debouncing, schema validation and event history on top. An optional WebSocket adapter connects it to a server.
 
 ## Features
 
-- **🔗 Event Subscription**: Easily subscribe to events with callbacks. Each subscription returns a unique identifier (UUID) which can be used for unsubscribing.
-
-  - `subscribe(event: string, callback: EventCallback<T>): string`
-
-- **❌ Event Unsubscription**: Unsubscribe from events to stop receiving notifications.
-
-  - `unsubscribe(event: string, callback: EventCallback<T>): void`
-  - `unsubscribeById(id: string): void` - Unsubscribe using the unique ID returned by `subscribe`.
-
-- **🔄 Once-only Events**: Subscribe to events that will automatically unsubscribe after the first occurrence.
-
-  - `subscribeOnce(event: string, callback: EventCallback<T>): string`
-  - Or use `subscribe(event, callback, { once: true })`
-  
-- **📜 Event History**: Keep a history of events and replay them to new subscribers.
-
-  - Enable with `enableHistory(maxEvents)` to start recording events
-  - Replay the most recent event with `subscribe(event, callback, { replayLastEvent: true })`
-  - Replay all matching historical events with `subscribe(event, callback, { replayHistory: true })`
-  - Access recorded events with `getEventHistory()`
-
-- **📣 Event Publishing**: Publish events with optional data and configuration.
-
-  - `publish<T = unknown>(event: string, args?: T, options?: PublishOptions | number): Promise<boolean>`
-  - Returns a boolean indicating whether the event completed (true) or was canceled (false)
-  - Configure timeouts, error policies, and cancelable behavior
-
-- **🥇 Event Priority**: Set priority levels for handlers to control execution order.
-
-  - Use `subscribe(event, callback, { priority: 'high' | 'normal' | 'low' | number | Priority.HIGH })` 
-  - Higher priority handlers execute before lower priority ones
-  - Numeric priorities allow for fine-grained control (higher numbers = higher priority)
-  - Built-in Priority enum provides better type safety (Priority.HIGH, Priority.NORMAL, Priority.LOW)
-
-- **📚 Namespace Support**: Organize events using a namespace pattern.
-
-  - `subscribe("namespace.eventName", callback)`
-  - Facilitates categorizing and managing events based on their namespace.
-
-- **🌟 Wildcard Event Names**: Support for wildcard event names, allowing for flexible event listening.
-
-  - Subscribe to events using patterns like `eventName.*`, `*.eventName`, or `namespace.*.events`.
-
-- **🔍 Event Filtering**: Filter events based on their data before processing them.
-
-  - Apply predicates to event data that determine whether a callback should be invoked
-  - Support for both synchronous and asynchronous filter functions
-  - Chain multiple filters together to create complex filtering logic
-  - Fully integrated with the existing subscription system
-
-- **⏲️ Event Debouncing**: Prevent excessive event handling using debounce.
-
-  - Set a debounce time to ensure callbacks are only invoked once within a specified time period
-  - Useful for handling rapid-fire events like window resize, keyboard input, or API updates
-  - Combine with filtering for powerful event stream control
-
-- **🔄 Event Throttling**: Limit the frequency of event handler execution.
-
-  - Set a throttle time to ensure callbacks are executed at most once per time window
-  - First event in a throttle window is processed immediately, subsequent events are ignored until the window expires
-  - Perfect for rate-limiting high-frequency events like scrolling, mouse movements, or API calls
-
-- **🛑 Cancelable Events**: Allow events to be canceled by subscribers to prevent further processing.
-
-  - Publish events with the `cancelable: true` option 
-  - Event handlers can call `event.cancel()` to stop propagation to remaining handlers
-  - Returns a boolean indicating whether the event completed (true) or was canceled (false)
-  - Useful for validation chains, permission checks, or early termination of event processing
-  
-- **⚠️ Error Policies**: Configure how errors in event callbacks are handled.
-
-  - Set different policies when publishing events using `errorPolicy: ErrorPolicy.OPTION`
-  - Supports four policy modes: LOG_AND_CONTINUE (default), SILENT, CANCEL_ON_ERROR, and THROW
-  - Control whether errors are logged, ignored, stop event propagation, or are rethrown
-  - Provides flexibility in error handling strategies for different use cases
-  
-- **🔄 Middleware Support**: Process and transform events before they reach subscribers.
-
-  - Register middleware functions that can intercept and modify events
-  - Apply middleware to specific event patterns using wildcards (e.g., "user.*", "*.created")
-  - Transform event data or redirect events to different event names
-  - Cancel events based on custom conditions
-  - Apply global or targeted processing logic across your application
-
-- **⏱️ Timeout Management for Asynchronous Callbacks**: Ensures that asynchronous callbacks do not hang indefinitely.
-
-  - A default timeout of 5000ms (5 seconds) is set for each callback, but can be overridden per event in the `publish` method.
-  - Gracefully handles timeout exceedance.
-
-- **⏱️ Asynchronous and Synchronous Callbacks**: Support for both synchronous and asynchronous callbacks.
-
-  - Callbacks can be either a simple function or an `async` function.
-  - Promises from async callbacks are properly awaited in the event chain
-
-- **🌀 Customizable Recursion Depth**: Set a custom maximum recursion depth for event publishing to prevent stack overflow errors and infinite loops.
-
-  - Constructor parameter to set the maximum recursion depth (default is 3).
-  - Depth counts publishes of the same event started from inside its own handlers (callbacks, middleware or transforms); independent concurrent publishes of the same event are not limited. A publish a handler starts only after awaiting other work can't be traced back to it and starts a new chain.
-
-- **🛠️ Error Handling**: Robust error handling for empty event names and exceptions in callbacks.
-
-  - Throws an error if the event name is empty during subscription, unsubscription, or publishing.
-  - Handles exceptions thrown in event callbacks gracefully.
-
-- **🔍 Debugging Support**: Inspect and monitor the event system with the info method.
-
-  - Get information about all registered subscriptions and middleware
-  - Filter results by event pattern to focus on specific event types
-  - See priorities, subscription IDs, and middleware patterns
-  - Useful for debugging complex event setups and visualizing the event system state
-  
-- **🔄 Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers.
-
-  - Add additional data or modify existing data between handlers
-  - Build data processing pipelines with multiple transform steps
-  - Support for both synchronous and asynchronous transformations
-  - Chain with other features like filtering and priorities for complex workflows
-
-- **🔍 Memory Leak Detection**: Detect potential memory leaks from event handlers that aren't properly unsubscribed.
-
-  - Enable with `enableMemoryLeakDetection(options)` 
-  - Configure custom thresholds for warning detection
-  - Detailed subscription information provided when potential leaks are detected
-  - Helps identify events with too many subscriptions that might be leaking memory
-
-- **🔒 Event Schema Validation**: Validate event data against schemas to ensure data integrity.
-
-  - Define schema validators that check event data structure and types
-  - Support for both simple validators (boolean result) and advanced validators (detailed error information)
-  - Configurable error policies for validation failures (continue, silent, cancel, throw)
-  - Seamlessly integrates with other features like filtering and transformations
-  - Works with both synchronous and asynchronous validation
-
-## WebSocket Adapter (Optional Extension)
-
-EvEm includes an optional WebSocket adapter that provides common patterns for real-time communication. The adapter is implemented as a separate module that doesn't modify the core library.
-
-**Key Features:**
-- **Auto-Wiring**: WebSocketHandler automatically connects WebSocket events to EvEm (zero boilerplate!)
-- **Connection State Management**: Track connection lifecycle with state machine (disconnected → connecting → connected → reconnecting → disconnecting)
-- **Message Queue**: Automatic queueing of messages while disconnected with configurable size limits and overflow handling
-- **Request-Response Pattern**: RPC-style communication with correlation IDs, timeouts, and error handling
-- **Universal Compatibility**: Works with both browser WebSocket and Node.js `ws` library
-- **100% Test Coverage**: 115 comprehensive tests covering all edge cases
-
-### Quick Start with WebSocketHandler (Recommended)
-
-The simplest way to integrate WebSocket with EvEm is using `WebSocketHandler`, which automatically wires everything:
-
-```typescript
-import { EvEm } from '@jcfigueiredo/evem';
-import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';
-
-const evem = new EvEm();
-const handler = new WebSocketHandler('wss://api.example.com', evem);
-
-// Subscribe to server events - everything is auto-wired!
-evem.subscribe('server.user.*', (data) => {
-  console.log('User event from server:', data);
-});
-
-evem.subscribe('server.notification', (notification) => {
-  showToast(notification.message);
-});
-
-// Send messages to the server
-await evem.publish('ws.send', { type: 'chat', text: 'Hello!' });
-
-// Use the handler for connection state and lifecycle management
-console.log('Connected:', handler.isConnected());
-console.log('Queue size:', handler.getQueueSize());
-
-// Clean up when done
-window.addEventListener('beforeunload', () => {
-  handler.disconnect();
-});
-```
-
-**What WebSocketHandler does automatically:**
-- Wires WebSocket lifecycle events (`onopen`, `onclose`, `onerror`, `onmessage`) to EvEm events
-- Routes incoming server messages to the appropriate EvEm event patterns
-- Sends outgoing EvEm events to the WebSocket automatically
-- Integrates ConnectionManager, MessageQueue, and RequestResponseManager seamlessly
-- Parses and formats messages using customizable JSON serialization
-
-**When to use the handler reference:**
-- ✅ Check connection state with `handler.isConnected()`
-- ✅ Monitor queue size with `handler.getQueueSize()`
-- ✅ Clean up resources with `handler.disconnect()`
-- 💡 If you don't need lifecycle management, you can skip storing it (though cleanup is recommended)
-
-**Configuration Options:**
-
-```typescript
-const handler = new WebSocketHandler('wss://api.example.com', evem, {
-  // Enable/disable message queue (default: true)
-  enableQueue: true,
-  queueSize: 100,
-  autoFlush: true,
-
-  // Enable/disable request-response pattern (default: true)
-  enableRequestResponse: true,
-
-  // Customize server event prefix (default: 'server')
-  serverEventPrefix: 'server',
-
-  // Reconnect after an unexpected close (default: false); new sockets use the same URL.
-  // After maxReconnectAttempts consecutive failures the state goes to 'disconnected'
-  // and 'ws.reconnect.failed' is published with { attempts }
-  reconnect: true,
-  reconnectDelay: 1000,      // ms before each attempt (default: 1000)
-  maxReconnectAttempts: 5,   // (default: 5)
-
-  // Custom message parsing/formatting
-  messageParser: (data) => JSON.parse(data),
-  messageFormatter: (data) => JSON.stringify(data),
-
-  // Error handling
-  onError: (error) => console.error('WebSocket error:', error)
-});
-```
-
-### Manual Approach (Advanced)
-
-For more control, you can wire components manually:
-
-```typescript
-import { EvEm } from '@jcfigueiredo/evem';
-import { ConnectionManager, MessageQueue, RequestResponseManager } from '@jcfigueiredo/evem/websocket';
-
-const evem = new EvEm();
-const ws = new WebSocket('wss://api.example.com');
-const connectionManager = new ConnectionManager(evem);
-const messageQueue = new MessageQueue(evem, connectionManager);
-const requestResponse = new RequestResponseManager(evem);
-
-// Enable message queue with auto-flush on reconnection
-messageQueue.enable(100, { autoFlush: true });
-
-// Manually wire WebSocket events
-ws.onopen = () => connectionManager.transitionTo('connected');
-ws.onclose = () => connectionManager.transitionTo('disconnected');
-ws.onmessage = (event) => {
-  const message = JSON.parse(event.data);
-  if (message.event) {
-    evem.publish(`server.${message.event}`, message.data);
-  }
-};
-
-// Handle outgoing messages
-evem.subscribe('ws.send.queued', (data) => {
-  ws.send(JSON.stringify(data));
-});
-
-// Subscribe to server events
-evem.subscribe('server.user.*', (data) => {
-  console.log('User event:', data);
-});
-```
-
-### Request-Response Pattern
-
-WebSocketHandler supports RPC-style request-response when enabled:
-
-```typescript
-// Request-response is enabled by default
-const handler = new WebSocketHandler('wss://api.example.com', evem);
-
-// Send a request and wait for response
-const result = await requestResponse.request('getUser', { id: 123 }, {
-  timeout: 5000
-});
-
-console.log('User data:', result);
-```
-
-For complete documentation, examples, and API reference, see:
-- [WebSocket Adapter Documentation](docs/websocket-adapter.md)
-- [WebSocketHandler API Reference](docs/websocket-handler.md)
+- **🔗 Event Subscription**: Subscribe to events with callbacks. Each subscription returns a unique id (a UUID) that you can use to unsubscribe.
+  - `subscribe<T>(event, callback, options?): string`
+- **❌ Event Unsubscription**: Stop receiving an event.
+  - `unsubscribe(event, callback)` removes the subscription made with that callback, with or without options
+  - `unsubscribeById(id)` removes the subscription with the id returned by `subscribe`
+- **🔄 Once-only Events**: `subscribeOnce(event, callback)` or `subscribe(event, callback, { once: true })` unsubscribes after the first event it handles.
+- **📣 Event Publishing**: `publish<T>(event, data?, options?)` returns a promise that resolves to `true` once the subscribers have run, or `false` if the event was canceled. Options set the timeout, the error policy and whether the event is cancelable.
+- **⏱️ Asynchronous and Synchronous Callbacks**: Callbacks can be plain or `async` functions. Async callbacks are awaited one after the other, in priority order.
+- **📚 Namespace Support**: Organize events with dot-separated names such as `user.profile.updated`.
+- **🌟 Wildcard Event Names**: Subscribe to patterns such as `user.*`, `*.created` or `system.*.error` (see [the rules](#using-wildcards-in-event-subscription)).
+- **🥇 Event Priority**: Control the order subscribers run in with `'high'`, `'normal'`, `'low'`, the `Priority` enum or any number (higher runs first).
+- **🔍 Event Filtering**: Run a callback only for events whose data passes one or more predicates, sync or async.
+- **🔄 Event Throttling**: Handle at most one event per time window. The first one is handled immediately.
+- **⏲️ Event Debouncing**: Handle only the last event of a burst, once events have stopped arriving for a while.
+- **🛑 Cancelable Events**: Publish with `cancelable: true`, and any subscriber can call `cancel()` to stop the subscribers after it.
+- **🔄 Event Transformation**: A subscriber can transform the data that the subscribers after it receive.
+- **🔄 Middleware Support**: Intercept events before they reach subscribers to modify their data, reroute them to another event name or cancel them, for all events or for event patterns.
+- **⚠️ Error Policies**: Choose per publish whether callback errors are logged, ignored, stop the event or reject the `publish` promise.
+- **⏱️ Timeouts for Asynchronous Callbacks**: `publish` waits up to 5 seconds (configurable) for each async callback, then reports it through the error policy and moves on.
+- **🔒 Event Schema Validation**: Validate event data per subscriber, with simple (boolean) or detailed validators, sync or async.
+- **📜 Event History**: Record events and replay them to late subscribers.
+- **🔍 Memory Leak Detection**: Get a warning when an event collects more subscriptions than expected.
+- **🌀 Recursion Protection**: Limit how deeply an event can re-publish itself from its own handlers (default depth 3, set in the constructor).
+- **🔍 Debugging Support**: Inspect subscriptions and middleware with `info()`.
+- **🛠️ Error Handling**: Empty event names throw (`subscribe`, `unsubscribe`) or reject (`publish`). Errors in callbacks are handled by the error policy.
+- **🔌 WebSocket Adapter**: An optional entry point that connects EvEm to a WebSocket server, with offline queueing, reconnection and request-response calls.
 
 ## Getting on Board
 
 ### Installation
 
-EvEm is published on npm as `@jcfigueiredo/evem`. It's an ES module with TypeScript types and no runtime dependencies, and needs Node.js 20 or later (or any modern browser or bundler).
+EvEm is published on npm as `@jcfigueiredo/evem`. It's an ES module with TypeScript types and no runtime dependencies, and needs Node.js 20 or later (or any modern browser or bundler). It generates subscription ids with `crypto.randomUUID()`, which browsers only provide in secure contexts (HTTPS or `localhost`).
 
 ```bash
 pnpm add @jcfigueiredo/evem
@@ -310,7 +57,8 @@ import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';
 Jump right in!
 
 ```typescript
-import { EvEm } from "@jcfigueiredo/evem";
+import { EvEm, type CancelableEvent } from "@jcfigueiredo/evem";
+
 const evem = new EvEm();
 
 // Subscribe to a party start event
@@ -318,267 +66,134 @@ evem.subscribe("party.start", () => {
   console.log("Let's get this party started!");
 });
 
-// Publish the party start event
-void evem.publish("party.start");
+// Publish the party start event. The promise resolves once the callbacks have run
+await evem.publish("party.start");
+// Output: Let's get this party started!
 
-// Using Asynchronous Callbacks
+// Callbacks receive the published data. Its type is `unknown` unless you give one
+interface Guest {
+  name: string;
+  vip: boolean;
+}
+
+evem.subscribe<Guest>("party.guest.arrived", (guest) => {
+  console.log(`Welcome, ${guest.name}!`);
+});
+
+await evem.publish<Guest>("party.guest.arrived", { name: "Alice", vip: false });
+// Output: Welcome, Alice!
+
+// Async callbacks are awaited before the next one runs
 evem.subscribe("party.end", async () => {
   console.log("Wrapping up the party...");
-  await new Promise(resolve => setTimeout(resolve, 1000)); // Simulating async operation
+  await new Promise(resolve => setTimeout(resolve, 1000)); // Simulating async work
   console.log("Party ended.");
 });
 
 await evem.publish("party.end");
+// Output:
+// Wrapping up the party...
+// Party ended.
 
-// Unsubscribing from an Event
+// Unsubscribe with the callback, or with the id subscribe() returned
 const danceCallback = () => console.log("Time to dance!");
-const subId = evem.subscribe("party.dance", danceCallback);
+evem.subscribe("party.dance", danceCallback);
 const musicSubId = evem.subscribe("party.music", () => console.log("Music is playing!"));
 
-// Later, to unsubscribe from the event
 evem.unsubscribe("party.dance", danceCallback);
 evem.unsubscribeById(musicSubId);
 
-// Using Filters
-evem.subscribe("user.login", 
-  (user) => {
-    console.log(`Admin user logged in: ${user.name}`);
-  }, 
-  {
-    // Only receive events for admin users
-    filter: (user) => user.role === 'admin'
-  }
-);
+// Wildcards: "party.*" matches party.start, party.guest.arrived, ...
+evem.subscribe("party.*", () => console.log("Something happened at the party"));
 
-// Multiple filters can be applied together
-evem.subscribe("payment.processed",
-  (payment) => {
-    console.log(`Large international payment processed: $${payment.amount}`);
-  },
-  {
-    filter: [
-      // Only large payments
-      (payment) => payment.amount > 1000,
-      // Only international payments
-      (payment) => payment.type === 'international'
-    ]
-  }
-);
-
-// Async filters are also supported
-evem.subscribe("document.created",
-  (doc) => {
-    console.log(`Valid document created: ${doc.id}`);
-  },
-  {
-    filter: async (doc) => {
-      // Simulate API validation check
-      const result = await validateDocumentAsync(doc);
-      return result.isValid;
-    }
-  }
-);
-
-// Using priority to control execution order
-evem.subscribe("app.startup", () => {
-  console.log("Initialize UI components");
-}, { priority: 'normal' });
-
-evem.subscribe("app.startup", () => {
-  console.log("Load critical services FIRST");
-}, { priority: 'high' });
-
-evem.subscribe("app.startup", () => {
-  console.log("Load non-essential resources LAST");
-}, { priority: 'low' });
-
-// The handlers will execute in order of priority: high, normal, low
-await evem.publish("app.startup");
-
-// Using event history and replay
-evem.enableHistory();  // Start recording events
-
-// Publish some events
-await evem.publish('sensor.reading', { value: 42, unit: 'celsius' });
-await evem.publish('sensor.reading', { value: 43, unit: 'celsius' });
-
-// Later, a new subscriber can get the last reading immediately
-evem.subscribe('sensor.reading', reading => {
-  console.log(`Current temperature: ${reading.value}${reading.unit}`);
-}, { replayLastEvent: true }); // Outputs "Current temperature: 43celsius" immediately
-
-// Or replay the entire history
-evem.subscribe('sensor.reading', reading => {
-  console.log(`Historical reading: ${reading.value}${reading.unit}`);
-}, { replayHistory: true }); // Replays all recorded sensor.reading events
-
-// Using memory leak detection
-evem.enableMemoryLeakDetection({
-  threshold: 10,                 // Warn when an event has more than 10 subscribers (default)
-  showSubscriptionDetails: true  // Show detailed info about subscriptions (default)
+// Filters: only VIP guests
+evem.subscribe<Guest>("party.guest.arrived", (guest) => {
+  console.log(`VIP alert: ${guest.name}`);
+}, {
+  filter: (guest) => guest.vip
 });
 
-// Now if you create many subscriptions to the same event without unsubscribing,
-// you'll get warnings in the console to help detect memory leaks
-for (let i = 0; i < 15; i++) {
-  evem.subscribe('button.click', () => console.log('Button clicked!')); 
+// Priorities: higher runs first ('high' = 100, 'normal' = 0, 'low' = -100);
+// equal priorities run in the order they subscribed
+evem.subscribe("party.guest.arrived", () => {
+  console.log("Open the door");
+}, { priority: 'high' });
+
+await evem.publish<Guest>("party.guest.arrived", { name: "Bob", vip: true });
+// Output:
+// Open the door
+// Welcome, Bob!
+// Something happened at the party
+// VIP alert: Bob
+
+// Cancelable events: a subscriber can stop the ones after it
+interface SignupForm {
+  email: string;
+  isValid: boolean;
 }
-// Warning: "Possible memory leak detected: 15 handlers added for event 'button.click'..."
 
-// Disable memory leak detection when no longer needed
-evem.disableMemoryLeakDetection();
-
-// Using cancelable events
-evem.subscribe("form.submit", (event) => {
+evem.subscribe<SignupForm & CancelableEvent>("form.submit", (form) => {
   console.log("Validating form...");
-  if (!event.data.isValid) {
+  if (!form.isValid) {
     console.log("Form validation failed, canceling submission.");
-    event.cancel(); // Stop further processing
+    form.cancel(); // Stop further processing
     return;
   }
   console.log("Form validation passed.");
 });
 
-evem.subscribe("form.submit", (event) => {
-  console.log("Submitting form to server...");
-  // This won't execute if the event is canceled by the first handler
+evem.subscribe<SignupForm>("form.submit", (form) => {
+  // Doesn't run when the first subscriber cancels the event
+  console.log(`Submitting ${form.email} to the server...`);
 });
 
-// Publish a cancelable event
-const formData = { isValid: false };
+const formData: SignupForm = { email: "alice@example.com", isValid: false };
 const eventCompleted = await evem.publish("form.submit", formData, { cancelable: true });
 
 console.log(eventCompleted ? "Form submitted successfully" : "Form submission was canceled");
-
-// Using schema validation
-// First, define an interface for your event data
-interface UserData {
-  id: number;
-  name: string;
-  email: string;
-  age: number;
-}
-
-// Simple schema validator
-const userSchema = (data: UserData) => {
-  return (
-    typeof data === 'object' &&
-    typeof data.id === 'number' &&
-    typeof data.name === 'string' &&
-    typeof data.email === 'string' && 
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email) && // Email validation
-    typeof data.age === 'number' &&
-    data.age >= 18 // Must be 18 or older
-  );
-};
-
-// Advanced schema validator with detailed errors
-const advancedUserSchema = (data: any) => {
-  const errors = [];
-  
-  if (!data || typeof data !== 'object') {
-    return { valid: false, errors: [{ message: 'Data must be an object' }] };
-  }
-  
-  if (typeof data.id !== 'number') {
-    errors.push({ message: 'ID must be a number', path: 'id' });
-  }
-  
-  if (typeof data.name !== 'string' || data.name.length < 2) {
-    errors.push({ message: 'Name must be a string with at least 2 characters', path: 'name' });
-  }
-  
-  if (typeof data.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
-    errors.push({ message: 'Email must be a valid email address', path: 'email' });
-  }
-  
-  if (typeof data.age !== 'number' || data.age < 18) {
-    errors.push({ message: 'Age must be a number and 18 or older', path: 'age' });
-  }
-  
-  return { 
-    valid: errors.length === 0,
-    errors: errors.length > 0 ? errors : undefined
-  };
-};
-
-// Subscribe with schema validation
-evem.subscribe<UserData>('user.register', (user) => {
-  console.log(`User registered successfully: ${user.name}, ${user.email}`);
-}, {
-  schema: userSchema
-});
-
-// Subscribe with advanced schema validation and custom error policy
-evem.subscribe<UserData>('user.register', (user) => {
-  console.log(`Processing valid user registration: ${user.name}`);
-}, {
-  schema: advancedUserSchema,
-  schemaErrorPolicy: ErrorPolicy.LOG_AND_CONTINUE // Log errors but still execute callback
-});
-
-// This will trigger the callback (valid data)
-await evem.publish('user.register', {
-  id: 1,
-  name: 'Alice',
-  email: 'alice@example.com',
-  age: 25
-});
-
-// This will fail schema validation (invalid email and age)
-await evem.publish('user.register', {
-  id: 2,
-  name: 'Bob',
-  email: 'invalid-email',
-  age: 16
-});
+// Output:
+// Validating form...
+// Form validation failed, canceling submission.
+// Form submission was canceled
 ```
 
-## Managing Timeouts in Callbacks
+The sections below cover each feature in detail, including schema validation, event history and memory leak detection.
 
-EvEm's flexible design allows for managing timeouts in asynchronous callbacks, ensuring they don't hang indefinitely.
+## How an Event Is Processed
 
-### Setting a Default Timeout
+When you call `publish(event, data, options)`:
 
-When publishing an event, you can set a default timeout for all its callbacks. This is useful when you want to ensure that all callbacks complete within a specific time frame.
+1. **Middleware** runs in registration order. Each middleware whose pattern matches the event name (middleware without a pattern sees every event) receives the data returned by the previous one. Returning `null` cancels the event; returning a new `{ event, data }` object reroutes it (see [Middleware](#middleware)).
+2. The event is recorded in **history**, if enabled, with the data as the middleware left it.
+3. If the event is **cancelable**, `cancel()` and `canceled` are added to the data.
+4. **Subscribers** whose event name or pattern matches run one at a time, highest priority first. Equal priorities run in the order they subscribed, also across different patterns. For each subscriber, its options apply in this order:
+   1. schema validation
+   2. filters
+   3. throttle/debounce
+   4. once (the subscription is removed just before the callback runs)
+   5. the callback (an async callback is awaited, up to the publish `timeout`)
+   6. the subscriber's transform, whose result is what the following subscribers receive
+5. The promise resolves to `true`, or to `false` if a middleware returned `null` (or threw), a subscriber called `cancel()`, or an error stopped the event under `ErrorPolicy.CANCEL_ON_ERROR`. It rejects when an error occurs under `ErrorPolicy.THROW`, when a schema check fails with `schemaErrorPolicy: ErrorPolicy.THROW`, and when the event name is empty or the [recursion limit](#recursion-protection) is exceeded.
 
-```typescript
-// Set a 3000 ms timeout for all callbacks of this event
-await evem.publish("network.request", requestData, 3000);
-```
-
-### Default Timeout Value
-
-If no timeout is specified when publishing an event, a default timeout of 5000ms (5 seconds) is used.
-
-```typescript
-// Uses the default 5000ms timeout
-await evem.publish("data.process", processData);
-```
-
-### Handling Timeout Exceedance
-
-When a callback exceeds the specified timeout, it will be gracefully terminated, ensuring that your application remains responsive and avoids potential hang-ups.
-
-```typescript
-evem.subscribe("user.activity", async () => {
-  try {
-    await trackUserActivity();
-  } catch (error) {
-    console.error("User activity tracking timed out");
-  }
-});
-```
-
-These timeout management features make EvEm a robust solution for handling asynchronous operations in your applications.
+An event stopped at one step doesn't reach the later steps of that subscriber: an event rejected by a filter doesn't start a throttle window or use up a `once` subscription, and a transform only applies when its own callback handled the event during the publish.
 
 ## Using Wildcards in Event Subscription
 
-EvEm supports wildcard patterns in event subscriptions, allowing for more dynamic and flexible event handling.
+EvEm supports wildcard patterns in event subscriptions, allowing for more dynamic and flexible event handling. Event names are split on dots into segments, and `*` stands for segments:
+
+| Pattern | Matches | Doesn't match |
+|---|---|---|
+| `*` | every event | |
+| `user.*` | `user.login`, `user.profile.updated` | `user` |
+| `*.created` | `user.created` | `admin.user.created` |
+| `system.*.error` | `system.db.error` | `system.error`, `system.db.pool.error` |
+
+- `*` on its own matches every event.
+- A `*` at the end of a pattern matches **one or more** segments. `user.*` doesn't match `user` itself; subscribe to both if you need both.
+- A `*` at the start or in the middle of a pattern matches **exactly one** segment.
+- Wildcards work in subscription patterns, middleware patterns, `getEventHistory()` and `info()`. Publish concrete event names.
 
 ### Subscribe to All Events in a Category
-
-You can subscribe to all events within a certain category using the wildcard `*`.
 
 ```typescript
 // Subscribe to all events that start with 'network.'
@@ -589,25 +204,21 @@ evem.subscribe("network.*", data => {
 
 ### Using Wildcards for Multi-level Events
 
-Wildcards can also be used for subscribing to multi-level events, providing great flexibility in handling event hierarchies.
-
 ```typescript
-// Subscribe to any event that matches 'system.*.error'
+// Subscribe to events like 'system.db.error' or 'system.cache.error'
 evem.subscribe("system.*.error", error => {
   console.error("System error detected:", error);
 });
 ```
 
-These wildcard capabilities make EvEm an ideal choice for applications requiring complex event handling strategies.
-
 ## Middleware
 
-EvEm allows you to register middleware functions that can intercept, transform, or cancel events before they reach subscribers.
+EvEm allows you to register middleware functions that can intercept, transform, or cancel events before they reach subscribers. Middleware runs in registration order; each one receives the event name and the data returned by the previous one.
 
 ### Basic Middleware Usage
 
 ```typescript
-import { EvEm, MiddlewareFunction } from "@jcfigueiredo/evem";
+import { EvEm, type MiddlewareFunction } from "@jcfigueiredo/evem";
 const evem = new EvEm();
 
 // Create a middleware that adds metadata to all events
@@ -622,8 +233,14 @@ const addMetadataMiddleware: MiddlewareFunction = (event, data) => {
 // Register the middleware
 evem.use(addMetadataMiddleware);
 
+interface LoginEvent {
+  username: string;
+  timestamp: number;
+  eventName: string;
+}
+
 // Register an event handler that can use the metadata
-evem.subscribe('user.login', (data) => {
+evem.subscribe<LoginEvent>('user.login', (data) => {
   console.log(`User logged in at ${new Date(data.timestamp).toISOString()}`);
   console.log(`Event: ${data.eventName}`);
   console.log(`Username: ${data.username}`);
@@ -631,8 +248,8 @@ evem.subscribe('user.login', (data) => {
 
 // Publish an event
 await evem.publish('user.login', { username: 'alice' });
-// Output:
-// User logged in at 2023-05-20T15:30:45.123Z
+// Output (with the current time):
+// User logged in at 2026-10-02T15:30:45.123Z
 // Event: user.login
 // Username: alice
 ```
@@ -642,7 +259,7 @@ await evem.publish('user.login', { username: 'alice' });
 You can apply middleware to specific event patterns, allowing for more targeted event processing:
 
 ```typescript
-import { EvEm, MiddlewareConfig } from "@jcfigueiredo/evem";
+import { EvEm, type MiddlewareConfig } from "@jcfigueiredo/evem";
 const evem = new EvEm();
 
 // Middleware that only applies to user events
@@ -652,10 +269,7 @@ const userEventsMiddleware: MiddlewareConfig = {
     console.log(`Processing user event: ${event}`);
     return {
       ...data,
-      audit: {
-        processedAt: new Date(),
-        eventType: 'user'
-      }
+      audit: { eventType: 'user' }
     };
   }
 };
@@ -676,23 +290,30 @@ const creationEventsMiddleware: MiddlewareConfig = {
 evem.use(userEventsMiddleware);
 evem.use(creationEventsMiddleware);
 
-// These events will trigger different middleware
-await evem.publish('user.login', { id: 1 });  // Only triggers user middleware
-await evem.publish('product.created', { id: 2 });  // Only triggers creation middleware
-await evem.publish('user.created', { id: 3 });  // Triggers both middleware
-
 // Subscribe to see the results
 evem.subscribe('user.created', (data) => {
   console.log('User created:', data);
-  // Output: User created: { id: 3, isNew: true, audit: { processedAt: "...", eventType: "user" } }
 });
+
+// These events will trigger different middleware
+await evem.publish('user.login', { id: 1 });      // Only the user middleware runs
+await evem.publish('product.created', { id: 2 }); // Only the creation middleware runs
+await evem.publish('user.created', { id: 3 });    // Both run, in registration order
+// Output:
+// Processing user event: user.login
+// Processing creation event: product.created
+// Processing user event: user.created
+// Processing creation event: user.created
+// User created: { id: 3, audit: { eventType: 'user' }, isNew: true }
 ```
 
 ### Event Transformation and Redirection
 
-Middleware can also transform events or redirect them to different event types:
+Middleware can also redirect events to a different event name:
 
 ```typescript
+import type { MiddlewareFunction } from "@jcfigueiredo/evem";
+
 // Create a middleware that redirects events based on roles
 const routingMiddleware: MiddlewareFunction = (event, data) => {
   if (event === 'user.action' && data.role === 'admin') {
@@ -725,19 +346,21 @@ await evem.publish('user.action', { role: 'admin', action: 'delete' });
 // Output: Admin action (redirected): { role: 'admin', action: 'delete' }
 ```
 
-A redirect is a new object with exactly two properties, `event` (a string) and `data`. Returning the original data unchanged, or a copy with extra properties, never redirects — even when the payload itself has `event` and `data` fields, like `{ event: 'chat.send', data: {...} }` messages sent over `ws.send`.
+A redirect is a **new** object with **exactly two** properties, `event` (a string) and `data`. Returning the original data unchanged, or a copy with extra properties, never redirects, even when the payload itself has `event` and `data` fields, like `{ event: 'chat.send', data: {...} }` messages sent over `ws.send`. After a redirect, later middleware is matched against the new event name, the subscribers of the new event receive it, and history records it under the new name.
 
 ### Event Filtering with Middleware
 
-Middleware can be used to filter or cancel events based on global conditions:
+Middleware can be used to filter or cancel events based on global conditions. Returning `null` cancels the event: no subscriber receives it and `publish` resolves to `false`. A middleware that throws also cancels the event (the error is logged).
 
 ```typescript
+import type { MiddlewareFunction } from "@jcfigueiredo/evem";
+
 // Create a middleware that implements a permissions system
 const permissionsMiddleware: MiddlewareFunction = (event, data) => {
   // Check if this event requires permissions
   if (event.startsWith('secure.')) {
     // Check if the user has permissions
-    if (!data.user || !data.user.permissions || !data.user.permissions.includes('admin')) {
+    if (!data.user?.permissions?.includes('admin')) {
       // Cancel the event by returning null
       console.log('Access denied: Admin permission required');
       return null;
@@ -760,12 +383,12 @@ await evem.publish('secure.data.access', { user: { name: 'bob', permissions: ['u
 
 // This will pass the middleware check
 await evem.publish('secure.data.access', { user: { name: 'alice', permissions: ['admin'] } });
-// Output: Accessing secure data: { user: { name: 'alice', permissions: ['admin'] } }
+// Output: Accessing secure data: { user: { name: 'alice', permissions: [ 'admin' ] } }
 ```
 
 ## Error Policy Configuration
 
-EvEm allows you to configure how errors in event callbacks are handled through different error policies.
+EvEm allows you to configure, per publish, how errors in event callbacks are handled through different error policies.
 
 ### Using Different Error Policies
 
@@ -774,7 +397,7 @@ import { EvEm, ErrorPolicy } from "@jcfigueiredo/evem";
 const evem = new EvEm();
 
 // Register handlers
-evem.subscribe('process.data', data => {
+evem.subscribe<{ isValid: boolean }>('process.data', (data) => {
   // This handler might throw
   if (!data.isValid) {
     throw new Error('Invalid data format');
@@ -782,23 +405,30 @@ evem.subscribe('process.data', data => {
   console.log('Processing data:', data);
 });
 
-// Default behavior: Log errors and continue
-await evem.publish('process.data', { isValid: false });
-// Error is logged to console, but execution continues
+evem.subscribe('process.data', () => {
+  console.log('Second handler ran');
+});
 
-// Silent policy: Ignore errors completely
+// Default behavior: log the error and continue
+await evem.publish('process.data', { isValid: false });
+// Logs: Error in event handler for "process.data": Error: Invalid data format ...
+// Output: Second handler ran
+
+// Silent policy: ignore errors completely
 await evem.publish('process.data', { isValid: false }, {
   errorPolicy: ErrorPolicy.SILENT
 });
-// No error logging, silently continues
+// Output: Second handler ran
 
-// Cancel policy: Stop event propagation when an error occurs
-await evem.publish('process.data', { isValid: false }, {
+// Cancel policy: log the error and stop the event
+const completed = await evem.publish('process.data', { isValid: false }, {
   errorPolicy: ErrorPolicy.CANCEL_ON_ERROR
 });
-// Error is logged, but propagation stops and returns false
+// Logs: Error in event handler for "process.data": Error: Invalid data format ...
+console.log(completed);
+// Output: false
 
-// Throw policy: Rethrow the error to the caller
+// Throw policy: stop the event and reject with the error
 try {
   await evem.publish('process.data', { isValid: false }, {
     errorPolicy: ErrorPolicy.THROW
@@ -809,6 +439,20 @@ try {
 }
 ```
 
+| Policy | The error | Remaining subscribers | `publish` |
+|---|---|---|---|
+| `LOG_AND_CONTINUE` (default) | logged with `console.error` | run | resolves `true` |
+| `SILENT` | ignored | run | resolves `true` |
+| `CANCEL_ON_ERROR` | logged | skipped | resolves `false` |
+| `THROW` | passed to the caller | skipped | rejects with the error |
+
+The policy applies to errors thrown by callbacks and transforms (including rejected promises), and to [timeouts](#managing-timeouts-in-callbacks). When a transform fails and the event continues, the next subscribers receive the data unchanged. Other errors are handled where they happen:
+
+- A filter that throws is logged and counts as rejecting the event.
+- A middleware that throws is logged and cancels the event (`publish` resolves `false`).
+- A failed schema validation follows the subscription's `schemaErrorPolicy` (see [Schema Validation](#schema-validation)).
+- Debounced calls and history replays run outside any `publish`, so their errors are logged.
+
 ### Use Cases for Different Error Policies
 
 Different error policies are useful in different scenarios:
@@ -818,60 +462,53 @@ Different error policies are useful in different scenarios:
 - **CANCEL_ON_ERROR**: Good for validation chains where any failure should halt the process
 - **THROW**: Useful when the caller needs to handle errors from event handlers directly
 
-## Error Policy Configuration
+## Managing Timeouts in Callbacks
 
-EvEm allows you to configure how errors in event callbacks are handled through different error policies.
+`publish` waits for each async callback (and each async transform) before running the next subscriber, but only up to a timeout: 5000 ms by default, or the `timeout` you pass. The timeout applies to each callback separately, not to the whole publish.
 
-### Using Different Error Policies
+```typescript
+import { ErrorPolicy } from "@jcfigueiredo/evem";
+
+// Wait up to 3000 ms for each callback of this event
+await evem.publish("network.request", requestData, 3000);
+
+// The same, combined with other options
+await evem.publish("network.request", requestData, {
+  timeout: 3000,
+  errorPolicy: ErrorPolicy.THROW
+});
+
+// Uses the default 5000 ms timeout
+await evem.publish("data.process", processData);
+```
+
+### Handling Timeout Exceedance
+
+A callback that takes longer than the timeout is reported as an error, `Event handler timed out after 3000ms`, and handled by the publish [error policy](#error-policy-configuration): logged by default, ignored with `SILENT`, stopping the event with `CANCEL_ON_ERROR` and rejecting `publish` with `THROW`. `publish` stops waiting for it, but **the callback itself keeps running**: JavaScript can't stop a running function. If the work should stop too, give it its own deadline, for example with `fetch(url, { signal: AbortSignal.timeout(3000) })`.
 
 ```typescript
 import { EvEm, ErrorPolicy } from "@jcfigueiredo/evem";
 const evem = new EvEm();
 
-// Register handlers
-evem.subscribe('process.data', data => {
-  // This handler might throw
-  if (!data.isValid) {
-    throw new Error('Invalid data format');
-  }
-  console.log('Processing data:', data);
+evem.subscribe("report.generate", async () => {
+  await new Promise(resolve => setTimeout(resolve, 2000)); // Slow work
+  console.log("Report finished");
 });
 
-// Default behavior: Log errors and continue
-await evem.publish('process.data', { isValid: false });
-// Error is logged to console, but execution continues
-
-// Silent policy: Ignore errors completely
-await evem.publish('process.data', { isValid: false }, {
-  errorPolicy: ErrorPolicy.SILENT
-});
-// No error logging, silently continues
-
-// Cancel policy: Stop event propagation when an error occurs
-await evem.publish('process.data', { isValid: false }, {
-  errorPolicy: ErrorPolicy.CANCEL_ON_ERROR
-});
-// Error is logged, but propagation stops and returns false
-
-// Throw policy: Rethrow the error to the caller
 try {
-  await evem.publish('process.data', { isValid: false }, {
+  await evem.publish("report.generate", undefined, {
+    timeout: 500,
     errorPolicy: ErrorPolicy.THROW
   });
 } catch (error) {
-  console.error('Caught error from event handler:', error);
-  // Handle the error at the caller level
+  console.log((error as Error).message);
 }
+// Output:
+// Event handler timed out after 500ms
+// Report finished   <- 1.5 seconds later: the callback wasn't stopped
 ```
 
-### Use Cases for Different Error Policies
-
-Different error policies are useful in different scenarios:
-
-- **LOG_AND_CONTINUE**: Good for non-critical handlers where failures should be noted but not impact other handlers
-- **SILENT**: Useful for optional features where errors shouldn't clutter logs
-- **CANCEL_ON_ERROR**: Good for validation chains where any failure should halt the process
-- **THROW**: Useful when the caller needs to handle errors from event handlers directly
+A transform that times out is handled the same way (`Transform timed out after 500ms`), and the next subscribers receive the data unchanged.
 
 ## Throttling Events
 
@@ -879,31 +516,37 @@ EvEm provides built-in throttling, which is useful when you need to limit the ra
 
 ### Basic Throttling
 
+The first event is handled immediately and starts a time window; events published during the window are dropped (not delayed).
+
 ```typescript
 // Handle scroll events at most once every 200ms
 evem.subscribe('window.scroll', updateScrollIndicator, {
   throttleTime: 200
 });
 
-// Only the first event and events after the throttle window will be processed
-evem.publish('window.scroll', { position: 100 }); // Processed immediately
-evem.publish('window.scroll', { position: 120 }); // Ignored (within throttle window)
-evem.publish('window.scroll', { position: 150 }); // Ignored (within throttle window)
+await evem.publish('window.scroll', { position: 100 }); // Handled immediately
+await evem.publish('window.scroll', { position: 120 }); // Dropped (within the throttle window)
+await evem.publish('window.scroll', { position: 150 }); // Dropped (within the throttle window)
 
-// ... 200ms later ...
+await new Promise(resolve => setTimeout(resolve, 200)); // ... 200ms later ...
 
-evem.publish('window.scroll', { position: 300 }); // Processed (new throttle window)
+await evem.publish('window.scroll', { position: 300 }); // Handled (new throttle window)
 ```
 
 ### Combining Throttle with Filters
 
-Throttling can be combined with filters to control both the rate and conditions of event handling:
+Throttling can be combined with filters to control both the rate and conditions of event handling. Filters run first, so events they reject don't start a throttle window:
 
 ```typescript
+let lastValue = 0;
+
 // Process large value changes at most once every 500ms
-evem.subscribe('sensor.reading', updateDisplay, {
+evem.subscribe<{ value: number }>('sensor.reading', (reading) => {
+  lastValue = reading.value;
+  updateDisplay(reading);
+}, {
   throttleTime: 500,
-  filter: reading => Math.abs(reading.value - lastValue) > 5
+  filter: (reading) => Math.abs(reading.value - lastValue) > 5
 });
 ```
 
@@ -915,48 +558,60 @@ EvEm provides built-in debouncing, which is useful when you need to limit how of
 
 ### Basic Debouncing
 
+Each event restarts the timer; the callback runs once, `debounceTime` ms after the last event, with that event's data.
+
 ```typescript
-// Only handle the last resize event in each 300ms window
+// Only handle the last resize event once resizing pauses for 300ms
 evem.subscribe('window.resize', updateLayout, {
   debounceTime: 300
 });
 
-// These will all be collapsed into one call to updateLayout
-evem.publish('window.resize', { width: 800, height: 600 });
-evem.publish('window.resize', { width: 810, height: 600 });
-evem.publish('window.resize', { width: 820, height: 610 });
+// These will all be collapsed into one call: updateLayout({ width: 820, height: 610 }), 300ms later
+await evem.publish('window.resize', { width: 800, height: 600 });
+await evem.publish('window.resize', { width: 810, height: 600 });
+await evem.publish('window.resize', { width: 820, height: 610 });
 ```
+
+A debounced call happens after `publish` has resolved, so it's outside the publish: `publish` doesn't wait for it, its errors are logged instead of going through the error policy, and the subscriber's transform isn't applied.
 
 ### Combining Debounce with Filters
 
-Debouncing can be combined with filtering for powerful control over event processing:
+Debouncing can be combined with filtering for powerful control over event processing. Events the filters reject don't restart the timer:
 
 ```typescript
-// Debounce important notifications from a specific user
-evem.subscribe('notification.received', showNotification, {
+interface AppNotification {
+  importance: 'high' | 'low';
+  from: string;
+  text: string;
+}
+
+// Debounce important notifications from the system
+evem.subscribe<AppNotification>('notification.received', (notification) => {
+  showNotification(notification.text);
+}, {
   debounceTime: 500,
-  filter: notification => 
-    notification.importance === 'high' && 
+  filter: (notification) =>
+    notification.importance === 'high' &&
     notification.from === 'system'
 });
 ```
 
 ### Combining Throttle and Debounce
 
-For advanced control, you can combine both throttling and debouncing:
+With both options, an event is handled immediately when more than `throttleTime` ms have passed since the last event that was handled immediately. Other events are debounced: the latest one is handled `debounceTime` ms after it arrived, unless an event is handled immediately first. While events keep coming, the callback runs at the start of each throttle window, and once they stop, one more time with the last event:
 
 ```typescript
-// Process the first event immediately, then wait for a pause in events
+// While the user types: suggest at most every 300ms, and once more 500ms after the last keystroke
 evem.subscribe('user.typing', suggestCompletions, {
-  throttleTime: 100,  // Process immediately, then throttle
-  debounceTime: 500   // Wait for typing to pause before suggesting again
+  throttleTime: 300,
+  debounceTime: 500
 });
 ```
 
 This combination is particularly useful for handling scenarios like:
-- Autocomplete suggestions - show immediate results then wait for typing to pause
-- Infinite scrolling - load immediately on first scroll, then wait for scrolling to stop
-- Progress updates - show first update right away, then only show updates after activity pauses
+- Autocomplete suggestions - show results while the user types, and for the final input
+- Infinite scrolling - load while the user scrolls, and once more where scrolling stops
+- Progress updates - show updates at a steady rate, and always the final one
 
 ## Using Cancelable Events
 
@@ -976,25 +631,50 @@ if (!result) {
 
 ### Canceling Events in Handlers
 
-Event handlers receive an object with a `cancel()` method that can be called to prevent further handlers from executing:
+Subscribers of a cancelable event receive the published data with two extra members: `cancel()`, which stops the subscribers after this one (and this subscriber's own transform), and `canceled`, which tells whether the event has been canceled. The `CancelableEvent` type describes them.
 
 ```typescript
-// Permission check handler
-evem.subscribe('user.delete', (event) => {
-  if (event.user.role !== 'admin') {
+import { EvEm, type CancelableEvent } from "@jcfigueiredo/evem";
+const evem = new EvEm();
+
+interface DeleteRequest {
+  userId: number;
+  requestedBy: { role: string };
+}
+
+// Permission check handler (high priority, so it runs first)
+evem.subscribe<DeleteRequest & CancelableEvent>('user.delete', (event) => {
+  if (event.requestedBy.role !== 'admin') {
     console.log('Permission denied: Only admins can delete users');
     event.cancel(); // Stop propagation
     return;
   }
   console.log('Permission granted');
-});
+}, { priority: 'high' });
 
 // Action handler - will only execute if the event wasn't canceled
-evem.subscribe('user.delete', (event) => {
-  console.log('Deleting user:', event.user.id);
-  deleteUser(event.user.id);
+evem.subscribe<DeleteRequest>('user.delete', (event) => {
+  console.log('Deleting user:', event.userId);
 });
+
+const deleted = await evem.publish<DeleteRequest>('user.delete', {
+  userId: 42,
+  requestedBy: { role: 'editor' }
+}, { cancelable: true });
+console.log(deleted);
+// Output:
+// Permission denied: Only admins can delete users
+// false
 ```
+
+How the data is delivered depends on its type:
+
+- **Plain objects** are shallow-copied, and the copy gets `cancel()` and `canceled`. A missing payload becomes `{}`, so it can be canceled too.
+- **Arrays** are copied and stay arrays.
+- **Other objects** (`Date`, `Map`, class instances) are wrapped in a proxy that keeps their type and methods.
+- **Primitives** (strings, numbers, booleans, `null`) are delivered unchanged, without `cancel()`. Wrap them in an object if a subscriber needs to cancel.
+
+History records the data without `cancel()` and `canceled`.
 
 ### Use Cases for Cancelable Events
 
@@ -1011,17 +691,18 @@ Cancelable events are ideal for:
 Cancelable events work well with priorities to ensure critical checks happen before resource-intensive operations:
 
 ```typescript
+import type { CancelableEvent } from "@jcfigueiredo/evem";
+
 // High priority security check runs first
-evem.subscribe('document.save', (event) => {
+evem.subscribe<CancelableEvent>('document.save', (event) => {
   if (!isAuthenticated()) {
     event.cancel();
-    return;
   }
 }, { priority: 'high' });
 
 // Normal priority business logic only runs if security check passes
-evem.subscribe('document.save', (event) => {
-  // Process document
+evem.subscribe('document.save', (document) => {
+  saveDocument(document);
 }, { priority: 'normal' });
 ```
 
@@ -1033,7 +714,7 @@ EvEm provides once-only events that automatically unsubscribe after being trigge
 
 ```typescript
 // Using the dedicated method
-evem.subscribeOnce('user.initial-login', userData => {
+evem.subscribeOnce<{ name: string }>('user.initial-login', (userData) => {
   console.log('Welcome to the app!', userData.name);
   showOnboardingTutorial();
 });
@@ -1042,14 +723,18 @@ evem.subscribeOnce('user.initial-login', userData => {
 evem.subscribe('app.ready', initializeApp, { once: true });
 ```
 
+The subscription is removed just before the callback runs, so it fires exactly once, even when events arrive concurrently or are replayed from history.
+
 ### Combining Once with Other Options
 
-Once-only events can be combined with filters, throttling and debouncing:
+Once-only events can be combined with filters, throttling and debouncing. Only an event that gets through them uses up the subscription:
 
 ```typescript
-// Only execute once for the first important notification
-evem.subscribeOnce('notification', showWelcomeDialog, {
-  filter: notification => notification.type === 'important',
+// Only execute once, for the first important notification
+evem.subscribeOnce<{ type: string; message: string }>('notification', (notification) => {
+  showWelcomeDialog(notification.message);
+}, {
+  filter: (notification) => notification.type === 'important',
   debounceTime: 100 // In case multiple notifications arrive simultaneously
 });
 ```
@@ -1062,7 +747,7 @@ This is ideal for:
 
 ## Prioritizing Events
 
-EvEm allows you to assign priorities to event handlers, giving you control over the execution order when multiple callbacks are triggered by the same event.
+EvEm allows you to assign priorities to event handlers, giving you control over the execution order when multiple callbacks are triggered by the same event. Handlers with equal priority run in the order they subscribed, also when they subscribed with different patterns.
 
 ### Basic Priority Levels
 
@@ -1082,6 +767,10 @@ evem.subscribe('system.startup', () => {
 
 // Publish the event
 await evem.publish('system.startup');
+// Output:
+// Database connection established
+// Middleware initialized
+// Analytics tracking started
 ```
 
 ### Using the Priority Enum
@@ -1124,7 +813,7 @@ evem.subscribe('render', () => {
 
 evem.subscribe('render', () => {
   console.log('Draw UI overlay');
-}, { priority: 20 });   // Low priority - executes third 
+}, { priority: 20 });   // Low priority - executes third
 
 evem.subscribe('render', () => {
   console.log('Draw debug information');
@@ -1138,12 +827,18 @@ await evem.publish('render');
 Priority can be combined with other features like filters, throttling, or debouncing:
 
 ```typescript
+interface UserAction {
+  role: string;
+  action: string;
+  actionType: string;
+}
+
 // Priority with filter
-evem.subscribe('user.action', (user) => {
+evem.subscribe<UserAction>('user.action', (user) => {
   console.log('Critical admin action detected:', user.action);
 }, {
   priority: 'high',
-  filter: user => user.role === 'admin' && user.actionType === 'critical'
+  filter: (user) => user.role === 'admin' && user.actionType === 'critical'
 });
 
 // Priority with once
@@ -1159,33 +854,42 @@ The priority system ensures that your most critical handlers execute first, prov
 
 ## Event Transformation
 
-EvEm allows you to transform event data before it's passed to the next subscriber in the chain. This is useful for enriching, modifying, or adapting event data in sequence.
+A subscriber can have a `transform` function. It runs right after that subscriber's callback, and its result is the data that the subscribers after it (lower priority, or subscribed later with the same priority) receive. This is useful for enriching, modifying, or adapting event data in sequence.
+
+A transform only applies when its subscriber handled the event: not when the subscriber's filter or schema rejected it, while the subscriber is throttled, for debounced calls, or after a `once` subscription has fired. It doesn't run when its callback canceled the event. History keeps the data as the middleware left it, before any transform.
 
 ### Basic Transformation
 
 ```typescript
-// Create a subscriber that transforms event data
-emitter.subscribe('user.login', (user) => {
+interface LoginEvent {
+  name: string;
+  id: number;
+}
+
+interface EnrichedLogin extends LoginEvent {
+  timestamp: number;
+  clientInfo: { browser: string; os: string };
+}
+
+// A subscriber that also transforms the event data for the subscribers after it
+evem.subscribe<LoginEvent>('user.login', (user) => {
   console.log(`User logged in: ${user.name}`);
 }, {
-  transform: (user) => {
-    // Add timestamp and client info to the event
-    return {
-      ...user,
-      timestamp: Date.now(),
-      clientInfo: detectClientInfo()
-    };
-  }
+  transform: (user): EnrichedLogin => ({
+    ...user,
+    timestamp: Date.now(),
+    clientInfo: detectClientInfo()
+  })
 });
 
 // Next subscriber receives the transformed data
-emitter.subscribe('user.login', (userData) => {
+evem.subscribe<EnrichedLogin>('user.login', (userData) => {
   console.log(`Login recorded at ${new Date(userData.timestamp).toISOString()}`);
   console.log(`Client: ${userData.clientInfo.browser} on ${userData.clientInfo.os}`);
 });
 
 // Publish with original data
-await emitter.publish('user.login', { name: 'Alice', id: 123 });
+await evem.publish<LoginEvent>('user.login', { name: 'Alice', id: 123 });
 ```
 
 ### Transformation Chain
@@ -1193,8 +897,17 @@ await emitter.publish('user.login', { name: 'Alice', id: 123 });
 Multiple subscribers can transform the data in sequence, creating a data processing pipeline:
 
 ```typescript
+interface Message {
+  content: string;
+  sender: string;
+}
+
+interface CountedMessage extends Message {
+  wordCount: number;
+}
+
 // First subscriber normalizes the data
-emitter.subscribe('message.received', (msg) => {
+evem.subscribe<Message>('message.received', () => {
   console.log('Processing message...');
 }, {
   priority: 'high',
@@ -1205,44 +918,57 @@ emitter.subscribe('message.received', (msg) => {
 });
 
 // Second subscriber enriches the data
-emitter.subscribe('message.received', (msg) => {
+evem.subscribe<Message>('message.received', () => {
   console.log('Enriching message...');
 }, {
   priority: 'normal',
-  transform: (msg) => ({
+  transform: (msg): CountedMessage => ({
     ...msg,
-    wordCount: msg.content.split(/\s+/).length,
-    sentiment: analyzeSentiment(msg.content)
+    wordCount: msg.content.split(/\s+/).length
   })
 });
 
-// Final subscriber receives fully transformed data
-emitter.subscribe('message.received', (msg) => {
+// Final subscriber receives the data transformed by both
+evem.subscribe<CountedMessage>('message.received', (msg) => {
   console.log(`Message: "${msg.content}"`);
   console.log(`Word count: ${msg.wordCount}`);
-  console.log(`Sentiment: ${msg.sentiment}`);
 }, { priority: 'low' });
 
 // Original data is simple
-await emitter.publish('message.received', { 
+await evem.publish<Message>('message.received', {
   content: '  Hello World!  ',
   sender: 'user1'
 });
+// Output:
+// Processing message...
+// Enriching message...
+// Message: "hello world!"
+// Word count: 2
 ```
 
 ### Async Transformations
 
-Transformations can be asynchronous, automatically waiting for completion before proceeding:
+Transformations can be asynchronous; `publish` waits for them (up to its timeout) before running the next subscriber:
 
 ```typescript
-emitter.subscribe('document.upload', (doc) => {
+interface UploadedDocument {
+  content: string;
+}
+
+interface ProcessedDocument extends UploadedDocument {
+  metadata: { author: string };
+  tags: string[];
+  processedAt: Date;
+}
+
+evem.subscribe<UploadedDocument>('document.upload', () => {
   console.log('Document received');
 }, {
-  transform: async (doc) => {
+  transform: async (doc): Promise<ProcessedDocument> => {
     // Perform async enrichment
     const metadata = await extractMetadata(doc.content);
     const tags = await autoTagDocument(doc.content);
-    
+
     return {
       ...doc,
       metadata,
@@ -1253,8 +979,8 @@ emitter.subscribe('document.upload', (doc) => {
 });
 
 // Next subscriber gets the enriched document
-emitter.subscribe('document.upload', (doc) => {
-  console.log(`Document processed at ${doc.processedAt}`);
+evem.subscribe<ProcessedDocument>('document.upload', (doc) => {
+  console.log(`Document processed at ${doc.processedAt.toISOString()}`);
   console.log(`Tags: ${doc.tags.join(', ')}`);
   console.log(`Author: ${doc.metadata.author}`);
 });
@@ -1270,31 +996,28 @@ Both transformations and middleware can modify event data, but they serve differ
 - You want the modification to be tied to a specific subscriber
 - You need to modify data between subscribers in a chain
 - You want sequential processing where each step can see previous modifications
-- You're implementing a custom transformation pipeline for a specific event flow
-- You want to maintain a clear data flow within a specific feature
 
 **Use Middleware When:**
-- You need global preprocessing that applies to many events
-- You want to apply a consistent transformation across your entire application
-- You need to potentially change the event name (redirecting events)
+- You need preprocessing that applies to many events, before any subscriber sees them
+- You need to change the event name (redirecting events)
 - You want to implement cross-cutting concerns like logging or authentication
-- You need to potentially cancel events before they reach any subscribers
+- You need to cancel events before they reach any subscribers
 
 **Examples:**
 
 ```typescript
 // MIDDLEWARE: Application-wide timestamp enrichment
-evem.use((event, data) => {
+evem.use((event: string, data: Record<string, unknown>) => {
   // Add timestamp to ALL events
   return { ...data, timestamp: Date.now() };
 });
 
 // TRANSFORMATION: Feature-specific data normalization
-evem.subscribe('user.input', (data) => {
+evem.subscribe<{ value: string }>('user.input', (data) => {
   console.log('Processing user input:', data.value);
 }, {
   transform: (data) => {
-    // Normalize this specific input stream
+    // Normalize this specific input stream for the subscribers after this one
     return {
       ...data,
       value: data.value.trim().toLowerCase()
@@ -1305,49 +1028,6 @@ evem.subscribe('user.input', (data) => {
 
 In general, middleware is better for application-wide concerns while transformations are better for feature-specific data processing.
 
-**Combining Both:**
-
-You can use both approaches together for more complex scenarios:
-
-```typescript
-// Middleware handles global concerns
-evem.use((event, data) => {
-  // Add request context to all events
-  return { ...data, context: getCurrentRequestContext() };
-});
-
-// First subscriber does basic validation and enrichment
-evem.subscribe('order.submit', validateOrder, {
-  priority: 'high',
-  transform: (order) => {
-    // Normalize and enrich order data
-    return {
-      ...order,
-      total: calculateTotal(order.items),
-      normalizedItems: normalizeItems(order.items)
-    };
-  }
-});
-
-// Second subscriber processes the validated and enriched data
-evem.subscribe('order.submit', processOrder, {
-  priority: 'normal',
-  transform: async (order) => {
-    // Add payment processing results
-    const paymentResult = await processPayment(order);
-    return {
-      ...order,
-      payment: paymentResult
-    };
-  }
-});
-
-// Final subscriber receives fully processed data with all transformations
-evem.subscribe('order.submit', finalizeOrder, { priority: 'low' });
-```
-
-This approach gives you flexibility to handle both global and specific concerns in a clean, modular way.
-
 ## Filtering Events
 
 EvEm provides powerful filtering capabilities that let you filter events based on their data. This allows you to subscribe only to the specific events you care about.
@@ -1357,49 +1037,173 @@ EvEm provides powerful filtering capabilities that let you filter events based o
 You can filter events by providing a predicate function in the subscription options:
 
 ```typescript
+interface User {
+  name: string;
+  role: string;
+}
+
 // Only receive user.login events for admin users
-emitter.subscribe('user.login', (user) => {
+evem.subscribe<User>('user.login', (user) => {
   console.log(`Admin logged in: ${user.name}`);
 }, {
   filter: (user) => user.role === 'admin'
 });
 
 // Will only trigger for admin users
-await emitter.publish('user.login', { name: 'Alice', role: 'admin' }); // Triggers callback
-await emitter.publish('user.login', { name: 'Bob', role: 'user' });    // Filtered out
+await evem.publish<User>('user.login', { name: 'Alice', role: 'admin' }); // Triggers callback
+await evem.publish<User>('user.login', { name: 'Bob', role: 'user' });    // Filtered out
+// Output: Admin logged in: Alice
 ```
 
 ### Multiple Filters
 
-For more complex filtering logic, you can apply multiple filters as an array:
+For more complex filtering logic, you can apply multiple filters as an array. They run in order, stop at the first one that returns `false`, and all must pass for the callback to be executed:
 
 ```typescript
-// Only receive messages that are both important and from a specific user
-emitter.subscribe('message.received', handleMessage, {
+interface ChatMessage {
+  priority: 'high' | 'normal';
+  from: string;
+  text: string;
+}
+
+// Only receive messages that are both important and from a specific sender
+evem.subscribe<ChatMessage>('message.received', (msg) => {
+  console.log(`Important system message: ${msg.text}`);
+}, {
   filter: [
-    msg => msg.priority === 'high',    // Only high priority messages
-    msg => msg.from === 'system'       // Only from system
+    (msg) => msg.priority === 'high',    // Only high priority messages
+    (msg) => msg.from === 'system'       // Only from system
   ]
 });
 ```
-
-All filters must pass for the callback to be executed.
 
 ### Async Filters
 
 Filters can also be asynchronous, which is useful for validation that requires database lookups or API calls:
 
 ```typescript
-emitter.subscribe('document.updated', handleDocUpdate, {
+evem.subscribe<{ id: string }>('document.updated', handleDocUpdate, {
   filter: async (doc) => {
-    // Simulate checking permissions in database
+    // Check permissions in the database
     const userHasAccess = await checkUserPermissions(doc.id);
     return userHasAccess;
   }
 });
 ```
 
+A filter that throws (or rejects) is logged and treated as returning `false`. Filters run after schema validation and before throttle/debounce and once, so a filtered-out event doesn't start a throttle window, restart a debounce timer or use up a `once` subscription.
+
 Filtering provides a clean and declarative way to handle complex event processing logic without cluttering your event handlers.
+
+## Schema Validation
+
+A subscription can validate event data with a `schema` function before its filters and callback run. A simple validator returns `true` or `false`; an advanced validator returns `{ valid, errors }` with details. Both can be async.
+
+```typescript
+import {
+  EvEm,
+  ErrorPolicy,
+  type AdvancedSchemaValidator,
+  type SchemaValidationError,
+  type SchemaValidator
+} from "@jcfigueiredo/evem";
+const evem = new EvEm();
+
+interface UserData {
+  id: number;
+  name: string;
+  email: string;
+  age: number;
+}
+
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Simple schema validator
+const isAdultUser: SchemaValidator<UserData> = (data) =>
+  typeof data === 'object' &&
+  data !== null &&
+  typeof data.id === 'number' &&
+  typeof data.name === 'string' &&
+  typeof data.email === 'string' &&
+  emailPattern.test(data.email) &&
+  typeof data.age === 'number' &&
+  data.age >= 18;
+
+// Advanced schema validator with detailed errors
+const validateUser: AdvancedSchemaValidator<UserData> = (data) => {
+  if (!data || typeof data !== 'object') {
+    return { valid: false, errors: [{ message: 'Data must be an object' }] };
+  }
+
+  const errors: SchemaValidationError[] = [];
+  if (typeof data.id !== 'number') {
+    errors.push({ message: 'ID must be a number', path: 'id' });
+  }
+  if (typeof data.name !== 'string' || data.name.length < 2) {
+    errors.push({ message: 'Name must be a string with at least 2 characters', path: 'name' });
+  }
+  if (typeof data.email !== 'string' || !emailPattern.test(data.email)) {
+    errors.push({ message: 'Email must be a valid email address', path: 'email' });
+  }
+  if (typeof data.age !== 'number' || data.age < 18) {
+    errors.push({ message: 'Age must be a number and 18 or older', path: 'age' });
+  }
+
+  return { valid: errors.length === 0, errors };
+};
+
+// Default policy (CANCEL_ON_ERROR): invalid data is logged and skips this subscriber only
+evem.subscribe<UserData>('user.register', (user) => {
+  console.log(`User registered: ${user.name}`);
+}, {
+  schema: isAdultUser
+});
+
+// THROW: invalid data rejects publish with the validator's errors
+evem.subscribe<UserData>('user.register', (user) => {
+  console.log(`Welcome email sent to ${user.email}`);
+}, {
+  schema: validateUser,
+  schemaErrorPolicy: ErrorPolicy.THROW
+});
+
+// Valid data reaches both subscribers
+await evem.publish<UserData>('user.register', {
+  id: 1,
+  name: 'Alice',
+  email: 'alice@example.com',
+  age: 25
+});
+// Output:
+// User registered: Alice
+// Welcome email sent to alice@example.com
+
+// Invalid data (bad email, under 18)
+try {
+  await evem.publish<UserData>('user.register', {
+    id: 2,
+    name: 'Bob',
+    email: 'invalid-email',
+    age: 16
+  });
+} catch (error) {
+  const { validationErrors } = error as { validationErrors: SchemaValidationError[] };
+  console.log(validationErrors.map(e => e.path));
+}
+// Logs: Schema validation failed for event 'user.register' (from the first subscriber)
+// Output: [ 'email', 'age' ]
+```
+
+`schemaErrorPolicy` decides what happens when validation fails for that subscriber. It's separate from the publish `errorPolicy`:
+
+| `schemaErrorPolicy` | On invalid data |
+|---|---|
+| `CANCEL_ON_ERROR` (default) | Logs the failure and skips **this subscriber only**. Other subscribers still run, and `publish` resolves `true`. |
+| `LOG_AND_CONTINUE` | Logs the failure and runs the callback anyway. |
+| `SILENT` | Skips this subscriber without logging. |
+| `THROW` | Rejects `publish` with an `Error` whose `validationErrors` holds the validator's errors (`null` for a simple validator). The remaining subscribers don't run. This happens whatever the publish `errorPolicy` is. |
+
+A validator that throws or rejects counts as a failed validation. Errors thrown by the callback itself go through the publish error policy.
 
 ## Using Event History and Replay
 
@@ -1409,56 +1213,125 @@ EvEm can maintain a history of published events, allowing new subscribers to cat
 import { EvEm } from "@jcfigueiredo/evem";
 const evem = new EvEm();
 
-// Enable history recording with a maximum of 100 events
+interface Login {
+  userId: number;
+  name: string;
+}
+
+// Enable history recording, keeping at most the last 100 events (default: 50)
 evem.enableHistory(100);
 
 // Publish some events that will be recorded
-await evem.publish('user.login', { userId: 1, name: 'Alice' });
+await evem.publish<Login>('user.login', { userId: 1, name: 'Alice' });
 await evem.publish('notification', { message: 'New feature available!' });
-await evem.publish('user.login', { userId: 2, name: 'Bob' });
+await evem.publish<Login>('user.login', { userId: 2, name: 'Bob' });
 
-// Retrieve all recorded events
+// Retrieve all recorded events: { event, data, timestamp } records, oldest first
 const allHistory = evem.getEventHistory();
 console.log(`Recorded ${allHistory.length} events`);
+// Output: Recorded 3 events
 
-// Retrieve just user.login events
-const loginHistory = evem.getEventHistory('user.login');
+// Retrieve just user.login events (patterns like 'user.*' work too)
+const loginHistory = evem.getEventHistory<Login>('user.login');
 console.log(`${loginHistory.length} user logins recorded`);
+// Output: 2 user logins recorded
 
-// When a new component is initialized later, it can get the most recent notification
-function initializeNotificationCenter() {
-  evem.subscribe('notification', (notification) => {
-    displayNotification(notification.message);
-  }, { 
-    replayLastEvent: true  // Will immediately receive 'New feature available!'
-  });
-}
+// A component initialized later can get the most recent notification immediately
+evem.subscribe<{ message: string }>('notification', (notification) => {
+  console.log(`Latest notification: ${notification.message}`);
+}, {
+  replayLastEvent: true
+});
+// Output: Latest notification: New feature available!
 
-// When a new analytics service connects, it can get all user login history
-function initializeAnalytics() {
-  evem.subscribe('user.login', (user) => {
-    trackUserLogin(user.userId, user.name);
-  }, { 
-    replayHistory: true  // Will receive both Alice and Bob's logins in order
-  });
-}
+// An analytics service connecting later can get every login, in order
+evem.subscribe<Login>('user.login', (user) => {
+  console.log(`Login: ${user.name} (#${user.userId})`);
+}, {
+  replayHistory: true
+});
+// Output:
+// Login: Alice (#1)
+// Login: Bob (#2)
 
 // Clear history if needed
 evem.clearEventHistory();
 
-// Disable history recording when no longer needed
+// Disable history recording when no longer needed (doesn't clear existing history)
 evem.disableHistory();
 ```
+
+What gets recorded and replayed:
+
+- History records the data subscribers receive, after middleware (and under the new name if a middleware rerouted the event), without the `cancel()` of cancelable events. Events canceled by middleware aren't recorded.
+- `enableHistory(maxEvents)` keeps the most recent `maxEvents` events (default 50). `enableHistory(0)` keeps nothing, and re-enabling with a smaller limit drops the oldest events.
+- Replay only happens if history is enabled when you subscribe. The callback is called right away, during `subscribe`, once for the last matching event (`replayLastEvent`) or for every matching event (`replayHistory`). A wildcard subscription replays every event its pattern matches.
+- Replayed events go through the subscription's schema, filters, throttle/debounce and once (a `once` subscription fires only once), but not its transform. Replay happens outside any `publish`: async callbacks aren't awaited, and errors are logged.
 
 ### Uses for Event History
 
 Event history is particularly useful for:
 
-1. **Late Subscribers**: Components that initialize after events have occurred can catch up 
+1. **Late Subscribers**: Components that initialize after events have occurred can catch up
 2. **State Synchronization**: New components can immediately sync with the current application state
 3. **Audit Trails**: Keep a record of important events for logging or debugging
 4. **Replay Scenarios**: Test components by replaying the same sequence of events
 5. **Event Sourcing**: Build event-sourced architectures where system state is derived from event history
+
+## Memory Leak Detection
+
+EvEm can warn you when an event collects more subscriptions than expected, which usually means handlers aren't being unsubscribed.
+
+```typescript
+import { EvEm } from "@jcfigueiredo/evem";
+const evem = new EvEm();
+
+evem.enableMemoryLeakDetection({
+  threshold: 10,                 // Warn when an event has more than 10 subscriptions (default)
+  showSubscriptionDetails: true  // Also log the subscription ids and some tips (default)
+});
+
+// Now if you create many subscriptions to the same event without unsubscribing,
+// you'll get a warning in the console
+for (let i = 0; i < 15; i++) {
+  evem.subscribe('button.click', () => console.log('Button clicked!'));
+}
+// Warns once, when the 11th subscription is added:
+// Possible memory leak detected: 11 handlers added for event "button.click". This exceeds the threshold of 10. This could indicate event handlers are not being properly unsubscribed.
+// (followed by the subscription details)
+
+// Disable memory leak detection when no longer needed
+evem.disableMemoryLeakDetection();
+```
+
+Both options are optional. The check runs when a subscription is added, and counts the subscriptions to that exact event name or pattern (a `user.*` subscription counts for `user.*`, not for each event it receives). Each event is reported once; it can be reported again after its count drops back to the threshold, or after detection is re-enabled.
+
+## Recursion Protection
+
+A handler that publishes the event it's handling can loop forever. EvEm limits how deeply that can nest: 3 levels by default, or the depth you pass to the constructor (`new EvEm(5)`).
+
+```typescript
+import { EvEm } from "@jcfigueiredo/evem";
+const evem = new EvEm(); // Same as new EvEm(3)
+
+let calls = 0;
+evem.subscribe('tick', async () => {
+  calls++;
+  await evem.publish('tick'); // Re-publishes the event it's handling
+});
+
+await evem.publish('tick');
+console.log(calls);
+// Logs: Error in event handler for "tick": Error: Max recursion depth of 3 exceeded for event 'tick'
+// Output: 3
+```
+
+The publish that goes over the limit rejects with that error. Here the third handler awaits it, so the rejection becomes that handler's error and is handled by the outer publish's error policy.
+
+- The depth counts publishes of the same event started from inside its own handlers (callbacks, middleware and transforms), directly or through the handlers of other events.
+- Independent publishes of the same event are not limited, even when they overlap.
+- A publish started after the handler has awaited other work can't be traced back to it, so it starts a new chain. Loops like that aren't caught.
+- Await (or catch) publishes you start from handlers: one that goes over the limit without being awaited is an unhandled promise rejection.
 
 ## Using the Info Method for Debugging
 
@@ -1489,13 +1362,21 @@ evem.use({
 // Get info about all events and middleware
 const allInfo = evem.info();
 console.log('All events and middleware:', allInfo);
-// Shows all subscriptions and middleware
+// Shows all three subscriptions and both middleware
 
 // Get info about only user-related events and middleware
 const userInfo = evem.info('user.*');
-console.log('User-related events and middleware:', userInfo);
-// Shows only user.login, user.logout subscriptions and relevant middleware
+console.log(userInfo);
+// Output:
+// [
+//   { event: 'user.login', isMiddleware: false, id: '…', priority: 0 },
+//   { event: 'user.logout', isMiddleware: false, id: '…', priority: 0 },
+//   { event: '*', isMiddleware: true, pattern: undefined },
+//   { event: 'user.*', isMiddleware: true, pattern: 'user.*' }
+// ]
 ```
+
+With a pattern, `info(pattern)` lists the subscriptions whose registered event name or pattern matches it, and the middleware that would run for it (including middleware without a pattern, shown as `'*'`). It matches registered names against your pattern, not the other way around: `info('user.login')` doesn't list a `user.*` subscription, even though that subscription receives `user.login` events.
 
 This feature is particularly useful for:
 1. Debugging complex event setups
@@ -1505,43 +1386,128 @@ This feature is particularly useful for:
 
 For a comprehensive set of examples, check out the [examples](docs/examples.md) page.
 
+## WebSocket Adapter (Optional Extension)
+
+The `@jcfigueiredo/evem/websocket` entry point connects an EvEm instance to a WebSocket server. It's built on EvEm's public API and doesn't change the core. `WebSocketHandler` is the recommended way to use it: it wires the socket to EvEm events, queues outgoing messages while offline, reconnects if you ask it to, and makes request-response calls.
+
+```typescript
+import { EvEm } from '@jcfigueiredo/evem';
+import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';
+
+const evem = new EvEm();
+const handler = new WebSocketHandler('wss://api.example.com', evem, {
+  reconnect: true // Reconnect after unexpected closes (default: false)
+});
+
+// Incoming: a message like { "event": "user.joined", "data": {...} } is published as 'server.user.joined'
+evem.subscribe<{ name: string }>('server.user.*', (user) => {
+  console.log('User event from server:', user.name);
+});
+
+// Outgoing: the data of 'ws.send' (and of other 'ws.send.*' events) is sent as JSON.
+// While the socket isn't open, messages are queued and sent once it connects
+await evem.publish('ws.send', { type: 'chat', text: 'Hello!' });
+
+// Request-response: sends { type: 'request', id, method, params, timestamp } and resolves with the
+// `result` of the server's { type: 'response', id, result } reply (rejects on `error` or after the timeout)
+const user = await handler.request<{ id: number; name: string }>('getUser', { id: 123 }, { timeout: 5000 });
+console.log('User data:', user);
+
+// Connection state and queue
+console.log(handler.isConnected(), handler.getConnectionState(), handler.getQueueSize());
+
+// Close the socket and remove the handler's subscriptions and middleware
+await handler.disconnect();
+```
+
+**What it publishes:**
+- `ws.connection.state` with `{ from, to, timestamp }` when the state changes (`disconnected`, `connected`, `reconnecting`, `disconnecting`). With `reconnect`, after `maxReconnectAttempts` failed attempts in a row the state goes to `disconnected` and `ws.reconnect.failed` is published with `{ attempts }`.
+- Incoming messages: `{ event, data }` as `server.<event>`, `{ type, data }` as `server.<type>`, responses as `ws.response` / `ws.response.error`, anything else as `ws.message`, and unparseable messages as `ws.parse.error`. Socket errors are published as `ws.error`.
+- `ws.queue.overflow` when the queue is full and the oldest message is dropped.
+
+**Configuration options:**
+
+```typescript
+import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';
+
+const handler = new WebSocketHandler('wss://api.example.com', evem, {
+  enableQueue: true,           // Queue outgoing messages while not connected (default: true)
+  queueSize: 100,              // Maximum queued messages; the oldest is dropped (default: 100)
+  autoFlush: true,             // Send queued messages once connected (default: true)
+  enableRequestResponse: true, // Enable handler.request() (default: true)
+  serverEventPrefix: 'server', // Prefix for incoming events (default: 'server')
+  reconnect: true,             // Reconnect after an unexpected close (default: false)
+  reconnectDelay: 1000,        // ms before each attempt (default: 1000)
+  maxReconnectAttempts: 5,     // Consecutive failed attempts before giving up (default: 5)
+  messageParser: (data) => JSON.parse(data),        // Default
+  messageFormatter: (data) => JSON.stringify(data), // Default
+  onError: (error) => console.error('WebSocket error:', error)
+});
+```
+
+**Node.js:** Node 22 and later have a global `WebSocket`, but Node 20 doesn't. There, pass the [`ws`](https://www.npmjs.com/package/ws) package's class as `WebSocketConstructor`. You can also pass a socket created with it (`new WebSocket(url)`) in place of the URL, but keep the option: reconnecting creates new sockets with it.
+
+```typescript
+import WebSocket from 'ws';
+import { EvEm } from '@jcfigueiredo/evem';
+import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';
+
+const evem = new EvEm();
+const handler = new WebSocketHandler('wss://api.example.com', evem, {
+  WebSocketConstructor: WebSocket
+});
+```
+
+The building blocks (`ConnectionManager`, `MessageQueue` and `RequestResponseManager`) are exported too, for wiring a socket yourself. See the [WebSocket Adapter documentation](docs/websocket-adapter.md) for message formats, the full event reference and more examples.
+
 ## API at Your Fingertips
 
-- `subscribe(event: string, callback: EventCallback<T>, options?: SubscriptionOptions<T>): string`
-  - `options.filter`: A predicate function or array of predicate functions that determine if the callback should be executed
-  - `options.debounceTime`: Number of milliseconds to debounce the event (only process the last event within this time window)
-  - `options.throttleTime`: Number of milliseconds to throttle the event (limit to at most one execution per time window)
-  - `options.once`: When true, automatically unsubscribes after the callback is invoked for the first time
-  - `options.priority`: Priority level ('high', 'normal', 'low'), number, or Priority enum value (Priority.HIGH) to control execution order (higher values execute first)
-  - `options.transform`: A function that transforms the event data before it's passed to the next subscriber
-  - `options.replayLastEvent`: When true, immediately trigger the callback with the most recent matching event from history
-  - `options.replayHistory`: When true, immediately trigger the callback with all matching events from history
-  - `options.schema`: A schema validator function to validate event data before the callback is executed
-  - `options.schemaErrorPolicy`: How to handle schema validation errors (default: ErrorPolicy.CANCEL_ON_ERROR)
-- `subscribeOnce(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T>, 'once'>): string`
-- `unsubscribe(event: string, callback: EventCallback<T>): void`
+- `new EvEm(maxRecursionDepth = 3)`: Create an emitter; `maxRecursionDepth` limits how deeply an event can re-publish itself from its own handlers
+- `subscribe<T = unknown, R = any>(event: string, callback: EventCallback<T>, options?: SubscriptionOptions<T, R>): string`
+  - Returns the subscription id. `event` can be a [wildcard pattern](#using-wildcards-in-event-subscription)
+  - `options.schema`: A validator, `(data) => boolean` or `(data) => { valid, errors? }` (sync or async), checked before the filters and callback
+  - `options.schemaErrorPolicy`: What to do when validation fails (default: `ErrorPolicy.CANCEL_ON_ERROR`, which logs and skips this subscriber only)
+  - `options.filter`: A predicate function or array of predicates (sync or async); all must pass for the callback to run
+  - `options.throttleTime`: Milliseconds; handle the first event, then drop events until the window ends
+  - `options.debounceTime`: Milliseconds; handle only the last event, once none has arrived for this long
+  - `options.once`: When true, unsubscribes just before the callback runs for the first time
+  - `options.priority`: `'high'` (100), `'normal'` (0), `'low'` (-100), a number or a `Priority` value; higher runs first (default: 0)
+  - `options.transform`: `(data: T) => R | Promise<R>`, run after this subscriber's callback; its result is what the following subscribers receive
+  - `options.replayLastEvent`: When true and history is enabled, immediately call the callback with the most recent matching event from history
+  - `options.replayHistory`: When true and history is enabled, immediately call the callback with every matching event from history, oldest first
+- `subscribeOnce<T = unknown, R = any>(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T, R>, 'once'>): string`
+- `unsubscribe<T = unknown>(event: string, callback: EventCallback<T>): void`: Remove the subscription to exactly `event` made with `callback`
 - `unsubscribeById(id: string): void`
-- `publish(event: string, args?: T, options?: PublishOptions | number): Promise<boolean>`
-  - Returns `true` if the event completed without being canceled, `false` if it was canceled
-  - `options.timeout`: Number of milliseconds before timing out async callbacks (default: 5000)
-  - `options.cancelable`: Whether the event can be canceled by handlers (default: false)
-  - `options.errorPolicy`: How to handle errors in callbacks (default: ErrorPolicy.LOG_AND_CONTINUE)
-- `use(middleware: MiddlewareFunction | MiddlewareConfig)`: Register a middleware function to process events
-  - Can provide a simple function that processes all events
-  - Or a config object with `pattern` and `handler` to process only matching events
-- `removeMiddleware(middleware: MiddlewareFunction | MiddlewareConfig)`: Remove a previously registered middleware function
-- `info(pattern?: string): EventInfo[]`: Get information about subscriptions and middleware
-  - Returns an array of EventInfo objects containing details about events and middleware
-  - Can be filtered by providing an optional pattern parameter
-  - Useful for debugging and inspecting the current state of the event emitter
-- `enableHistory(maxEvents?: number)`: Start recording events in history (default max: 50)
-- `disableHistory()`: Stop recording events in history (doesn't clear existing history)
-- `clearEventHistory()`: Remove all events from history
-- `getEventHistory(pattern?: string)`: Get recorded events, optionally filtered by pattern
-- `enableMemoryLeakDetection(options?: MemoryLeakOptions)`: Enable memory leak detection with optional configuration
-  - `options.threshold`: Number of handlers per event before warning (default: 10) 
-  - `options.showSubscriptionDetails`: Whether to show detailed information about subscriptions (default: true)
-- `disableMemoryLeakDetection()`: Disable memory leak detection
+- `publish<T = unknown>(event: string, data?: T, options?: PublishOptions | number): Promise<boolean>`
+  - Resolves to `true` if the event completed, `false` if it was canceled
+  - A number in place of the options is the timeout
+  - `options.timeout`: Milliseconds to wait for each async callback or transform (default: 5000)
+  - `options.cancelable`: Whether handlers can cancel the event (default: false)
+  - `options.errorPolicy`: How to handle errors in callbacks and transforms (default: `ErrorPolicy.LOG_AND_CONTINUE`)
+  - A missing `data` is delivered as `{}`; `null` is delivered as `null`
+- `use<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void`: Register a middleware
+  - A function processes all events
+  - A `{ pattern, handler }` object processes only events matching `pattern`
+  - The handler returns the (new) data, `null` to cancel, or a new `{ event, data }` object to reroute
+- `removeMiddleware<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void`: Remove a middleware (the same function, or a config with the same handler and pattern)
+- `info(pattern?: string): EventInfo[]`: List subscriptions (`{ event, isMiddleware: false, id, priority }`) and middleware (`{ event, isMiddleware: true, pattern }`), optionally only those matching `pattern`
+- `enableHistory(maxEvents = 50): void`: Start recording events
+- `disableHistory(): void`: Stop recording events (doesn't clear existing history)
+- `clearEventHistory(): void`: Remove all events from history
+- `getEventHistory<T = any>(pattern?: string): EventRecord<T>[]`: Get recorded events (`{ event, data, timestamp }`), optionally only those matching `pattern`
+- `enableMemoryLeakDetection(options?: Partial<MemoryLeakOptions>): void`
+  - `options.threshold`: Number of subscriptions to one event before warning (default: 10)
+  - `options.showSubscriptionDetails`: Whether to also log the subscription details (default: true)
+- `disableMemoryLeakDetection(): void`
+
+The package also exports the `Priority` and `ErrorPolicy` enums and the types `CancelableEvent`, `EventCallback`, `EventInfo`, `EventRecord`, `FilterPredicate`, `MemoryLeakOptions`, `MiddlewareConfig`, `MiddlewareFunction`, `MiddlewareResult`, `PublishOptions`, `SchemaValidator`, `AdvancedSchemaValidator`, `SchemaValidationError`, `SubscriptionOptions`, `TransformFunction`, `PriorityLevel` and `IEventEmitter`.
+
+`WebSocketHandler` (from `@jcfigueiredo/evem/websocket`):
+
+- `new WebSocketHandler(urlOrSocket: string | IWebSocket, evem: EvEm, options?: WebSocketHandlerOptions)`
+- `request<T = any>(method: string, params?: any, options?: { timeout?: number; id?: string }): Promise<T>`
+- `isConnected(): boolean`, `getConnectionState(): string`, `getQueueSize(): number`
+- `disconnect(): Promise<void>`
 
 ## Join the Party - Contribute!
 
@@ -1552,68 +1518,74 @@ Got awesome ideas? Want to make **evem** even better? Jump in and contribute! Op
 Run the tests and watch the magic:
 
 ```bash
-pnpm test
+pnpm test            # Watch mode
+pnpm test:nowatch    # Run once
+pnpm test:coverage   # With a coverage report
+pnpm typecheck       # TypeScript check
 ```
 
 ## Comparison with Alternatives
 
-Here's how EvEm compares to other popular event emitter libraries:
+Here's how EvEm compares to other popular event emitter libraries. EvEm is written in TypeScript and ships its own type declarations. You type payloads per subscription and publish (`subscribe<T>`, `publish<T>`), but there is no typed event map: event names are plain strings, and the compiler doesn't check that what you publish matches what subscribers expect.
 
 ### EvEm vs Node.js EventEmitter
 
 **Pros of EvEm:**
-- TypeScript support with type safety
 - Namespace and wildcard pattern support
-- Built-in timeout management for async callbacks
-- Protection against infinite recursion loops
+- Async callbacks are awaited in priority order, with timeouts
+- Priorities, filters, middleware, throttle/debounce, schema validation and history built in
+- Recursion depth limit for events that re-publish themselves
+- Runs in browsers as well as Node.js
 
 **Cons of EvEm:**
 - Not as widely adopted as Node's EventEmitter
-- Additional dependency (whereas Node's EventEmitter is built-in)
+- An extra package (with no dependencies of its own), whereas Node's EventEmitter is built in
+- `publish` always returns a promise, while `emit` is synchronous
 
 ### EvEm vs EventEmitter3
 
 **Pros of EvEm:**
-- Better TypeScript integration
 - Namespace hierarchy support
-- Built-in timeout handling for async operations
 - Wildcard event pattern matching
+- Built-in handling of async callbacks, with timeouts
+- Priorities, filters, middleware and history built in
 
 **Cons of EvEm:**
-- May not be as performance-optimized as EventEmitter3
+- EventEmitter3 is focused on raw performance, which EvEm doesn't match
+- EventEmitter3 supports a typed event map (`new EventEmitter<Events>()`); EvEm doesn't
 - Smaller community and ecosystem
 
 ### EvEm vs Mitt
 
 **Pros of EvEm:**
-- More feature-rich (namespaces, wildcards, timeouts)
-- Better handling of asynchronous events
+- More feature-rich (wildcard patterns, priorities, middleware, history)
+- Awaits async callbacks, with timeouts and error policies
 - Subscription ID tracking for easier unsubscription
 - Recursion depth control
 
 **Cons of EvEm:**
 - Larger bundle size than Mitt (which is ~200 bytes)
 - More complex API compared to Mitt's minimalist approach
+- Mitt supports a typed event map (`mitt<Events>()`); EvEm doesn't
 
 ### EvEm vs RxJS
 
 **Pros of EvEm:**
 - Simpler learning curve
 - Smaller bundle size
-- Focused functionality for basic pub/sub patterns
+- Focused functionality for pub/sub patterns
 - Less conceptual overhead
 
 **Cons of EvEm:**
-- Lacks advanced reactive programming features
+- Lacks reactive programming features such as composable operators over streams
 - Less powerful for complex async workflows
-- No oob extension support 
 
 ### EvEm vs tiny-emitter
 
 **Pros of EvEm:**
-- TypeScript support out of the box
+- Written in TypeScript
 - More features (namespaces, wildcards, async handling)
-- Better error handling
+- Configurable error policies
 - Subscription ID system
 
 **Cons of EvEm:**
@@ -1626,7 +1598,6 @@ Here's how EvEm compares to other popular event emitter libraries:
 - Modern TypeScript implementation
 - Namespaces and wildcards not available in events
 - Timeout handling for async callbacks
-- Better designed for modern frontend applications
 
 **Cons of EvEm:**
 - Not a direct drop-in replacement for Node.js code
@@ -1640,14 +1611,6 @@ Here's how EvEm compares to other popular event emitter libraries:
 
 These are planned features for future releases:
 
-1. ~~**Event History/Replay**: Keep a history of recent events and allow new subscribers to optionally receive the most recent event immediately upon subscription.~~ ✅ Implemented in latest version!
+1. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
 
-2. **Subscription Lifecycle Hooks**: Add hooks for subscription creation and teardown, useful for cleanup operations.
-
-3. ~~**Memory Leak Detection**: Add optional warnings when subscriptions might be leaking (e.g., too many subscriptions to the same event).~~ ✅ Implemented in latest version!
-
-4. ~~**Event Schema Validation**: Add optional runtime validation of event data against schemas.~~ ✅ Implemented in latest version!
-
-5. ~~**Event Transformation**: Allow subscribers to transform event data before it's passed to subsequent subscribers in the chain.~~ ✅ Implemented in latest version!
-
-6. **Performance Metrics/Telemetry**: Built-in instrumentation for measuring event processing performance.
+2. **Performance Metrics/Telemetry**: Built-in instrumentation for measuring event processing performance.
