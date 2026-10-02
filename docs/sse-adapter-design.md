@@ -1,6 +1,6 @@
 # SSE Adapter Design
 
-> **Status: proposal — not implemented.** This document describes a planned Server-Sent Events (SSE) adapter for EvEm. Decisions marked **(decision)** are recommendations awaiting confirmation; see [Open decisions](#open-decisions).
+> **Status: approved, phase 1 in progress.** This document describes the Server-Sent Events (SSE) adapter for EvEm. The decisions marked **(decision)** were agreed as recommended; see [Decisions](#decisions). Once implemented, user documentation lives in [sse-adapter.md](sse-adapter.md).
 
 ## Summary
 
@@ -255,7 +255,7 @@ Unlike `WebSocketHandler`, which never enters `connecting`, `SseHandler` reports
 
 | Method | Description |
 |--------|-------------|
-| `connect(): void` | Start connecting (only needed with `autoConnect: false`, or after `disconnect()` if reuse is allowed — see [Open decisions](#open-decisions)). |
+| `connect(): void` | Start connecting: needed with `autoConnect: false`, or to reconnect after `disconnect()`. |
 | `disconnect(): Promise<void>` | Abort the connection, cancel any pending reconnect, transition `disconnecting` → `disconnected`. Removes nothing from the emitter except what it registered (it registers no subscriptions or middleware in phase 1). |
 | `isConnected(): boolean` / `getConnectionState(): ConnectionState` | Same as `WebSocketHandler`. |
 | `getLastEventId(): string \| undefined` | The last event ID received, e.g. to persist for resuming. |
@@ -284,26 +284,54 @@ With `sequential: true`, the handler awaits each `publish` before dispatching th
 
 ## Server-side helper
 
-Writing the wire format by hand is error-prone. A `data` value with a newline needs one `data:` line per line, and an `event` or `id` containing a newline corrupts the stream. The entry point exports two pure functions usable in Node, Deno, Bun or edge runtimes:
+Writing the wire format by hand is error-prone, and some of the mistakes are security bugs:
+
+- **Forged events:** user content containing a blank line ends the event early, and following lines such as `event: admin.alert` are then read as a second, forged event.
+- **Corrupt fields:** a line break in `event` or `id`, a NUL in `id`, or a non-integer `retry` corrupts the stream or is silently ignored by clients.
+- **Delayed events:** an event without its terminating blank line is held by the client until the next event arrives.
+- **Lost events:** an event without `data` is never dispatched.
+
+A separate entry point, `@jcfigueiredo/evem/sse/server`, exports pure functions (no I/O, usable in Node, Deno, Bun or edge runtimes) so server code doesn't load the client:
 
 ```typescript
-formatSseMessage({ event?: string; data: unknown; id?: string; retry?: number }): string
+formatSseMessage(
+  message: { event?: string; data?: unknown; id?: string | number; retry?: number },
+  options?: { raw?: boolean; envelope?: boolean }
+): string
 formatSseComment(text?: string): string   // ": ping\n\n" for heartbeats
+SSE_HEADERS: Readonly<Record<string, string>>
 ```
 
-`data` is `JSON.stringify`-ed unless it's a string. Newlines in `event` or `id` throw. The result ends with the blank line that dispatches the event. Example (Node):
+- **`data`** is `JSON.stringify`-ed by default, **strings included**, matching the client's default `parseData: 'json'`. `raw: true` writes a string as text, one `data:` line per line (for `parseData: 'text'` clients). Omitted data is written as `data: null`, so signal-only events still dispatch.
+- **`envelope: true`** writes an unnamed message carrying `{ event, data }`. Clients using the native `EventSource` then receive every event without listing `eventTypes`.
+- **Validation:** line breaks in `event` or `id`, NUL in `id`, and a `retry` that isn't a non-negative integer throw. Every result ends with the blank line that dispatches the event.
+- **`SSE_HEADERS`** is `Content-Type: text/event-stream; charset=utf-8`, `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no` (stops nginx buffering). It deliberately omits `Connection: keep-alive`, which HTTP/2 servers reject.
 
 ```typescript
-response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
-response.write(formatSseMessage({ event: 'order.updated', id: String(seq), data: order }));
+import { formatSseComment, formatSseMessage, SSE_HEADERS } from '@jcfigueiredo/evem/sse/server';
+
+response.writeHead(200, SSE_HEADERS);
+response.write(formatSseMessage({ event: 'order.updated', id: seq, data: order }));
 setInterval(() => response.write(formatSseComment('ping')), 15_000);
 ```
 
+A `createSseStream()` helper for `Request`/`Response`-style servers was considered and dropped.
+
+### Python servers
+
+The main server is expected to be Python, so Python is documented on equal footing:
+
+- **Reference implementation:** `examples/python/evem_sse.py` mirrors the JS helper exactly (`format_sse_message`, `format_sse_comment`, `SSE_HEADERS`, same defaults and validation). It's a single stdlib-only file to copy into a project, not a published package.
+- **Examples:** a runnable stdlib server (`examples/python/server.py`, also used by the tests) with resume via `Last-Event-ID` and heartbeats, plus FastAPI/Starlette (`StreamingResponse`) and Flask (streamed response) examples in the docs.
+- **Tested across languages:** an integration test starts the Python server and connects `SseHandler` to it, and the Python helper's output goes through the round-trip test against `SseParser`. These tests are skipped when `python3` isn't installed.
+
 ## Packaging
 
-- **New entry point:** add `"./sse"` to `exports` in package.json, pointing to `dist/sse/index.js` and `.d.ts`. The source is `src/sse/index.ts`, which exports `SseHandler`, the transports, `SseParser`, `formatSseMessage` / `formatSseComment`, `ConnectionManager` and the types.
+- **New entry points:** add `"./sse"` and `"./sse/server"` to `exports` in package.json.
+  - `src/sse/index.ts` exports `SseHandler`, the transports, `SseParser`, `ConnectionManager` and the types.
+  - `src/sse/server.ts` exports `formatSseMessage`, `formatSseComment` and `SSE_HEADERS` only.
 - **No dependencies:** only `fetch`, `ReadableStream`, `TextDecoder` and `AbortController`, all built into Node 20+ and modern browsers.
-- **`scripts/check-package.mjs`:** gains the third entry point. It imports `@jcfigueiredo/evem/sse` from Node and type-checks a consumer that uses it.
+- **`scripts/check-package.mjs`:** gains the two entry points. It imports them from Node and type-checks a consumer that uses them.
 - **Version:** 0.3.0, with CHANGELOG entries. The `ConnectionManager` move and the routing extraction are internal, so the `./websocket` exports stay identical.
 
 ## Testing plan
@@ -356,17 +384,19 @@ These are sketched to make sure phase 1 doesn't block them. They're not part of 
 - **A generic `RealtimeHandler`** over WebSocket and SSE. Rejected: their capabilities differ too much (bidirectional vs. one-way, a queue vs. none, RPC vs. none), and a shared interface would be lowest-common-denominator. Sharing the routing and the connection state gives the consistency that matters (the same `server.*` events and state model) without a forced abstraction.
 - **SSE behind `WebSocketHandler`** via a fake `IWebSocket`. Rejected: `send()` has nothing to map to, and the reconnection semantics differ.
 
-## Open decisions
+## Decisions
 
-1. **Default transport:** `fetch`, recommended for headers, POST, all event names and Node support; or the native `EventSource`?
-2. **Reconnect defaults:**
-   - Recommended: reconnect forever, with exponential backoff and jitter from 3 s up to 30 s, and the server's `retry:` as the base.
-   - Alternative: match `WebSocketHandler` (fixed delay, 5 attempts).
-3. **Status handling:** stop on `4xx` (except 408 and 429) and on a `204`; retry on `5xx`, `408`, `429` and network errors. Overridable with `shouldReconnect`.
-4. **`parseData` default:** strict `'json'` with `sse.parse.error` (recommended, like WebSocket), or `'text'`?
-5. **Phase 1 scope:** receive-only plus the server helper (recommended), or include phase 2's upstream/RPC now?
-6. **Reuse after `disconnect()`:** may `connect()` be called again (recommended: yes, since SSE has no socket object to replace), or is a handler single-use like `WebSocketHandler`?
-7. **Shared code location:** move `ConnectionManager` and the routing into `src/shared/` (recommended). The alternative is to import them across adapters from `src/websocket/`.
+All agreed as recommended:
+
+1. **Default transport:** `fetch`; the native `EventSource` is an option.
+2. **Reconnect defaults:** reconnect forever, with exponential backoff and jitter from 3 s up to 30 s, and the server's `retry:` as the base.
+3. **Status handling:** stop on `204` and on `4xx` other than 408 and 429; retry on `5xx`, `408`, `429` and network errors. Overridable with `shouldReconnect`.
+4. **`parseData` default:** strict `'json'`, failures published as `sse.parse.error`.
+5. **Phase 1 scope:** receive-only plus the server helper; phase 2's upstream/RPC later.
+6. **Reuse after `disconnect()`:** `connect()` may be called again.
+7. **Shared code:** `ConnectionManager` and the routing move to `src/shared/`.
+8. **Server helper:** a separate `./sse/server` entry point and the `envelope` option; no `createSseStream()`. Python is documented and tested alongside JS.
+9. **Demo:** an SSE page in `demo/examples/`, like the other demos.
 
 ## Implementation plan
 
@@ -384,6 +414,7 @@ These are sketched to make sure phase 1 doesn't block them. They're not part of 
    - the package check;
    - a localhost integration test;
    - `docs/sse-adapter.md`, a README section, CLAUDE.md and the CHANGELOG (0.3.0).
-8. **Optional:** an SSE demo page with a simulated stream, to fit the existing demos.
+8. **Python:** the reference helper, the runnable server, the FastAPI and Flask examples, and the cross-language tests.
+9. **Demo:** `demo/examples/sse-demo.html` with a simulated server and a live view of the wire format, linked from the demo index and covered by `tests/demo/`.
 
 Phase 1 is roughly the size of the WebSocket adapter: about 600–700 lines of source and a similar amount of tests.
