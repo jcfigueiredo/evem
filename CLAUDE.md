@@ -115,7 +115,7 @@ Real-time communication patterns built on top of EvEm, in `src/websocket/` and p
 - **Testing**: TDD approach - write tests first to validate simple designs
 
 ## Development Approach
-- No runtime dependencies (subscription and request IDs come from `crypto.randomUUID()`)
+- No runtime dependencies (subscription and request IDs come from `generateId()` in `src/id.ts`: `crypto.randomUUID()`, or `crypto.getRandomValues()` where browsers don't expose it outside secure contexts)
 - Focus on performance with Map-based lookups and efficient iteration
 - Maintain backward compatibility when adding features; record behavior changes in CHANGELOG.md
 - Each feature should be independently testable and composable

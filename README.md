@@ -35,7 +35,7 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
 
 ### Installation
 
-EvEm is published on npm as `@jcfigueiredo/evem`. It's an ES module with TypeScript types and no runtime dependencies, and needs Node.js 20 or later (or any modern browser or bundler). It generates subscription ids with `crypto.randomUUID()`, which browsers only provide in secure contexts (HTTPS or `localhost`).
+EvEm is published on npm as `@jcfigueiredo/evem`. It's an ES module with TypeScript types and no runtime dependencies, and needs Node.js 20 or later (or any modern browser or bundler).
 
 ```bash
 pnpm add @jcfigueiredo/evem

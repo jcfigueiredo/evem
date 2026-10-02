@@ -1,4 +1,5 @@
 import type { EvEm } from '../eventEmitter.js';
+import { generateId } from '../id.js';
 import type {
   RequestMessage,
   ResponseMessage,
@@ -51,7 +52,7 @@ export class RequestResponseManager {
     options: RequestOptions = {}
   ): Promise<any> {
     const timeout = options.timeout ?? 5000;
-    const id = options.id ?? crypto.randomUUID();
+    const id = options.id ?? generateId();
 
     // Responses are matched by id, so a second pending request with the same id can't be told apart
     if (this.pendingRequests.has(id)) {

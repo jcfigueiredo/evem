@@ -1,3 +1,5 @@
+import { generateId } from "./id.js";
+
 /**
  * Interface for cancelable events that can be canceled by subscribers
  */
@@ -438,7 +440,7 @@ class EvEm implements IEventEmitter {
     if (!event) throw new Error("Event name cannot be empty.");
 
     // Generate a subscription ID early so we can use it in the throttle/debounce callbacks
-    const subscriptionId = crypto.randomUUID();
+    const subscriptionId = generateId();
     
     // Reference to the original callback
     let finalCallback: WrappedCallback<T> = callback;

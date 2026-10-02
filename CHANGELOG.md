@@ -8,7 +8,7 @@ First release published to npm, as `@jcfigueiredo/evem`.
 
 - Published as an ES module with TypeScript declarations, built from `src/` into `dist/`.
 - Two entry points: `@jcfigueiredo/evem` (core) and `@jcfigueiredo/evem/websocket` (WebSocket adapter).
-- No runtime dependencies: `uuid` was replaced by the built-in `crypto.randomUUID()`. Requires Node.js 20+ or a modern browser.
+- No runtime dependencies: `uuid` was replaced by the built-in Web Crypto API (`crypto.randomUUID()`, falling back to `crypto.getRandomValues()` on plain-HTTP pages, where browsers don't provide `randomUUID`). Requires Node.js 20+ or a modern browser.
 - `EventRecord` and `MemoryLeakOptions` are now exported.
 
 ### Behavior changes to check when upgrading
