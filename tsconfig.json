@@ -27,12 +27,6 @@
       "~/*": ["./src/*"]
     }
   },
-  "include": [
-    ".eslintrc.cjs",
-    "**/*.ts",
-    "**/*.tsx",
-    "**/*.cjs",
-    "**/*.js",
-  ],
+  "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
