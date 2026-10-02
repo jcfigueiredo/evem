@@ -1,34 +1,22 @@
 # WebSocket Features Proposal for EVEM
 
-> **Status Update**: The high-priority features (Connection State Management, Message Queue, and Request-Response Pattern) have been **fully implemented** as a separate WebSocket adapter module. See [WebSocket Adapter Documentation](websocket-adapter.md) for complete usage guide.
+This is the original proposal for WebSocket-oriented features, kept for reference. Most of it proposed new methods on `EvEm` itself; what was built instead is an optional adapter, `@jcfigueiredo/evem/websocket` (`src/websocket/`), that leaves the core unchanged. For how to use what exists, see the [WebSocket Adapter Documentation](websocket-adapter.md) and the [examples](examples.md#websocket-adapter-examples).
 
-## Implementation Status
+## Status
 
-### ✅ Implemented Features (v1.0)
+| Proposed feature | Status | What exists today |
+|---|---|---|
+| 1. Connection State Management | Partially | `ConnectionManager` tracks the five states and publishes `ws.connection.state` (`{ from, to, timestamp }`), with `isConnected()`, `isConnecting()`, `isDisconnected()`, `isDisconnecting()`, `isReconnecting()`. It doesn't validate transitions. The connection-aware subscription options (`requiresConnection`, `queueWhileDisconnected`, `executeOnReconnect`) were not built. |
+| 2. Message Queue | Partially | `MessageQueue`: a FIFO queue of `ws.send` / `ws.send.*` messages published while not connected, with a size limit (the oldest message is dropped and `ws.queue.overflow` published) and a flush to `ws.send.queued` when the state changes to `connected` (`autoFlush`). Not built: `queueTTL`, `persistQueue`, `deduplication`, per-pattern queues, and the `publishQueued` / `flushQueue` / `clearQueue` / `getQueuedMessages` methods on `EvEm`. |
+| 3. Bidirectional Event Binding (request-response) | Partially | `WebSocketHandler.request(method, params?, { timeout, id })`, built on `RequestResponseManager`: requests go out on `ws.send.request` with a correlation id, `ws.response` / `ws.response.error` settle them, and `RequestTimeoutError` reports timeouts. Not built: `EvEm.request()` on arbitrary events with a `responseEvent`, and `respond()` for registering responders. |
+| 4. Event Replay with Acknowledgment | Partially | No acknowledgments, retries or `publishReliable()`. The core has event history (`enableHistory`, `getEventHistory`) and replays it to late subscribers with the `replayLastEvent` and `replayHistory` subscription options. |
+| 5. Circuit Breaker | Not implemented | |
+| 6. Event Batching | Not implemented | |
+| 7. Automatic Reconnection with Exponential Backoff | Partially | Reconnection is implemented in `WebSocketHandler` (options `reconnect`, `reconnectDelay`, `maxReconnectAttempts`): after an unexpected close it goes to `reconnecting`, opens a new socket to the same URL after a fixed delay, flushes the queue once connected, and publishes `ws.reconnect.failed` (`{ attempts }`) when the attempts are used up. Not built: exponential backoff, maximum delay, jitter, and per-pattern configuration on `EvEm`. |
+| 8. Metrics and Monitoring | Partially | No counters or timings (`enableMetrics`, `getMetrics`). The core's `info(pattern?)` lists subscriptions and middleware, and memory leak detection (`enableMemoryLeakDetection`) warns when an event's subscriptions pass a threshold. |
+| Not in this proposal: `WebSocketHandler` | Implemented | The recommended entry point. It connects a socket to an `EvEm` instance and runs the components above: it sends `ws.send` and `ws.send.*` events while connected and queues them while offline, routes incoming `{ event, data }` messages to `server.*` events (and unrecognised ones to `ws.message`), publishes `ws.error` and `ws.parse.error`, and provides `request()` and reconnection. |
 
-1. **Connection State Management** - Fully implemented
-   - State machine with transitions: disconnected → connecting → connected → reconnecting → disconnecting
-   - Event emission on state changes via `ws.connection.state`
-   - Helper methods: `isConnected()`, `isConnecting()`, `isDisconnected()`
-   - See: `src/websocket/ConnectionManager.ts`
-
-2. **Message Queue** - Fully implemented
-   - FIFO queue with configurable size limits
-   - Auto-flush on reconnection (configurable)
-   - Overflow handling with event emission
-   - Middleware-based interception for clean architecture
-   - See: `src/websocket/MessageQueue.ts`
-
-3. **Request-Response Pattern** - Fully implemented
-   - RPC-style communication with correlation IDs
-   - Configurable timeouts with `RequestTimeoutError`
-   - Support for concurrent requests
-   - Error handling with typed error responses
-   - See: `src/websocket/RequestResponseManager.ts`
-
-### 🚧 Future Enhancements (Not Yet Implemented)
-
-The following features from the original proposal are **not yet implemented** but remain as potential future additions:
+The sections below are the original proposal. The APIs they show were not built as written; the table says what exists instead.
 
 ## 1. Connection State Management
 Add built-in connection state tracking to handle online/offline scenarios:
@@ -211,23 +199,25 @@ class EvEm {
 
 ## Implementation Priority
 
-### ✅ High Priority (Core WebSocket needs) - COMPLETED:
-1. **Connection State Management** - ✅ Implemented in `src/websocket/ConnectionManager.ts`
-2. **Message Queue** - ✅ Implemented in `src/websocket/MessageQueue.ts`
-3. **Request-Response Pattern** - ✅ Implemented in `src/websocket/RequestResponseManager.ts`
+The priorities as proposed, with their status (see the [table](#status) for details):
 
-### 🚧 Medium Priority (Reliability) - NOT YET IMPLEMENTED:
-4. **Circuit Breaker** - Important for production systems
-5. **Reliable Delivery** - For critical messages
-6. **Event Batching** - Performance optimization
+### High Priority (Core WebSocket needs)
+1. **Connection State Management** - partially implemented: `src/websocket/ConnectionManager.ts`
+2. **Message Queue** - partially implemented: `src/websocket/MessageQueue.ts`
+3. **Request-Response Pattern** - partially implemented: `src/websocket/RequestResponseManager.ts`, exposed as `WebSocketHandler.request()`
 
-### 🚧 Low Priority (Nice to have) - NOT YET IMPLEMENTED:
-7. **Automatic Reconnection** - Can be implemented externally
-8. **Metrics and Monitoring** - Can use external tools
+### Medium Priority (Reliability)
+4. **Circuit Breaker** - not implemented
+5. **Reliable Delivery** - not implemented (the core replays event history to late subscribers, without acknowledgments)
+6. **Event Batching** - not implemented
+
+### Low Priority (Nice to have)
+7. **Automatic Reconnection** - implemented in `WebSocketHandler` with a fixed delay; exponential backoff and jitter are not
+8. **Metrics and Monitoring** - not implemented (the core has `info()` and memory leak detection)
 
 ## Example: Complete WebSocket Integration
 
-> **Note**: This example shows the original proposal's API design. For the **actual implemented API**, see the [WebSocket Adapter Documentation](websocket-adapter.md) which provides working examples of the implemented features.
+> **Note**: This sketches the API as originally proposed. None of the `EvEm` methods it calls (`on`, `enableMetrics`, `configureCircuitBreaker`, `enableBatching`, `flushQueue`, `publishReliable`, `request`, `publishQueued`) exist, and `ConnectionState` is a string union type exported from `@jcfigueiredo/evem/websocket`, not an enum. For working code, see the [examples](examples.md#websocket-adapter-examples).
 
 ```typescript
 import { EvEm, ConnectionState } from '@jcfigueiredo/evem';
@@ -294,25 +284,25 @@ class WebSocketClient {
 
 ## Actual Implementation
 
-The high-priority features have been implemented as a separate WebSocket adapter module with the following architecture:
+The features were built as a separate WebSocket adapter module (`src/websocket/`, published as `@jcfigueiredo/evem/websocket`):
 
-**Implemented Components:**
-- `ConnectionManager` - Connection state machine
+**Components:**
+- `WebSocketHandler` - Recommended entry point: wires a socket to EvEm (sending, queueing, routing, `request()`, reconnection)
+- `ConnectionManager` - Connection state tracking with `ws.connection.state` events
 - `MessageQueue` - Message queueing with auto-flush
 - `RequestResponseManager` - RPC-style request-response pattern
 
 **Key Differences from Proposal:**
-- Implemented as **optional adapter module** rather than core EvEm modifications
-- Uses **middleware pattern** for clean event interception
-- **Zero modifications** to EvEm core codebase
-- **Composition-based architecture** (components take EvEm instance)
+- Implemented as an **optional adapter module** rather than core EvEm modifications
+- Uses **middleware** to intercept outgoing `ws.send` / `ws.send.*` events
+- Uses only EvEm's **public API** (subscriptions and middleware); the core has no WebSocket-specific code
+- **Composition-based architecture** (components take an EvEm instance)
 
 **Documentation:**
 - **Full API Reference**: [WebSocket Adapter Documentation](websocket-adapter.md)
 - **Working Examples**: [Examples Documentation](examples.md#websocket-adapter-examples)
 - **Architecture Notes**: [CLAUDE.md](../CLAUDE.md#websocket-adapter-optional-extension)
 
-**Test Coverage:**
-- 78 comprehensive tests (100% passing)
-- Tests located in `tests/websocket/` directory
-- Run with: `pnpm test:nowatch -- tests/websocket/`
+**Tests:**
+- Located in `tests/websocket/` (one file per component, plus the entry point exports)
+- Run with: `pnpm test:nowatch tests/websocket/`
