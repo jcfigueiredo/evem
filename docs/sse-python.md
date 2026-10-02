@@ -41,7 +41,7 @@ format_sse_message(event=None, data=<omitted>, id=None, retry=None, *, raw=False
 | `event` | Event type. The client publishes it as `server.<event>`. |
 | `data` | Payload, JSON-encoded (strings included), matching the client's default `parseData: 'json'`. `None` is sent as `null`. |
 | `id` | `str` or `int`. The client sends the last id back as `Last-Event-ID` when it reconnects. |
-| `retry` | Reconnection delay for the client, in ms (a non-negative `int`). |
+| `retry` | Reconnection delay for the client, in ms (an `int` from 0 to 2\*\*53 − 1). |
 | `raw` | Write a `str` as plain text, one `data:` line per line, for clients using `parseData: 'text'`. Other values are still JSON-encoded. |
 | `envelope` | Write an unnamed message whose data is `{"event": …, "data": …}`, for [native EventSource clients](#native-eventsource-clients). Needs an `event`. |
 
@@ -74,7 +74,7 @@ The result is a `str` that ends with the blank line that dispatches the event. E
   ```
 
 - **Field order:** fields are written in the same order as in JavaScript: `event`, `id`, `retry`, `data`.
-- **Validation:** a line break in `event` or `id`, a NUL in `id`, a `retry` that isn't a non-negative `int`, and `envelope` without `event` raise `ValueError`. Such values would corrupt the stream, or be silently ignored by clients.
+- **Validation:** a line break in `event` or `id`, a NUL in `id`, a `retry` that isn't an `int` from 0 to 2\*\*53 − 1 (JavaScript's `Number.MAX_SAFE_INTEGER`), and `envelope` without `event` raise `ValueError`. Such values would corrupt the stream, or be silently ignored by clients.
 
 ### format_sse_comment
 
@@ -110,7 +110,7 @@ These headers set:
 | No data | `data` left out (`undefined`) | `data` left out (`None` is `null`, like JS `null`) |
 | Invalid values | `TypeError` / `RangeError` | `ValueError` |
 | Wrong types | not allowed by the TypeScript types | `TypeError`: `event` must be a `str`; `id` a `str` or `int` (not `float` or `bool`) |
-| `retry` | any integer number, including `5000.0` | an `int` only (`5000.0` raises `ValueError`) |
+| `retry` | any safe integer number, including `5000.0` | an `int` only (`5000.0` raises `ValueError`) |
 | NaN and infinity | written as `null` | `ValueError` |
 | Floats | `1`, `1e-7` | `1.0`, `1e-07`: written differently, but `JSON.parse` reads the same number |
 | Values JSON can't encode | `toJSON()` is used (a `Date` becomes an ISO string) | `TypeError` from `json`: convert first, e.g. `dt.isoformat()`, `dataclasses.asdict(obj)`, `model.model_dump(mode="json")` |

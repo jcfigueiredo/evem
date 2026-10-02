@@ -40,6 +40,7 @@ purpose: HTTP/2 servers reject it. Copy before changing it: ``{**SSE_HEADERS, "X
 # \v, \f, \x1c-\x1e, \x85, \u2028 and \u2029: the client keeps those as part of the line.
 _LINE_BREAK = re.compile(r"\r\n|\r|\n")
 _SURROGATE = re.compile("[\ud800-\udfff]")
+_MAX_RETRY = 2**53 - 1
 
 _OMITTED: Any = object()
 """Default for ``data``: no data given (``None`` is sent as JSON ``null``)."""
@@ -89,7 +90,7 @@ def format_sse_message(
 
     Raises:
         ValueError: If ``event`` or ``id`` contains a line break, ``id`` contains NUL, ``retry``
-            isn't a non-negative ``int``, ``envelope`` is set without an ``event``, or ``data``
+            isn't an ``int`` from 0 to 2**53 - 1, ``envelope`` is set without an ``event``, or ``data``
             contains NaN or infinity. (The JavaScript helper throws TypeError / RangeError.)
         TypeError: If ``event`` isn't a ``str``, ``id`` isn't a ``str`` or ``int``, or ``data``
             can't be JSON-encoded.
@@ -116,8 +117,9 @@ def format_sse_message(
         lines.append(f"id: {id_text}")
 
     if retry is not None:
-        if isinstance(retry, bool) or not isinstance(retry, int) or retry < 0:
-            raise ValueError(f"SSE retry must be a non-negative integer, got {retry!r}")
+        # Same limit as JavaScript's Number.MAX_SAFE_INTEGER, so both helpers reject the same values
+        if isinstance(retry, bool) or not isinstance(retry, int) or not 0 <= retry <= _MAX_RETRY:
+            raise ValueError(f"SSE retry must be a non-negative integer up to 2**53 - 1, got {retry!r}")
         lines.append(f"retry: {int(retry)}")
 
     if event or data is not _OMITTED:

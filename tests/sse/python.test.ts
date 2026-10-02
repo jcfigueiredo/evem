@@ -186,6 +186,7 @@ const invalidVectors: Vector[] = [
   { message: { id: '\0' } },
   { message: { retry: -1 } },
   { message: { retry: 1.5 } },
+  { message: { retry: 2 ** 53 } }, // above Number.MAX_SAFE_INTEGER
   { message: { retry: '5000' as unknown as number } },
   { message: { retry: true as unknown as number } },
   { message: { data: 1 }, options: { envelope: true } },
