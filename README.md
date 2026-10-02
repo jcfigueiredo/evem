@@ -1491,7 +1491,7 @@ evem.subscribe<{ to: string }>('sse.connection.state', ({ to }) => {
 await sse.disconnect();
 ```
 
-**What it publishes:** `sse.connection.state` with `{ from, to, timestamp }`; server events as `server.<name>`; other unnamed messages as `sse.message`; data that isn't valid JSON as `sse.parse.error`; connection problems as `sse.error` with `{ error, reason, status?, contentType? }`; and `sse.reconnect.failed` if you set `maxReconnectAttempts` and it's reached. By default the handler stops on `204`, on a response that isn't an event stream, and on `4xx` statuses other than `408` and `429`. Otherwise it reconnects after about 3 seconds (or the server's `retry:` delay), doubling the delay after each failed attempt up to 30 seconds.
+**What it publishes:** `sse.connection.state` with `{ from, to, timestamp }`; server events as `server.<name>`; other unnamed messages as `sse.message`; data that isn't valid JSON as `sse.parse.error`; connection problems as `sse.error` with `{ error, reason, status?, contentType? }`; and `sse.reconnect.failed` if you set `maxReconnectAttempts` and it's reached. By default the handler stops on `204`, on a response that isn't an event stream, and on `4xx` statuses other than `408` and `429`. Otherwise it reconnects after about 3 seconds (or the server's `retry:` delay), doubling the delay after each failed attempt up to about 30 seconds.
 
 **Servers:** `@jcfigueiredo/evem/sse/server` writes the wire format safely (no forged events from user content) and has the right response headers:
 
