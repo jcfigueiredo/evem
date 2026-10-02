@@ -8,10 +8,12 @@ function recordingListener() {
   const events: SseParsedEvent[] = [];
   const listener = {
     open: vi.fn(),
-    event: vi.fn((event: SseParsedEvent) => { events.push(event); }),
+    event: vi.fn((event: SseParsedEvent) => {
+      events.push(event);
+    }),
     retry: vi.fn(),
     activity: vi.fn(),
-    reconnecting: vi.fn(),
+    reconnecting: vi.fn()
   } satisfies SseTransportListener;
   return { listener, events };
 }
@@ -37,7 +39,7 @@ describe('EventSourceSseTransport', () => {
     expect(listener.open).toHaveBeenCalledTimes(1);
     expect(events).toEqual([
       { type: 'message', data: '{"a":1}', lastEventId: '4' },
-      { type: 'order.updated', data: '{"id":7}', lastEventId: '5' },
+      { type: 'order.updated', data: '{"id":7}', lastEventId: '5' }
     ]);
     expect(listener.activity).toHaveBeenCalledTimes(2);
   });
@@ -84,7 +86,7 @@ describe('EventSourceSseTransport', () => {
 
     expect(MockEventSource.instances.map(source => source.url)).toEqual([
       '/events?topic=a&lastEventId=4%202#x',
-      '/events?since=9',
+      '/events?since=9'
     ]);
     expect(MockEventSource.instances[0]!.init).toEqual({ withCredentials: true });
   });
@@ -95,7 +97,7 @@ describe('EventSourceSseTransport', () => {
 
     await expect(transport.connect({ url: '/events' }, recordingListener().listener)).resolves.toMatchObject({
       reason: 'network-error',
-      error: expect.objectContaining({ message: expect.stringContaining('EventSource') }),
+      error: expect.objectContaining({ message: expect.stringContaining('EventSource') })
     });
     vi.unstubAllGlobals();
   });

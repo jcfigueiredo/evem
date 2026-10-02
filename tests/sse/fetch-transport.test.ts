@@ -9,10 +9,16 @@ function recordingListener() {
   const listener: SseTransportListener & { opened: number; retries: number[]; activity: ReturnType<typeof vi.fn> } = {
     opened: 0,
     retries: [],
-    open() { this.opened++; },
-    event: event => { events.push(event); },
-    retry(milliseconds) { this.retries.push(milliseconds); },
-    activity: vi.fn(),
+    open() {
+      this.opened++;
+    },
+    event: event => {
+      events.push(event);
+    },
+    retry(milliseconds) {
+      this.retries.push(milliseconds);
+    },
+    activity: vi.fn()
   };
   return { listener, events };
 }
@@ -39,7 +45,13 @@ describe('FetchSseTransport', () => {
   it('sends Accept, the configured headers and Last-Event-ID', async () => {
     const { fetch, calls } = createFakeFetch();
     const headers = vi.fn(async () => ({ Authorization: 'Bearer t1' }));
-    const transport = new FetchSseTransport({ fetch, headers, method: 'POST', body: () => '{"topic":"orders"}', withCredentials: true });
+    const transport = new FetchSseTransport({
+      fetch,
+      headers,
+      method: 'POST',
+      body: () => '{"topic":"orders"}',
+      withCredentials: true
+    });
 
     void transport.connect({ url: 'https://api.test/events', lastEventId: '41' }, recordingListener().listener);
     await flush();
@@ -48,7 +60,7 @@ describe('FetchSseTransport', () => {
     expect(Object.fromEntries(new Headers(init.headers).entries())).toEqual({
       accept: 'text/event-stream',
       authorization: 'Bearer t1',
-      'last-event-id': '41',
+      'last-event-id': '41'
     });
     expect(init.method).toBe('POST');
     expect(init.body).toBe('{"topic":"orders"}');
@@ -76,15 +88,19 @@ describe('FetchSseTransport', () => {
   it.each([
     [{ status: 204 }, { reason: 'no-content' }],
     [{ status: 401 }, { reason: 'http-error', status: 401 }],
-    [{ status: 503, headers: { 'retry-after': '7' } }, { reason: 'http-error', status: 503, retryAfter: 7000 }],
+    [
+      { status: 503, headers: { 'retry-after': '7' } },
+      { reason: 'http-error', status: 503, retryAfter: 7000 }
+    ],
     [{ contentType: 'application/json' }, { reason: 'bad-content-type', contentType: 'application/json' }],
-    [{ contentType: null }, { reason: 'bad-content-type', contentType: null }],
+    [{ contentType: null }, { reason: 'bad-content-type', contentType: null }]
   ])('reports %j as %j without opening', async (response, expected) => {
     const { fetch } = createFakeFetch(() => response);
     const { listener } = recordingListener();
 
-    await expect(new FetchSseTransport({ fetch }).connect({ url: 'https://api.test/events' }, listener))
-      .resolves.toEqual(expected);
+    await expect(
+      new FetchSseTransport({ fetch }).connect({ url: 'https://api.test/events' }, listener)
+    ).resolves.toEqual(expected);
     expect(listener.opened).toBe(0);
   });
 
@@ -100,9 +116,12 @@ describe('FetchSseTransport', () => {
   });
 
   it('reports network errors, including a stream that fails midway', async () => {
-    const failingFetch = async () => { throw new TypeError('fetch failed'); };
-    await expect(new FetchSseTransport({ fetch: failingFetch }).connect({ url: 'x' }, recordingListener().listener))
-      .resolves.toEqual({ reason: 'network-error', error: new TypeError('fetch failed') });
+    const failingFetch = async () => {
+      throw new TypeError('fetch failed');
+    };
+    await expect(
+      new FetchSseTransport({ fetch: failingFetch }).connect({ url: 'x' }, recordingListener().listener)
+    ).resolves.toEqual({ reason: 'network-error', error: new TypeError('fetch failed') });
 
     const { fetch, calls } = createFakeFetch();
     const closed = new FetchSseTransport({ fetch }).connect({ url: 'x' }, recordingListener().listener);
@@ -113,9 +132,12 @@ describe('FetchSseTransport', () => {
 
   it('reports a failing headers function as an error', async () => {
     const { fetch } = createFakeFetch();
-    const headers = () => { throw new Error('token refresh failed'); };
-    await expect(new FetchSseTransport({ fetch, headers }).connect({ url: 'x' }, recordingListener().listener))
-      .resolves.toEqual({ reason: 'network-error', error: new Error('token refresh failed') });
+    const headers = () => {
+      throw new Error('token refresh failed');
+    };
+    await expect(
+      new FetchSseTransport({ fetch, headers }).connect({ url: 'x' }, recordingListener().listener)
+    ).resolves.toEqual({ reason: 'network-error', error: new Error('token refresh failed') });
   });
 
   it('resolves as aborted after abort()', async () => {
@@ -139,8 +161,14 @@ describe('FetchSseTransport', () => {
       activity() {},
       event: event => {
         order.push(`start ${event.data}`);
-        if (event.data === '1') return new Promise<void>(resolve => { release = () => { order.push('end 1'); resolve(); }; });
-      },
+        if (event.data === '1')
+          return new Promise<void>(resolve => {
+            release = () => {
+              order.push('end 1');
+              resolve();
+            };
+          });
+      }
     };
     const closed = new FetchSseTransport({ fetch }).connect({ url: 'x' }, listener);
     await flush();
@@ -166,8 +194,12 @@ describe('FetchSseTransport - id-only messages', () => {
       open() {},
       retry() {},
       activity() {},
-      event: event => { order.push(`event ${event.data} (${event.lastEventId})`); },
-      lastEventId: id => { order.push(`id ${id}`); },
+      event: event => {
+        order.push(`event ${event.data} (${event.lastEventId})`);
+      },
+      lastEventId: id => {
+        order.push(`id ${id}`);
+      }
     };
     const closed = new FetchSseTransport({ fetch }).connect({ url: 'x' }, listener);
     await flush();

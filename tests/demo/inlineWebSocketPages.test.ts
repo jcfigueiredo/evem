@@ -1,5 +1,5 @@
-import { loadInlineClasses } from "./demoPages";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { loadInlineClasses } from './demoPages';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Regression tests for the WebSocket demo pages' inline adapter classes.
@@ -21,60 +21,70 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("demo pages: websocket-demo.html request-response", () => {
+describe('demo pages: websocket-demo.html request-response', () => {
   function setup() {
-    const { classes } = loadInlineClasses("websocket-demo.html", ["EvEm", "RequestResponseManager"]);
+    const { classes } = loadInlineClasses('websocket-demo.html', ['EvEm', 'RequestResponseManager']);
     const evem = new classes.EvEm!();
     const requestManager = new classes.RequestResponseManager!(evem);
     const sent: any[] = [];
-    evem.subscribe("ws.send", (message: unknown) => { sent.push(message); });
+    evem.subscribe('ws.send', (message: unknown) => {
+      sent.push(message);
+    });
     return { evem, requestManager, sent };
   }
 
-  it("sends the request and resolves with the result of the response that has its id", async () => {
+  it('sends the request and resolves with the result of the response that has its id', async () => {
     const { evem, requestManager, sent } = setup();
 
-    const response = requestManager.request("getUser", { id: 123 }, { id: "req-1", timeout: 2000 });
-    expect(sent).toEqual([{ type: "request", id: "req-1", method: "getUser", params: { id: 123 } }]);
+    const response = requestManager.request('getUser', { id: 123 }, { id: 'req-1', timeout: 2000 });
+    expect(sent).toEqual([{ type: 'request', id: 'req-1', method: 'getUser', params: { id: 123 } }]);
     expect(requestManager.getPendingRequestCount()).toBe(1);
 
     // A response to another request is ignored
-    await evem.publish("ws.response", { type: "response", id: "req-other", result: "wrong" });
+    await evem.publish('ws.response', { type: 'response', id: 'req-other', result: 'wrong' });
     expect(requestManager.getPendingRequestCount()).toBe(1);
 
     await vi.advanceTimersByTimeAsync(100);
-    await evem.publish("ws.response", { type: "response", id: "req-1", result: { user: "John Doe", id: 123 } });
+    await evem.publish('ws.response', { type: 'response', id: 'req-1', result: { user: 'John Doe', id: 123 } });
 
-    await expect(response).resolves.toEqual({ user: "John Doe", id: 123 });
+    await expect(response).resolves.toEqual({ user: 'John Doe', id: 123 });
     expect(requestManager.getPendingRequestCount()).toBe(0);
     // The timeout was cleared: nothing is left to fire
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("rejects when no response arrives within the timeout, and ignores a late response", async () => {
+  it('rejects when no response arrives within the timeout, and ignores a late response', async () => {
     const { evem, requestManager } = setup();
 
-    const response = requestManager.request("getUser", { id: 123 }, { id: "req-1", timeout: 2000 });
-    const outcome = response.then(() => "resolved", (error: Error) => error.message);
+    const response = requestManager.request('getUser', { id: 123 }, { id: 'req-1', timeout: 2000 });
+    const outcome = response.then(
+      () => 'resolved',
+      (error: Error) => error.message
+    );
 
     await vi.advanceTimersByTimeAsync(1999);
     expect(requestManager.getPendingRequestCount()).toBe(1);
     await vi.advanceTimersByTimeAsync(1);
 
-    expect(await outcome).toBe("No response to req-1 within 2000ms");
+    expect(await outcome).toBe('No response to req-1 within 2000ms');
     expect(requestManager.getPendingRequestCount()).toBe(0);
 
-    await evem.publish("ws.response", { type: "response", id: "req-1", result: "late" });
+    await evem.publish('ws.response', { type: 'response', id: 'req-1', result: 'late' });
     expect(requestManager.getPendingRequestCount()).toBe(0);
   });
 });
 
-describe("demo pages: chat-demo.html offline delivery", () => {
+describe('demo pages: chat-demo.html offline delivery', () => {
   const LAG = 2000;
 
   /** The chat page's wiring: queue offline, deliver after the simulated lag, requeue on disconnect */
   function setup() {
-    const { classes } = loadInlineClasses("chat-demo.html", ["EvEm", "ConnectionManager", "MessageQueue", "SimulatedLink"]);
+    const { classes } = loadInlineClasses('chat-demo.html', [
+      'EvEm',
+      'ConnectionManager',
+      'MessageQueue',
+      'SimulatedLink'
+    ]);
     const evem = new classes.EvEm!();
     const connectionManager = new classes.ConnectionManager!(evem);
     const messageQueue = new classes.MessageQueue!(evem, connectionManager);
@@ -84,12 +94,14 @@ describe("demo pages: chat-demo.html offline delivery", () => {
     });
 
     messageQueue.enable();
-    evem.subscribe("ws.send.queued", (message: unknown) => { link.send(message, LAG); });
-    evem.subscribe("ws.connection.state", (event: { to: string }) => {
-      if (event.to === "disconnected") link.requeueInFlight();
+    evem.subscribe('ws.send.queued', (message: unknown) => {
+      link.send(message, LAG);
+    });
+    evem.subscribe('ws.connection.state', (event: { to: string }) => {
+      if (event.to === 'disconnected') link.requeueInFlight();
     });
 
-    const send = (text: string) => evem.publish("ws.send", { user: "You", text, timestamp: Date.now() });
+    const send = (text: string) => evem.publish('ws.send', { user: 'You', text, timestamp: Date.now() });
     /** Change the connection state, letting the timers of a flush run */
     const transitionTo = async (state: string) => {
       const done = connectionManager.transitionTo(state);
@@ -99,59 +111,59 @@ describe("demo pages: chat-demo.html offline delivery", () => {
     return { connectionManager, messageQueue, delivered, send, transitionTo };
   }
 
-  it("delivers a message after the lag while connected", async () => {
+  it('delivers a message after the lag while connected', async () => {
     const { messageQueue, delivered, send, transitionTo } = setup();
-    await transitionTo("connected");
+    await transitionTo('connected');
 
-    await send("hello");
+    await send('hello');
     await vi.advanceTimersByTimeAsync(LAG);
 
-    expect(delivered).toEqual(["hello"]);
+    expect(delivered).toEqual(['hello']);
     expect(messageQueue.getQueueSize()).toBe(0);
   });
 
-  it("puts a message still in flight back in the queue when the connection drops, and delivers it after reconnecting", async () => {
+  it('puts a message still in flight back in the queue when the connection drops, and delivers it after reconnecting', async () => {
     const { messageQueue, delivered, send, transitionTo } = setup();
-    await transitionTo("connected");
+    await transitionTo('connected');
 
-    await send("in flight");
+    await send('in flight');
     await vi.advanceTimersByTimeAsync(LAG / 2);
-    await transitionTo("disconnected");
+    await transitionTo('disconnected');
 
     expect(messageQueue.getQueueSize()).toBe(1);
-    await send("sent offline");
+    await send('sent offline');
     await vi.advanceTimersByTimeAsync(LAG * 2);
     expect(delivered).toEqual([]);
-    expect(messageQueue.queue.map((message: { text: string }) => message.text)).toEqual(["in flight", "sent offline"]);
+    expect(messageQueue.queue.map((message: { text: string }) => message.text)).toEqual(['in flight', 'sent offline']);
 
-    await transitionTo("connected");
+    await transitionTo('connected');
     await vi.advanceTimersByTimeAsync(LAG * 2);
 
-    expect(delivered).toEqual(["in flight", "sent offline"]);
+    expect(delivered).toEqual(['in flight', 'sent offline']);
     expect(messageQueue.getQueueSize()).toBe(0);
   });
 
-  it("keeps the rest of the queue when the connection drops during a flush", async () => {
+  it('keeps the rest of the queue when the connection drops during a flush', async () => {
     const { connectionManager, messageQueue, delivered, send, transitionTo } = setup();
-    for (const text of ["one", "two", "three"]) {
+    for (const text of ['one', 'two', 'three']) {
       await send(text);
       await vi.advanceTimersByTimeAsync(1);
     }
     expect(messageQueue.getQueueSize()).toBe(3);
 
     // The flush sends a message every 100ms: drop the connection after "one" and "two" went out
-    const connecting = connectionManager.transitionTo("connected");
+    const connecting = connectionManager.transitionTo('connected');
     await vi.advanceTimersByTimeAsync(150);
-    await transitionTo("disconnected");
+    await transitionTo('disconnected');
     await connecting;
     await vi.advanceTimersByTimeAsync(LAG * 2);
 
     expect(delivered).toEqual([]);
-    expect(messageQueue.queue.map((message: { text: string }) => message.text)).toEqual(["one", "two", "three"]);
+    expect(messageQueue.queue.map((message: { text: string }) => message.text)).toEqual(['one', 'two', 'three']);
 
-    await transitionTo("connected");
+    await transitionTo('connected');
     await vi.advanceTimersByTimeAsync(LAG * 2);
-    expect(delivered).toEqual(["one", "two", "three"]);
+    expect(delivered).toEqual(['one', 'two', 'three']);
     expect(messageQueue.getQueueSize()).toBe(0);
   });
 });

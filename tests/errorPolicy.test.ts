@@ -37,7 +37,7 @@ describe('Error Policy', () => {
       expect(mockHandler1).toHaveBeenCalledTimes(1);
       expect(mockHandler2).toHaveBeenCalledTimes(1);
       expect(mockHandler3).toHaveBeenCalledTimes(1);
-      
+
       // Assert that the error was logged
       expect(console.error).toHaveBeenCalledTimes(1);
       expect(console.error).toHaveBeenCalledWith(
@@ -65,7 +65,7 @@ describe('Error Policy', () => {
       expect(mockHandler1).toHaveBeenCalledTimes(1);
       expect(mockHandler2).toHaveBeenCalledTimes(1);
       expect(mockHandler3).toHaveBeenCalledTimes(1);
-      
+
       // Assert that the error was logged
       expect(console.error).toHaveBeenCalledTimes(1);
     });
@@ -91,7 +91,7 @@ describe('Error Policy', () => {
       expect(mockHandler1).toHaveBeenCalledTimes(1);
       expect(mockHandler2).toHaveBeenCalledTimes(1);
       expect(mockHandler3).toHaveBeenCalledTimes(1);
-      
+
       // Assert that no error was logged
       expect(console.error).not.toHaveBeenCalled();
     });
@@ -117,7 +117,7 @@ describe('Error Policy', () => {
       expect(mockHandler1).toHaveBeenCalledTimes(1);
       expect(mockHandler2).toHaveBeenCalledTimes(1);
       expect(mockHandler3).not.toHaveBeenCalled();
-      
+
       // Assert that the error was logged
       expect(console.error).toHaveBeenCalledTimes(1);
     });
@@ -129,8 +129,8 @@ describe('Error Policy', () => {
       });
 
       // Publish with CANCEL_ON_ERROR policy
-      const result = await evem.publish('test.event', undefined, { 
-        errorPolicy: ErrorPolicy.CANCEL_ON_ERROR 
+      const result = await evem.publish('test.event', undefined, {
+        errorPolicy: ErrorPolicy.CANCEL_ON_ERROR
       });
 
       // Assert that the result is false (event canceled)
@@ -152,15 +152,15 @@ describe('Error Policy', () => {
       evem.subscribe('test.event', mockHandler3);
 
       // Publish with THROW policy and expect it to throw
-      await expect(
-        evem.publish('test.event', undefined, { errorPolicy: ErrorPolicy.THROW })
-      ).rejects.toThrow('Test error');
+      await expect(evem.publish('test.event', undefined, { errorPolicy: ErrorPolicy.THROW })).rejects.toThrow(
+        'Test error'
+      );
 
       // Assert that only handlers before the error were called
       expect(mockHandler1).toHaveBeenCalledTimes(1);
       expect(mockHandler2).toHaveBeenCalledTimes(1);
       expect(mockHandler3).not.toHaveBeenCalled();
-      
+
       // Assert that no error was logged (since it's thrown instead)
       expect(console.error).not.toHaveBeenCalled();
     });
@@ -186,7 +186,7 @@ describe('Error Policy', () => {
       expect(mockHandler1).toHaveBeenCalledTimes(1);
       expect(mockHandler2).toHaveBeenCalledTimes(1);
       expect(mockHandler3).toHaveBeenCalledTimes(1);
-      
+
       // Assert that the error was logged
       expect(console.error).toHaveBeenCalledTimes(1);
     });
@@ -204,9 +204,9 @@ describe('Error Policy', () => {
       evem.subscribe('test.event', mockHandler3);
 
       // Publish with THROW policy and expect it to throw
-      await expect(
-        evem.publish('test.event', undefined, { errorPolicy: ErrorPolicy.THROW })
-      ).rejects.toThrow('Async test error');
+      await expect(evem.publish('test.event', undefined, { errorPolicy: ErrorPolicy.THROW })).rejects.toThrow(
+        'Async test error'
+      );
 
       // Assert that only handlers before the error were called
       expect(mockHandler1).toHaveBeenCalledTimes(1);
@@ -218,10 +218,10 @@ describe('Error Policy', () => {
   describe('Interaction with cancelable events', () => {
     it('should handle both cancellation and errors correctly', async () => {
       // First handler cancels the event
-      const cancelHandler = vi.fn().mockImplementation((event) => {
+      const cancelHandler = vi.fn().mockImplementation(event => {
         event.cancel();
       });
-      
+
       // Second handler throws an error (but won't be called due to cancellation)
       const errorHandler = vi.fn().mockImplementation(() => {
         throw new Error('This should not be called');
@@ -231,20 +231,20 @@ describe('Error Policy', () => {
       evem.subscribe('test.event', errorHandler);
 
       // Publish with cancelable:true and THROW error policy
-      const result = await evem.publish('test.event', undefined, { 
+      const result = await evem.publish('test.event', undefined, {
         cancelable: true,
         errorPolicy: ErrorPolicy.THROW
       });
 
       // Event was canceled
       expect(result).toBe(false);
-      
+
       // First handler was called
       expect(cancelHandler).toHaveBeenCalledTimes(1);
-      
+
       // Second handler was not called due to cancellation
       expect(errorHandler).not.toHaveBeenCalled();
-      
+
       // No errors were logged
       expect(console.error).not.toHaveBeenCalled();
     });
@@ -280,9 +280,9 @@ describe('Error policies - callback timeouts', () => {
   it('should reject a publish whose callback times out under THROW', async () => {
     evem.subscribe('report.generate', slowHandler);
 
-    await expect(
-      evem.publish('report.generate', {}, { timeout: 10, errorPolicy: ErrorPolicy.THROW })
-    ).rejects.toThrow('Event handler timed out after 10ms');
+    await expect(evem.publish('report.generate', {}, { timeout: 10, errorPolicy: ErrorPolicy.THROW })).rejects.toThrow(
+      'Event handler timed out after 10ms'
+    );
   });
 
   it('should cancel the event when a callback times out under CANCEL_ON_ERROR', async () => {
@@ -301,9 +301,9 @@ describe('Error policies - callback timeouts', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     evem.subscribe('report.generate', slowHandler);
 
-    await expect(
-      evem.publish('report.generate', {}, { timeout: 10, errorPolicy: ErrorPolicy.SILENT })
-    ).resolves.toBe(true);
+    await expect(evem.publish('report.generate', {}, { timeout: 10, errorPolicy: ErrorPolicy.SILENT })).resolves.toBe(
+      true
+    );
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 });

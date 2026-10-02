@@ -1,15 +1,15 @@
-import { EvEm } from "~/eventEmitter";
-import { describe, test, expect, beforeEach } from "vitest";
+import { EvEm } from '~/eventEmitter';
+import { describe, test, expect, beforeEach } from 'vitest';
 
-describe("SimpleEventEmitter Load Test", () => {
+describe('SimpleEventEmitter Load Test', () => {
   let emitter: EvEm;
 
   beforeEach(() => {
     emitter = new EvEm();
   });
 
-  test("should handle timeouts for asynchronous event callbacks", async () => {
-    const testEvent = "test.asyncEvent";
+  test('should handle timeouts for asynchronous event callbacks', async () => {
+    const testEvent = 'test.asyncEvent';
     let callbackCompleted = false;
 
     emitter.subscribe(testEvent, async () => {
@@ -23,7 +23,7 @@ describe("SimpleEventEmitter Load Test", () => {
     expect(callbackCompleted).toBe(false);
   });
 
-  test("should handle a high volume of subscriptions, publications, and unsubscriptions efficiently", async () => {
+  test('should handle a high volume of subscriptions, publications, and unsubscriptions efficiently', async () => {
     const emitter = new EvEm();
     const numSubscriptions = 100000; // Large number of subscriptions for the test
     let subscriptionIds: string[] = [];
@@ -31,14 +31,14 @@ describe("SimpleEventEmitter Load Test", () => {
     // Subscription
     const startSubscribe = performance.now();
     for (let i = 0; i < numSubscriptions; i++) {
-      const id = emitter.subscribe("test.event", () => {});
+      const id = emitter.subscribe('test.event', () => {});
       subscriptionIds.push(id);
     }
     const endSubscribe = performance.now();
 
     // Publication
     const startPublish = performance.now();
-    await emitter.publish("test.event");
+    await emitter.publish('test.event');
     const endPublish = performance.now();
 
     // Unsubscription

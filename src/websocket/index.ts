@@ -1,8 +1,8 @@
 /* c8 ignore next */
-export { ConnectionManager } from "./ConnectionManager.js";
-export { MessageQueue, type MessageQueueOptions } from "./MessageQueue.js";
-export { RequestResponseManager } from "./RequestResponseManager.js";
-export { WebSocketHandler } from "./WebSocketHandler.js";
+export { ConnectionManager } from './ConnectionManager.js';
+export { MessageQueue, type MessageQueueOptions } from './MessageQueue.js';
+export { RequestResponseManager } from './RequestResponseManager.js';
+export { WebSocketHandler } from './WebSocketHandler.js';
 export {
   ConnectionError,
   QueueOverflowError,
@@ -20,4 +20,4 @@ export {
   type WebSocketAdapterOptions,
   type WebSocketEvents,
   type WebSocketHandlerOptions
-} from "./types.js";
+} from './types.js';

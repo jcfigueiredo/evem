@@ -1,5 +1,13 @@
 import { SseParser, type SseParsedEvent } from './SseParser.js';
-import type { SseBody, SseCloseInfo, SseConnectRequest, SseFetch, SseHeaders, SseTransport, SseTransportListener } from './types.js';
+import type {
+  SseBody,
+  SseCloseInfo,
+  SseConnectRequest,
+  SseFetch,
+  SseHeaders,
+  SseTransport,
+  SseTransportListener
+} from './types.js';
 
 export interface FetchSseTransportOptions {
   /** fetch implementation (default: the global fetch) */
@@ -112,11 +120,15 @@ export class FetchSseTransport implements SseTransport {
       headers,
       body,
       credentials: withCredentials ? 'include' : 'same-origin',
-      signal,
+      signal
     });
   }
 
-  private async read(body: ReadableStream<Uint8Array>, request: SseConnectRequest, listener: SseTransportListener): Promise<void> {
+  private async read(
+    body: ReadableStream<Uint8Array>,
+    request: SseConnectRequest,
+    listener: SseTransportListener
+  ): Promise<void> {
     const reader = body.getReader();
     const decoder = new TextDecoder();
     // Events and id-only changes, delivered in stream order once each chunk is parsed
@@ -125,7 +137,7 @@ export class FetchSseTransport implements SseTransport {
       {
         onEvent: event => pending.push({ event }),
         onLastEventId: lastEventId => pending.push({ lastEventId }),
-        onRetry: milliseconds => listener.retry(milliseconds),
+        onRetry: milliseconds => listener.retry(milliseconds)
       },
       request.lastEventId ?? ''
     );

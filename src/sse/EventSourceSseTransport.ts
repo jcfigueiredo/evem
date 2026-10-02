@@ -57,10 +57,13 @@ export class EventSourceSseTransport implements SseTransport {
 
   connect(request: SseConnectRequest, listener: SseTransportListener): Promise<SseCloseInfo> {
     return new Promise(resolve => {
-      const EventSourceImplementation = this.options.EventSourceConstructor
-        ?? (globalThis as { EventSource?: EventSourceConstructorLike }).EventSource;
+      const EventSourceImplementation =
+        this.options.EventSourceConstructor ?? (globalThis as { EventSource?: EventSourceConstructorLike }).EventSource;
       if (!EventSourceImplementation) {
-        resolve({ reason: 'network-error', error: new Error('No EventSource implementation: pass EventSourceConstructor or use the fetch transport') });
+        resolve({
+          reason: 'network-error',
+          error: new Error('No EventSource implementation: pass EventSourceConstructor or use the fetch transport')
+        });
         return;
       }
 

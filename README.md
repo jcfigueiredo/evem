@@ -1586,7 +1586,8 @@ pnpm test            # Watch mode
 pnpm test:nowatch    # Run once
 pnpm test:coverage   # With a coverage report
 pnpm typecheck       # TypeScript check
-pnpm check           # Everything CI runs: type check, tests and package check
+pnpm format          # Format the code with Prettier (pnpm format:check only checks)
+pnpm check           # Everything CI runs: format check, type check, tests and package check
 ```
 
 Maintainers release new versions with `pnpm release <version>`; see [Releasing](docs/releasing.md).

@@ -1,4 +1,4 @@
-import { generateId } from "./id.js";
+import { generateId } from './id.js';
 
 /**
  * Interface for cancelable events that can be canceled by subscribers
@@ -87,7 +87,7 @@ export type SchemaValidator<T = unknown> = (data: T) => boolean | Promise<boolea
  */
 export interface SchemaValidationError {
   /** The error message */
-  message: string; 
+  message: string;
   /** The path to the invalid field (if available) */
   path?: string;
   /** Additional validation error details */
@@ -97,9 +97,10 @@ export interface SchemaValidationError {
 /**
  * Advanced schema validator that returns validation errors
  */
-export type AdvancedSchemaValidator<T = unknown> = (data: T) => 
-  { valid: boolean, errors?: SchemaValidationError[] } | 
-  Promise<{ valid: boolean, errors?: SchemaValidationError[] }>;
+export type AdvancedSchemaValidator<T = unknown> = (
+  data: T
+) =>
+  { valid: boolean; errors?: SchemaValidationError[] } | Promise<{ valid: boolean; errors?: SchemaValidationError[] }>;
 
 type SubscriptionOptions<T = unknown, R = any> = {
   filter?: FilterPredicate<T> | FilterPredicate<T>[];
@@ -130,8 +131,10 @@ export type MiddlewareResult<T = any> = null | T | { event: string; data: T };
  * @param data - The event data
  * @returns A MiddlewareResult that can modify or cancel the event
  */
-export type MiddlewareFunction<T = any> = 
-  (event: string, data: T) => MiddlewareResult<T> | Promise<MiddlewareResult<T>>;
+export type MiddlewareFunction<T = any> = (
+  event: string,
+  data: T
+) => MiddlewareResult<T> | Promise<MiddlewareResult<T>>;
 
 /**
  * Middleware configuration
@@ -172,8 +175,16 @@ export interface EventInfo {
 }
 
 interface IEventEmitter {
-  subscribe<T = unknown, R = any>(event: string, callback: EventCallback<T>, options?: SubscriptionOptions<T, R>): string;
-  subscribeOnce<T = unknown, R = any>(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T, R>, 'once'>): string;
+  subscribe<T = unknown, R = any>(
+    event: string,
+    callback: EventCallback<T>,
+    options?: SubscriptionOptions<T, R>
+  ): string;
+  subscribeOnce<T = unknown, R = any>(
+    event: string,
+    callback: EventCallback<T>,
+    options?: Omit<SubscriptionOptions<T, R>, 'once'>
+  ): string;
   unsubscribe<T = unknown>(event: string, callback: EventCallback<T>): void;
   unsubscribeById(id: string): void;
   publish<T = unknown>(event: string, args?: T, options?: PublishOptions | number): Promise<boolean>;
@@ -215,16 +226,16 @@ class EvEm implements IEventEmitter {
   // A publish started from inside a handler inherits it; unrelated (concurrent) publishes start fresh.
   private activePublishChain: Map<string, number> | null = null;
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private throttleTimers = new Map<string, { timer: ReturnType<typeof setTimeout>, expiresAt: number }>();
+  private throttleTimers = new Map<string, { timer: ReturnType<typeof setTimeout>; expiresAt: number }>();
   private middleware: Array<{ pattern?: string; handler: MiddlewareFunction }> = [];
   private subscriptionSequence = 0; // Orders subscriptions with equal priority by subscription time
   private maxRecursionDepth: number;
-  
+
   // Event history related properties
   private eventHistory: EventRecord[] = [];
   private historyEnabled: boolean = false;
   private historyMaxSize: number = 50; // Default history size
-  
+
   // Memory leak detection properties
   private memoryLeakDetectionEnabled: boolean = false;
   private memoryLeakThreshold: number = 10; // Default threshold
@@ -234,7 +245,7 @@ class EvEm implements IEventEmitter {
   constructor(maxRecursionDepth: number = 3) {
     this.maxRecursionDepth = maxRecursionDepth;
   }
-  
+
   /**
    * Enable event history recording
    * @param maxEvents - Maximum number of events to store in history (default: 50)
@@ -244,7 +255,7 @@ class EvEm implements IEventEmitter {
     this.historyMaxSize = Math.max(0, maxEvents);
     this.trimHistory();
   }
-  
+
   /**
    * Disable event history recording
    * Note: This doesn't clear existing history
@@ -252,33 +263,33 @@ class EvEm implements IEventEmitter {
   disableHistory(): void {
     this.historyEnabled = false;
   }
-  
+
   /**
    * Clear all recorded event history
    */
   clearEventHistory(): void {
     this.eventHistory = [];
   }
-  
+
   /**
    * Enable memory leak detection
    * @param options - Configuration options for leak detection
    */
   enableMemoryLeakDetection(options?: Partial<MemoryLeakOptions>): void {
     this.memoryLeakDetectionEnabled = true;
-    
+
     if (options?.threshold !== undefined) {
       this.memoryLeakThreshold = options.threshold;
     }
-    
+
     if (options?.showSubscriptionDetails !== undefined) {
       this.showLeakSubscriptionDetails = options.showSubscriptionDetails;
     }
-    
+
     // Reset warnings when re-enabling
     this.warnedEvents.clear();
   }
-  
+
   /**
    * Disable memory leak detection
    */
@@ -286,7 +297,7 @@ class EvEm implements IEventEmitter {
     this.memoryLeakDetectionEnabled = false;
     this.warnedEvents.clear();
   }
-  
+
   /**
    * Get the recorded event history
    * @param pattern - Optional event pattern to filter history by
@@ -296,13 +307,11 @@ class EvEm implements IEventEmitter {
     if (!pattern) {
       return this.eventHistory as EventRecord<T>[];
     }
-    
+
     // Filter history by pattern
-    return this.eventHistory.filter(record => 
-      this.isEventMatch(record.event, pattern)
-    ) as EventRecord<T>[];
+    return this.eventHistory.filter(record => this.isEventMatch(record.event, pattern)) as EventRecord<T>[];
   }
-  
+
   /**
    * Record an event in history if history is enabled
    * @param event - Event name
@@ -310,18 +319,18 @@ class EvEm implements IEventEmitter {
    */
   private recordEvent<T = any>(event: string, data: T): void {
     if (!this.historyEnabled) return;
-    
+
     // Add to history with timestamp
     const record: EventRecord<T> = {
       event,
       data,
       timestamp: Date.now()
     };
-    
+
     this.eventHistory.push(record);
     this.trimHistory();
   }
-  
+
   /**
    * Drop the oldest events so the history doesn't exceed its maximum size
    */
@@ -331,7 +340,7 @@ class EvEm implements IEventEmitter {
       this.eventHistory.splice(0, excess);
     }
   }
-  
+
   /**
    * Register a middleware function to process events before they reach subscribers
    * @param middleware - The middleware function or config to add
@@ -348,7 +357,7 @@ class EvEm implements IEventEmitter {
       });
     }
   }
-  
+
   /**
    * Remove a previously registered middleware function
    * @param middleware - The middleware function or config to remove
@@ -362,9 +371,8 @@ class EvEm implements IEventEmitter {
       }
     } else {
       // Find and remove by handler and pattern
-      const index = this.middleware.findIndex(m => 
-        m.handler === middleware.handler && 
-        m.pattern === middleware.pattern
+      const index = this.middleware.findIndex(
+        m => m.handler === middleware.handler && m.pattern === middleware.pattern
       );
       if (index !== -1) {
         this.middleware.splice(index, 1);
@@ -433,21 +441,21 @@ class EvEm implements IEventEmitter {
    * @returns A subscription ID that can be used to unsubscribe
    */
   subscribe<T = unknown, R = any>(
-    event: string, 
-    callback: EventCallback<T>, 
+    event: string,
+    callback: EventCallback<T>,
     options?: SubscriptionOptions<T, R>
   ): string {
-    if (!event) throw new Error("Event name cannot be empty.");
+    if (!event) throw new Error('Event name cannot be empty.');
 
     // Generate a subscription ID early so we can use it in the throttle/debounce callbacks
     const subscriptionId = generateId();
-    
+
     // Reference to the original callback
     let finalCallback: WrappedCallback<T> = callback;
-    
+
     // Build the callback chain from the inside out. Events flow through it in this order:
     // schema validation → filters → throttle/debounce → once → original callback
-    
+
     // First, wrap with once logic if needed. It's innermost, so only an event that got through
     // every other step consumes it, and the flag makes it fire exactly once even when events
     // arrive concurrently or are replayed from history
@@ -455,7 +463,7 @@ class EvEm implements IEventEmitter {
       const onceOriginalCallback = finalCallback;
       const self = this; // Store reference to 'this' for the closure
       let hasFired = false;
-      
+
       finalCallback = function onceWrapper(args: T) {
         if (hasFired) {
           return SKIPPED;
@@ -466,45 +474,45 @@ class EvEm implements IEventEmitter {
         return onceOriginalCallback(args);
       };
     }
-    
+
     // Store reference to the callback with once logic
     // This will be called by the throttle/debounce wrappers
     const processedCallback = finalCallback;
-    
+
     // Apply throttle/debounce logic
     const hasThrottle = options?.throttleTime && options.throttleTime > 0;
     const hasDebounce = options?.debounceTime && options.debounceTime > 0;
-    
+
     // Handle throttle only
     if (hasThrottle && !hasDebounce) {
       const throttleTime = options.throttleTime!;
-      
+
       finalCallback = (args: T) => {
         const timerId = `throttle_${event}_${subscriptionId}`;
         const now = Date.now();
-        
+
         // Check if we're currently throttled
         if (this.throttleTimers.has(timerId)) {
           const throttleData = this.throttleTimers.get(timerId)!;
-          
+
           // If throttle window hasn't expired, ignore this event
           if (now < throttleData.expiresAt) {
             return SKIPPED;
           }
-          
+
           // Throttle window has expired, clean up the old timer
           clearTimeout(throttleData.timer);
           this.throttleTimers.delete(timerId);
         }
-        
+
         // Set up a new throttle window
         const expiresAt = now + throttleTime;
         const timer = setTimeout(() => {
           this.throttleTimers.delete(timerId);
         }, throttleTime);
-        
+
         this.throttleTimers.set(timerId, { timer, expiresAt });
-        
+
         // Execute the callback immediately (throttle processes first event right away)
         return processedCallback(args);
       };
@@ -512,22 +520,22 @@ class EvEm implements IEventEmitter {
     // Handle debounce only
     else if (!hasThrottle && hasDebounce) {
       const debounceTime = options.debounceTime!;
-      
+
       finalCallback = (args: T) => {
         const timerId = `debounce_${event}_${subscriptionId}`;
-        
+
         // Clear any existing timer for this callback
         if (this.debounceTimers.has(timerId)) {
           clearTimeout(this.debounceTimers.get(timerId));
         }
-        
+
         // Set a new timer
         const timer = setTimeout(() => {
           this.debounceTimers.delete(timerId);
           // Execute the callback directly; there's no publish to report errors to anymore
           this.invokeDetached(processedCallback, args, `Error in debounced handler for "${event}":`);
         }, debounceTime);
-        
+
         this.debounceTimers.set(timerId, timer);
         return SKIPPED;
       };
@@ -536,54 +544,52 @@ class EvEm implements IEventEmitter {
     else if (hasThrottle && hasDebounce) {
       const throttleTime = options.throttleTime!;
       const debounceTime = options.debounceTime!;
-      
+
       // Track the last throttled time
       const throttleState = { lastThrottledTime: 0 };
-      
+
       finalCallback = (args: T) => {
         const timerId = `combined_${event}_${subscriptionId}`;
         const now = Date.now();
-        
+
         // Check if throttling allows this event to pass through
         let shouldProcessNow = false;
-        
+
         // If no throttle window or it has expired, we can process immediately
         if (now - throttleState.lastThrottledTime > throttleTime) {
           throttleState.lastThrottledTime = now;
           shouldProcessNow = true;
         }
-        
+
         // Clear any existing debounce timer
         if (this.debounceTimers.has(timerId)) {
           clearTimeout(this.debounceTimers.get(timerId));
         }
-        
+
         // If it should process now due to throttle, do it immediately
         if (shouldProcessNow) {
           return processedCallback(args);
         }
-        
+
         // Otherwise, debounce it
         const timer = setTimeout(() => {
           this.debounceTimers.delete(timerId);
           this.invokeDetached(processedCallback, args, `Error in debounced handler for "${event}":`);
         }, debounceTime);
-        
+
         this.debounceTimers.set(timerId, timer);
         return SKIPPED;
       };
     }
-    
+
     // Apply filters if needed. Filters wrap throttle/debounce and once, so a rejected event
     // never uses up a throttle window, resets a debounce timer or consumes a once subscription
-    const filters = options?.filter ? 
-      (Array.isArray(options.filter) ? options.filter : [options.filter]) : 
-      null;
-    
+    const filters = options?.filter ? (Array.isArray(options.filter) ? options.filter : [options.filter]) : null;
+
     if (filters) {
       const originalCallback = finalCallback;
       const self = this; // Store reference to 'this' for the closure
-      
+
       // Create a function that checks all filters first
       const checkFilters = async (args: T): Promise<boolean> => {
         // Apply each filter in series (short-circuiting on first false)
@@ -599,22 +605,24 @@ class EvEm implements IEventEmitter {
         }
         return true; // All filters passed
       };
-      
+
       // Wrap the callback with filter logic
       finalCallback = function filterWrapper(args: T) {
         // Check all filters first
         const filterResult = checkFilters(args);
-        
+
         // If filterResult is a promise (async filter)
         if (filterResult instanceof Promise) {
-          return filterResult.then(self.bindToActivePublishChain(passes => {
-            // If all filters passed, call the original callback
-            if (passes) {
-              return originalCallback(args);
-            }
-            // Otherwise skip the callback
-            return SKIPPED;
-          }));
+          return filterResult.then(
+            self.bindToActivePublishChain(passes => {
+              // If all filters passed, call the original callback
+              if (passes) {
+                return originalCallback(args);
+              }
+              // Otherwise skip the callback
+              return SKIPPED;
+            })
+          );
         } else if (filterResult) {
           // If all filters passed synchronously, call the original callback
           return originalCallback(args);
@@ -623,39 +631,39 @@ class EvEm implements IEventEmitter {
         return SKIPPED;
       };
     }
-    
+
     // Apply schema validation if provided
     if (options?.schema) {
       const schemaValidator = options.schema;
       const originalCallback = finalCallback;
       const schemaErrorPolicy = options.schemaErrorPolicy ?? ErrorPolicy.CANCEL_ON_ERROR;
       const self = this; // Store reference to 'this' for the closure
-      
+
       // Wrap the callback with schema validation logic
       finalCallback = function schemaValidationWrapper(args: T) {
         // Handler for schema validation errors based on error policy
         const handleSchemaValidationError = (
-          message: string, 
-          policy: ErrorPolicy, 
+          message: string,
+          policy: ErrorPolicy,
           errors: SchemaValidationError[] | null
         ): any => {
           switch (policy) {
             case ErrorPolicy.SILENT:
               // Silently ignore the error, don't call the callback
               return SKIPPED;
-              
+
             case ErrorPolicy.LOG_AND_CONTINUE:
               // Log the error and continue with the callback
               console.error(message, errors ? errors : '');
               return originalCallback(args);
-              
+
             case ErrorPolicy.THROW:
               // Throw an error
               const error = new Error(message);
               (error as any).validationErrors = errors;
               Object.defineProperty(error, SCHEMA_THROW, { value: true });
               throw error;
-              
+
             case ErrorPolicy.CANCEL_ON_ERROR:
             default:
               // Log the error and skip this subscriber (other subscribers still run)
@@ -663,12 +671,10 @@ class EvEm implements IEventEmitter {
               return SKIPPED;
           }
         };
-        
+
         // Call the callback for valid data, or apply the error policy for invalid data.
         // Works for both simple (boolean) and advanced ({ valid, errors }) validator results.
-        const handleValidationResult = (
-          result: boolean | { valid: boolean, errors?: SchemaValidationError[] }
-        ) => {
+        const handleValidationResult = (result: boolean | { valid: boolean; errors?: SchemaValidationError[] }) => {
           const isSimpleResult = typeof result === 'boolean';
           const valid = isSimpleResult ? result : result.valid;
           if (valid) {
@@ -677,26 +683,27 @@ class EvEm implements IEventEmitter {
           return handleSchemaValidationError(
             `Schema validation failed for event '${event}'`,
             schemaErrorPolicy,
-            isSimpleResult ? null : result.errors ?? null
+            isSimpleResult ? null : (result.errors ?? null)
           );
         };
-        
+
         // Only errors thrown by the validator itself are schema errors; errors thrown by the
         // callback must reach the publish error policy, so the callback runs outside this try
         // The validator itself threw (or rejected), handle according to error policy
-        const handleValidatorError = (error: unknown) => handleSchemaValidationError(
-          `Error during schema validation for event '${event}': ${error}`,
-          schemaErrorPolicy,
-          error instanceof Error ? [{ message: error.message }] : null
-        );
-        
+        const handleValidatorError = (error: unknown) =>
+          handleSchemaValidationError(
+            `Error during schema validation for event '${event}': ${error}`,
+            schemaErrorPolicy,
+            error instanceof Error ? [{ message: error.message }] : null
+          );
+
         let validationResult: ReturnType<typeof schemaValidator>;
         try {
           validationResult = schemaValidator(args);
         } catch (error) {
           return handleValidatorError(error);
         }
-        
+
         // Handle both synchronous and asynchronous validators
         if (validationResult instanceof Promise) {
           return validationResult.then(
@@ -707,10 +714,10 @@ class EvEm implements IEventEmitter {
         return handleValidationResult(validationResult);
       };
     }
-    
+
     // Convert priority option to a numeric value
     let priority = 0; // Default priority (normal)
-    
+
     if (options?.priority !== undefined) {
       if (typeof options.priority === 'number') {
         priority = options.priority;
@@ -730,10 +737,10 @@ class EvEm implements IEventEmitter {
         }
       }
     }
-    
+
     // Capture the transform function if provided
     const transform = options?.transform;
-    
+
     // Register the final wrapped callback with its priority and transform function
     const callbacks = this.events.get(event) ?? new Map();
     callbacks.set(subscriptionId, {
@@ -744,38 +751,44 @@ class EvEm implements IEventEmitter {
       transform
     });
     this.events.set(event, callbacks);
-    
+
     // Check for potential memory leaks if detection is enabled
     if (this.memoryLeakDetectionEnabled && callbacks.size > this.memoryLeakThreshold) {
       this.checkForMemoryLeak(event, callbacks.size);
     }
-    
+
     // Handle history replay options if history is enabled
     if (this.historyEnabled && (options?.replayLastEvent || options?.replayHistory)) {
       // Get relevant historical events
-      const relevantHistory = this.getEventHistory().filter(record => 
-        this.isEventMatch(record.event, event)
-      );
-      
+      const relevantHistory = this.getEventHistory().filter(record => this.isEventMatch(record.event, event));
+
       if (relevantHistory.length > 0) {
         // If replayLastEvent is true, only replay the most recent event
         if (options?.replayLastEvent) {
           const lastEvent = relevantHistory[relevantHistory.length - 1]!;
           // Directly call the callback with the historical data
-          this.invokeDetached(finalCallback, lastEvent.data, `Error replaying last event "${event}" to new subscriber:`);
-        } 
+          this.invokeDetached(
+            finalCallback,
+            lastEvent.data,
+            `Error replaying last event "${event}" to new subscriber:`
+          );
+        }
         // If replayHistory is true, replay all matching historical events in order
         else if (options?.replayHistory) {
           for (const record of relevantHistory) {
-            this.invokeDetached(finalCallback, record.data, `Error replaying historical event "${event}" to new subscriber:`);
+            this.invokeDetached(
+              finalCallback,
+              record.data,
+              `Error replaying historical event "${event}" to new subscriber:`
+            );
           }
         }
       }
     }
-    
+
     return subscriptionId;
   }
-  
+
   /**
    * Subscribe to an event that will automatically unsubscribe after the first occurrence
    * @param event - The event name to subscribe to
@@ -784,8 +797,8 @@ class EvEm implements IEventEmitter {
    * @returns A subscription ID that can be used to unsubscribe before the event occurs
    */
   subscribeOnce<T = unknown, R = any>(
-    event: string, 
-    callback: EventCallback<T>, 
+    event: string,
+    callback: EventCallback<T>,
     options?: Omit<SubscriptionOptions<T, R>, 'once'>
   ): string {
     // Simply uses the subscribe method with once:true added to the options
@@ -830,28 +843,26 @@ class EvEm implements IEventEmitter {
     if (callbacks.size === 0) {
       this.events.delete(event);
     }
-    
+
     // Clear memory leak warning if subscription count falls below threshold
-    if (this.memoryLeakDetectionEnabled && 
-        this.warnedEvents.has(event) && 
-        callbacks.size <= this.memoryLeakThreshold) {
+    if (this.memoryLeakDetectionEnabled && this.warnedEvents.has(event) && callbacks.size <= this.memoryLeakThreshold) {
       this.warnedEvents.delete(event);
     }
-    
+
     // Clean up any debounce timers associated with this subscription
     const debounceTimerKey = `debounce_${event}_${id}`;
     if (this.debounceTimers.has(debounceTimerKey)) {
       clearTimeout(this.debounceTimers.get(debounceTimerKey));
       this.debounceTimers.delete(debounceTimerKey);
     }
-    
+
     // Clean up any throttle timers associated with this subscription
     const throttleTimerKey = `throttle_${event}_${id}`;
     if (this.throttleTimers.has(throttleTimerKey)) {
       clearTimeout(this.throttleTimers.get(throttleTimerKey)!.timer);
       this.throttleTimers.delete(throttleTimerKey);
     }
-    
+
     // Clean up any combined throttle+debounce timers
     const combinedTimerKey = `combined_${event}_${id}`;
     if (this.debounceTimers.has(combinedTimerKey)) {
@@ -871,33 +882,33 @@ class EvEm implements IEventEmitter {
     event: string,
     data: T,
     publishChain: Map<string, number>
-  ): Promise<{ event: string, data: T } | null> {
+  ): Promise<{ event: string; data: T } | null> {
     let currentEvent = event;
     let currentData = data;
-    
+
     // Apply each matching middleware in order
     for (const { pattern, handler } of this.middleware) {
       // Skip middleware that doesn't match the event pattern
       if (pattern && !this.isEventMatch(currentEvent, pattern)) {
         continue;
       }
-      
+
       try {
         const result = this.runInPublishChain(publishChain, () => handler(currentEvent, currentData));
         const processedResult = result instanceof Promise ? await result : result;
-        
+
         // If middleware returns null, cancel the event
         if (processedResult === null) {
           return null;
         }
-        
+
         // If middleware returns a new { event, data } object, update both.
         // Data returned unchanged (or enriched) is never a reroute, even if the payload
         // itself happens to have `event` and `data` fields (e.g. WebSocket messages).
         if (processedResult !== currentData && this.isMiddlewareReroute(processedResult)) {
           currentEvent = processedResult.event;
           currentData = processedResult.data;
-        } 
+        }
         // Otherwise, just update the data
         else {
           currentData = processedResult as T;
@@ -908,7 +919,7 @@ class EvEm implements IEventEmitter {
         return null;
       }
     }
-    
+
     return { event: currentEvent, data: currentData };
   }
 
@@ -922,7 +933,7 @@ class EvEm implements IEventEmitter {
     if (data === null || typeof data !== 'object') {
       return data;
     }
-    
+
     const prototype = Object.getPrototypeOf(data);
     if (Array.isArray(data) || prototype === Object.prototype || prototype === null) {
       const copy: any = Array.isArray(data) ? [...data] : { ...data };
@@ -934,7 +945,7 @@ class EvEm implements IEventEmitter {
       Object.defineProperty(copy, 'canceled', { get: isCanceled, configurable: true });
       return copy;
     }
-    
+
     return new Proxy(data, {
       get(target, property) {
         if (property === 'cancel') return cancel;
@@ -952,31 +963,24 @@ class EvEm implements IEventEmitter {
   /**
    * Checks if a middleware result is a reroute: an object with exactly `event` (a string) and `data`
    */
-  private isMiddlewareReroute(result: unknown): result is { event: string, data: any } {
+  private isMiddlewareReroute(result: unknown): result is { event: string; data: any } {
     if (!result || typeof result !== 'object') {
       return false;
     }
     const keys = Object.keys(result);
-    return keys.length === 2 &&
-      'event' in result &&
-      'data' in result &&
-      typeof result.event === 'string';
+    return keys.length === 2 && 'event' in result && 'data' in result && typeof result.event === 'string';
   }
 
-  async publish<T = unknown>(
-    event: string, 
-    args?: T, 
-    options?: PublishOptions | number
-  ): Promise<boolean> {
+  async publish<T = unknown>(event: string, args?: T, options?: PublishOptions | number): Promise<boolean> {
     if (!event) {
-      return Promise.reject(new Error("Event name cannot be empty."));
+      return Promise.reject(new Error('Event name cannot be empty.'));
     }
 
     // Handle different forms of options
     let timeout = 5000;
     let cancelable = false;
     let errorPolicy = ErrorPolicy.LOG_AND_CONTINUE;
-    
+
     if (typeof options === 'number') {
       timeout = options;
     } else if (options) {
@@ -991,37 +995,45 @@ class EvEm implements IEventEmitter {
     // Create event data (with or without cancel function); only a missing payload defaults to {}
     let eventData: any = args === undefined ? ({} as T) : args;
     let isCanceled = false;
-    const makeCancelable = (data: any) => this.addCancelSupport(
-      data,
-      () => { isCanceled = true; },
-      () => isCanceled
-    );
-    
+    const makeCancelable = (data: any) =>
+      this.addCancelSupport(
+        data,
+        () => {
+          isCanceled = true;
+        },
+        () => isCanceled
+      );
+
     // Apply middleware to the event
     if (this.middleware.length > 0) {
       const middlewareResult = await this.applyMiddleware(event, eventData, publishChain);
-      
+
       // If middleware canceled the event, return false
       if (middlewareResult === null) {
         return false;
       }
-      
+
       // Update event and data based on middleware result
       event = middlewareResult.event;
       eventData = middlewareResult.data;
     }
-    
+
     // Record this event in history (before processing any callbacks), with the data subscribers
     // receive after middleware, but before the cancel method is added, so that replayed events
     // don't have cancel methods
     this.recordEvent(event, eventData);
-    
+
     // Add cancel functionality if the event is cancelable
     if (cancelable) {
       eventData = makeCancelable(eventData);
     }
 
-    const matchingCallbacks: { callback: WrappedCallback, priority: number, sequence: number, transform?: TransformFunction }[] = [];
+    const matchingCallbacks: {
+      callback: WrappedCallback;
+      priority: number;
+      sequence: number;
+      transform?: TransformFunction;
+    }[] = [];
 
     // First, collect all matching callbacks with their priorities and transform functions
     for (const [registeredEvent, callbacks] of this.events) {
@@ -1046,23 +1058,23 @@ class EvEm implements IEventEmitter {
       if (isSchemaThrow(error)) {
         throw error;
       }
-      
+
       // Handle other errors based on the error policy
       switch (errorPolicy) {
         case ErrorPolicy.SILENT:
           // Silently ignore the error
           break;
-          
+
         case ErrorPolicy.CANCEL_ON_ERROR:
           // Log the error and cancel event propagation
           console.error(`Error in event handler for "${event}":`, error);
           isCanceled = true;
           break;
-          
+
         case ErrorPolicy.THROW:
           // Rethrow the error to the caller
           throw error;
-          
+
         case ErrorPolicy.LOG_AND_CONTINUE:
         default:
           // Log the error and continue with the next callback (default behavior)
@@ -1070,16 +1082,16 @@ class EvEm implements IEventEmitter {
           break;
       }
     };
-    
+
     // Execute callbacks in priority order - we need to handle them sequentially for cancellation
     let currentEventData = eventData; // Start with the initial event data
-    
+
     for (const { callback, transform } of matchingCallbacks) {
       // Skip remaining callbacks if the event was canceled
       if (isCanceled) {
         break;
       }
-      
+
       try {
         // Call the current callback with the current event data
         let outcome = this.runInPublishChain(publishChain, () => callback(currentEventData));
@@ -1091,12 +1103,12 @@ class EvEm implements IEventEmitter {
             throw new Error(`Event handler timed out after ${timeout}ms`);
           }
         }
-        
+
         // Check if the event was canceled by the callback
         if (isCanceled) {
           break;
         }
-        
+
         // Apply this subscriber's transform, unless its once, filter, schema or throttle/debounce
         // step skipped the callback for this event
         if (transform && outcome !== SKIPPED) {
@@ -1119,17 +1131,17 @@ class EvEm implements IEventEmitter {
               case ErrorPolicy.SILENT:
                 // Silently ignore the error - use original data for next callback
                 break;
-                
+
               case ErrorPolicy.CANCEL_ON_ERROR:
                 // Log the error and cancel event propagation
                 console.error(`Error in transform function for "${event}":`, transformError);
                 isCanceled = true;
                 break;
-                
+
               case ErrorPolicy.THROW:
                 // Rethrow the error to the caller
                 throw transformError;
-                
+
               case ErrorPolicy.LOG_AND_CONTINUE:
               default:
                 // Log the error and continue with the next callback with original data
@@ -1142,7 +1154,7 @@ class EvEm implements IEventEmitter {
         handleCallbackError(error);
       }
     }
-    
+
     // Return whether the event completed without being canceled
     return !isCanceled;
   }
@@ -1175,15 +1187,15 @@ class EvEm implements IEventEmitter {
     if (pattern === '*') {
       return true;
     }
-    
-    const eventParts = event.split(".");
-    const patternParts = pattern.split(".");
-    
+
+    const eventParts = event.split('.');
+    const patternParts = pattern.split('.');
+
     // If pattern has more parts than the event, it can't match
     if (patternParts.length > eventParts.length) {
       return false;
     }
-    
+
     // Special case for wildcard at end (e.g. "user.*")
     if (patternParts.length < eventParts.length && patternParts[patternParts.length - 1] === '*') {
       // Check all parts before the last one
@@ -1194,22 +1206,22 @@ class EvEm implements IEventEmitter {
       }
       return true;
     }
-    
+
     // If parts length is different but the last part isn't a wildcard, it can't match
     if (patternParts.length !== eventParts.length) {
       return false;
     }
-    
+
     // Check each part
     for (let i = 0; i < patternParts.length; i++) {
       if (patternParts[i] !== '*' && patternParts[i] !== eventParts[i]) {
         return false;
       }
     }
-    
+
     return true;
   }
-  
+
   /**
    * Check for potential memory leaks when the number of subscriptions exceeds the threshold
    * @param event - The event name
@@ -1220,33 +1232,33 @@ class EvEm implements IEventEmitter {
     if (this.warnedEvents.has(event)) {
       return;
     }
-    
+
     // Mark this event as warned
     this.warnedEvents.add(event);
-    
+
     // Format the warning message
     console.warn(
       `Possible memory leak detected: ${count} handlers added for event "${event}". ` +
-      `This exceeds the threshold of ${this.memoryLeakThreshold}. ` +
-      'This could indicate event handlers are not being properly unsubscribed.'
+        `This exceeds the threshold of ${this.memoryLeakThreshold}. ` +
+        'This could indicate event handlers are not being properly unsubscribed.'
     );
-    
+
     // Show subscription details if enabled
     if (this.showLeakSubscriptionDetails) {
       console.group('Event subscription details:');
-      
+
       try {
         const eventInfo = this.info(event);
-        
+
         console.log(`Total subscriptions for "${event}" pattern: ${eventInfo.length}`);
         console.log('Subscription IDs:');
-        
+
         eventInfo.forEach(info => {
           if (!info.isMiddleware && info.id) {
             console.log(`- ${info.id} (priority: ${info.priority})`);
           }
         });
-        
+
         console.log('To fix this issue:');
         console.log('1. Ensure all event handlers are unsubscribed when components are unmounted');
         console.log('2. Use subscribeOnce() for one-time events');
@@ -1254,12 +1266,11 @@ class EvEm implements IEventEmitter {
       } catch (error) {
         console.error('Error displaying subscription details:', error);
       }
-      
+
       console.groupEnd();
     }
   }
 
-  
   /**
    * Get information about event subscriptions and middleware
    * @param pattern - Optional pattern to filter events and middleware
@@ -1267,14 +1278,14 @@ class EvEm implements IEventEmitter {
    */
   info(pattern?: string): EventInfo[] {
     const result: EventInfo[] = [];
-    
+
     // Add subscriptions matching the pattern
     for (const [event, callbacks] of this.events) {
       // If pattern is provided, check if the event matches
       if (pattern && !this.isEventMatch(event, pattern)) {
         continue;
       }
-      
+
       // Add each subscription for this event
       for (const [id, callbackInfo] of callbacks) {
         result.push({
@@ -1285,20 +1296,17 @@ class EvEm implements IEventEmitter {
         });
       }
     }
-    
+
     // Add middleware matching the pattern
     for (const mw of this.middleware) {
       const middlewarePattern = mw.pattern || '*';
-      
+
       // For middleware, we include it if:
       // 1. No pattern was provided (showing everything)
       // 2. The middleware's pattern matches the provided pattern
       // 3. The middleware has no pattern (matches all events) and a pattern was provided
-      const shouldInclude = 
-        !pattern || 
-        this.isEventMatch(pattern, middlewarePattern) || 
-        middlewarePattern === '*';
-      
+      const shouldInclude = !pattern || this.isEventMatch(pattern, middlewarePattern) || middlewarePattern === '*';
+
       if (shouldInclude) {
         result.push({
           event: middlewarePattern,
@@ -1307,16 +1315,16 @@ class EvEm implements IEventEmitter {
         });
       }
     }
-    
+
     return result;
   }
 }
 
 // Types declared with `export` above are already exported; only list the rest here
-export { 
+export {
   EvEm,
-  type IEventEmitter, 
-  type EventCallback, 
+  type IEventEmitter,
+  type EventCallback,
   type FilterPredicate,
   type TransformFunction,
   type SubscriptionOptions,

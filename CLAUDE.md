@@ -10,8 +10,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Watch mode tests**: `pnpm test`
 - **TypeScript check**: `pnpm typecheck` (same as `pnpm tsc --noEmit`)
 - **Build**: `pnpm build` (compiles `src/` to `dist/` as ES modules with `.d.ts` files, via `tsconfig.build.json`)
-- **Everything CI runs**: `pnpm check` (typecheck, tests and package check; also the `prepublishOnly` hook). CI runs these steps on Node 20 and 22 (Node 20 has no global `WebSocket`)
-- **No linter or formatter**: `pnpm typecheck` is the only static check. `.prettierrc` exists, but Prettier isn't a dependency and nothing runs it (see Formatting under Code Style)
+- **Format**: `pnpm format` (Prettier on `src/`, `tests/`, `scripts/` and `vitest.config.ts`); `pnpm format:check` only checks
+- **Everything CI runs**: `pnpm check` (format check, typecheck, tests and package check; also the `prepublishOnly` hook). CI runs these steps on Node 20 and 22 (Node 20 has no global `WebSocket`)
+- **No linter**: the format check and `pnpm typecheck` are the only static checks
 - **Package check**: `pnpm test:package` (builds, packs, installs the tarball into a temp project, imports every entry point from Node and type-checks a strict TypeScript consumer, with and without Node.js types)
 
 ## Packaging and Releases
@@ -128,7 +129,7 @@ A receive-only Server-Sent Events client in `src/sse/`, published as `@jcfigueir
 **Type definitions** (`types.ts`): the transport contract (`SseTransport`, `SseTransportListener`, `SseConnectRequest`, `SseCloseInfo`), `SseHeaders`, `SseBody`, `SseFetch` (the `fetch` option's type; not `typeof fetch`, which DOM + `@types/node` 18 overload incompatibly, so hand-written fetches wouldn't type-check), and `SseEvents`, which maps each event the adapter publishes (except the dynamic `server.*` ones) to its payload type; keep it and the docs' event table in sync when adding events.
 
 ## Code Style Guidelines
-- **Formatting**: no formatter runs, so match the file you're editing: the core (`eventEmitter.ts`) uses double quotes, the adapters single quotes
+- **Formatting**: run `pnpm format` before committing (`.prettierrc`: single quotes, 120 columns, no trailing commas); `pnpm check` and CI fail on unformatted code. Markdown and the demo pages aren't formatted (the `tests/demo/` tests read code out of the pages). Formatting-only commits go in `.git-blame-ignore-revs`
 - **Imports**: Use named imports; sort imports alphabetically
 - **Types**: Strong typing with TS; use interfaces for public APIs and types for internal structures
 - **Naming**: camelCase for variables/methods; PascalCase for classes/interfaces; UPPERCASE for constants

@@ -10,7 +10,7 @@ describe('Event Transformation', () => {
 
   it('should transform event data for the next subscriber', async () => {
     // Setup a transform function that adds a property
-    const transform: TransformFunction<any> = (data) => {
+    const transform: TransformFunction<any> = data => {
       return {
         ...data,
         transformed: true,
@@ -25,7 +25,7 @@ describe('Event Transformation', () => {
     });
 
     // Second subscriber that receives transformed data
-    const secondHandler = vi.fn((data) => {
+    const secondHandler = vi.fn(data => {
       expect(data.transformed).toBe(true);
       expect(data.value).toBe(20); // Original value (10) * 2
     });
@@ -46,7 +46,7 @@ describe('Event Transformation', () => {
 
   it('should handle multiple transforms in sequence', async () => {
     // First transform doubles the value
-    const transform1: TransformFunction<any> = (data) => {
+    const transform1: TransformFunction<any> = data => {
       return {
         ...data,
         value: data.value * 2,
@@ -55,7 +55,7 @@ describe('Event Transformation', () => {
     };
 
     // Second transform adds 5
-    const transform2: TransformFunction<any> = (data) => {
+    const transform2: TransformFunction<any> = data => {
       return {
         ...data,
         value: data.value + 5,
@@ -64,7 +64,7 @@ describe('Event Transformation', () => {
     };
 
     // Third transform converts to string
-    const transform3: TransformFunction<any> = (data) => {
+    const transform3: TransformFunction<any> = data => {
       return {
         ...data,
         value: String(data.value),
@@ -120,7 +120,7 @@ describe('Event Transformation', () => {
 
   it('should handle async transforms', async () => {
     // Async transform function
-    const asyncTransform: TransformFunction<any> = async (data) => {
+    const asyncTransform: TransformFunction<any> = async data => {
       // Simulate async operation
       await new Promise<void>(resolve => setTimeout(resolve, 10));
       return {
@@ -140,7 +140,7 @@ describe('Event Transformation', () => {
 
     expect(handler1).toHaveBeenCalledWith({ value: 50 });
     expect(handler2).toHaveBeenCalledWith({
-      value: 150, 
+      value: 150,
       asyncTransformed: true
     });
   });
@@ -200,16 +200,20 @@ describe('Event Transformation', () => {
       evem.subscribe('cancel.transform', handler2);
 
       // Use CANCEL_ON_ERROR policy
-      const result = await evem.publish('cancel.transform', { value: 10 }, {
-        errorPolicy: ErrorPolicy.CANCEL_ON_ERROR
-      });
+      const result = await evem.publish(
+        'cancel.transform',
+        { value: 10 },
+        {
+          errorPolicy: ErrorPolicy.CANCEL_ON_ERROR
+        }
+      );
 
       // First handler should be called
       expect(handler1).toHaveBeenCalledTimes(1);
-      
+
       // Second handler should NOT be called due to cancellation
       expect(handler2).not.toHaveBeenCalled();
-      
+
       // Result should be false indicating the event was canceled
       expect(result).toBe(false);
 
@@ -223,7 +227,7 @@ describe('Event Transformation', () => {
 
   it('should work with other features like filtering', async () => {
     // Transform function
-    const transform: TransformFunction<any> = (data) => {
+    const transform: TransformFunction<any> = data => {
       return {
         ...data,
         transformedBy: 'handler1',
@@ -240,10 +244,10 @@ describe('Event Transformation', () => {
 
     // First handler transforms the data
     evem.subscribe('combined.features', handler1, { transform });
-    
+
     // Second handler has a filter and only processes transformed data where value > 10
     evem.subscribe('combined.features', handler2, { filter });
-    
+
     // Third handler always receives the latest data
     evem.subscribe('combined.features', handler3);
 
@@ -251,13 +255,13 @@ describe('Event Transformation', () => {
     await evem.publish('combined.features', { value: 7 });
 
     expect(handler1).toHaveBeenCalledWith({ value: 7 });
-    
+
     // Second handler should be called because transformed value (12) passes filter
     expect(handler2).toHaveBeenCalledWith({
       value: 12,
       transformedBy: 'handler1'
     });
-    
+
     expect(handler3).toHaveBeenCalledWith({
       value: 12,
       transformedBy: 'handler1'
@@ -270,10 +274,10 @@ describe('Event Transformation', () => {
     await evem.publish('combined.features', { value: 3 });
 
     expect(handler1).toHaveBeenCalledWith({ value: 3 });
-    
+
     // Second handler should NOT be called because transformed value (8) fails filter
     expect(handler2).not.toHaveBeenCalled();
-    
+
     // Third handler should still be called
     expect(handler3).toHaveBeenCalledWith({
       value: 8,
@@ -294,7 +298,13 @@ describe('Transforms - async timeouts', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     let received: any = 'not called';
     evem.subscribe('order.placed', () => {}, { priority: 10, transform: slowTransform });
-    evem.subscribe('order.placed', (data: any) => { received = data; }, { priority: 0 });
+    evem.subscribe(
+      'order.placed',
+      (data: any) => {
+        received = data;
+      },
+      { priority: 0 }
+    );
 
     await evem.publish('order.placed', { id: 1 }, 10);
 
@@ -326,7 +336,13 @@ describe('Transforms - only for subscribers that handled the event', () => {
   const lastValueAfter = async (options: Record<string, unknown>, publishes: number[] = [1]) => {
     let received: any;
     evem.subscribe('reading', () => {}, { priority: 10, transform: double, ...options });
-    evem.subscribe('reading', (data: any) => { received = data.value; }, { priority: 0 });
+    evem.subscribe(
+      'reading',
+      (data: any) => {
+        received = data.value;
+      },
+      { priority: 0 }
+    );
     for (const value of publishes) {
       await evem.publish('reading', { value });
     }
@@ -337,15 +353,15 @@ describe('Transforms - only for subscribers that handled the event', () => {
     expect(await lastValueAfter({ filter: () => true })).toBe(2);
   });
 
-  it('should skip the transform when the subscriber\'s filter rejected the event', async () => {
+  it("should skip the transform when the subscriber's filter rejected the event", async () => {
     expect(await lastValueAfter({ filter: () => false })).toBe(1);
   });
 
-  it('should skip the transform when the subscriber\'s async filter rejected the event', async () => {
+  it("should skip the transform when the subscriber's async filter rejected the event", async () => {
     expect(await lastValueAfter({ filter: async () => false })).toBe(1);
   });
 
-  it('should skip the transform when the subscriber\'s schema rejected the event', async () => {
+  it("should skip the transform when the subscriber's schema rejected the event", async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(await lastValueAfter({ schema: () => false })).toBe(1);
     vi.restoreAllMocks();

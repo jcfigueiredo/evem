@@ -1,6 +1,6 @@
-import { EvEm } from "~/eventEmitter";
-import { loadInlineEvEm } from "./demoPages";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EvEm } from '~/eventEmitter';
+import { loadInlineEvEm } from './demoPages';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Regression tests: the flow-control demo's inline EvEm must combine throttle and debounce like the
@@ -22,12 +22,16 @@ interface Handled {
 async function runCombinedBurst(evem: Emitter): Promise<Handled[]> {
   const handled: Handled[] = [];
   const start = Date.now();
-  evem.subscribe("combined.event", (value: number) => {
-    handled.push({ value, at: Date.now() - start });
-  }, { throttleTime: 300, debounceTime: 300 });
+  evem.subscribe(
+    'combined.event',
+    (value: number) => {
+      handled.push({ value, at: Date.now() - start });
+    },
+    { throttleTime: 300, debounceTime: 300 }
+  );
 
   for (let value = 1; value <= 20; value++) {
-    void evem.publish("combined.event", value);
+    void evem.publish('combined.event', value);
     await vi.advanceTimersByTimeAsync(50);
   }
   await vi.advanceTimersByTimeAsync(1000);
@@ -39,10 +43,10 @@ const EXPECTED_COMBINED: Handled[] = [
   { value: 1, at: 0 },
   { value: 8, at: 350 },
   { value: 15, at: 700 },
-  { value: 20, at: 1250 },
+  { value: 20, at: 1250 }
 ];
 
-describe("demo pages: flow-control.html throttle + debounce", () => {
+describe('demo pages: flow-control.html throttle + debounce', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -51,12 +55,12 @@ describe("demo pages: flow-control.html throttle + debounce", () => {
     vi.useRealTimers();
   });
 
-  it("the expected timeline matches the real library", async () => {
+  it('the expected timeline matches the real library', async () => {
     expect(await runCombinedBurst(new EvEm())).toEqual(EXPECTED_COMBINED);
   });
 
-  it("handles the first event immediately and the last event after the pause, like the real library", async () => {
-    const { EvEm: InlineEvEm } = loadInlineEvEm("flow-control.html");
+  it('handles the first event immediately and the last event after the pause, like the real library', async () => {
+    const { EvEm: InlineEvEm } = loadInlineEvEm('flow-control.html');
     const handled = await runCombinedBurst(new InlineEvEm());
 
     expect(handled[0]).toEqual({ value: 1, at: 0 });
@@ -64,17 +68,29 @@ describe("demo pages: flow-control.html throttle + debounce", () => {
     expect(handled).toEqual(EXPECTED_COMBINED);
   });
 
-  it("still throttles and debounces on their own", async () => {
-    const { EvEm: InlineEvEm } = loadInlineEvEm("flow-control.html");
+  it('still throttles and debounces on their own', async () => {
+    const { EvEm: InlineEvEm } = loadInlineEvEm('flow-control.html');
     const evem = new InlineEvEm();
     const throttled: number[] = [];
     const debounced: number[] = [];
-    evem.subscribe("throttle.event", (value: number) => { throttled.push(value); }, { throttleTime: 500 });
-    evem.subscribe("debounce.event", (value: number) => { debounced.push(value); }, { debounceTime: 500 });
+    evem.subscribe(
+      'throttle.event',
+      (value: number) => {
+        throttled.push(value);
+      },
+      { throttleTime: 500 }
+    );
+    evem.subscribe(
+      'debounce.event',
+      (value: number) => {
+        debounced.push(value);
+      },
+      { debounceTime: 500 }
+    );
 
     for (let value = 1; value <= 20; value++) {
-      void evem.publish("throttle.event", value);
-      void evem.publish("debounce.event", value);
+      void evem.publish('throttle.event', value);
+      void evem.publish('debounce.event', value);
       await vi.advanceTimersByTimeAsync(50);
     }
     await vi.advanceTimersByTimeAsync(1000);

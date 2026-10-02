@@ -7,4 +7,4 @@ export {
   SSE_HEADERS,
   type FormatSseMessageOptions,
   type SseMessage
-} from "./format.js";
+} from './format.js';

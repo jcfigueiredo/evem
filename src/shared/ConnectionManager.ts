@@ -20,7 +20,10 @@ export class ConnectionManager {
   private currentState: ConnectionState = 'disconnected';
   private readonly stateEvent: string;
 
-  constructor(private evem: EvEm, options: ConnectionManagerOptions = {}) {
+  constructor(
+    private evem: EvEm,
+    options: ConnectionManagerOptions = {}
+  ) {
     this.stateEvent = options.stateEvent ?? 'ws.connection.state';
   }
 
@@ -36,7 +39,7 @@ export class ConnectionManager {
     const event: ConnectionStateChangeEvent = {
       from: oldState,
       to: newState,
-      timestamp: Date.now(),
+      timestamp: Date.now()
     };
 
     // Emit state change event through EvEm

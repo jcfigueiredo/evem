@@ -22,7 +22,7 @@ describe('Middleware', () => {
       evem.use(middleware);
 
       // Set up a handler that checks for the processed property
-      const handler = vi.fn((data) => {
+      const handler = vi.fn(data => {
         expect(data.processed).toBe(true);
       });
 
@@ -61,7 +61,7 @@ describe('Middleware', () => {
       evem.use(middleware3);
 
       // Set up a handler that checks for all the properties
-      const handler = vi.fn((data) => {
+      const handler = vi.fn(data => {
         expect(data.first).toBe(true);
         expect(data.second).toBe(true);
         expect(data.third).toBe(true);
@@ -128,7 +128,7 @@ describe('Middleware', () => {
       evem.use(asyncMiddleware);
 
       // Set up a handler that checks for the processed property
-      const handler = vi.fn((data) => {
+      const handler = vi.fn(data => {
         expect(data.asyncProcessed).toBe(true);
       });
 
@@ -164,10 +164,10 @@ describe('Middleware', () => {
 
         // Handler should not be called since middleware threw
         expect(handler).not.toHaveBeenCalled();
-        
+
         // Verify the error was logged
         expect(console.error).toHaveBeenCalledWith(
-          expect.stringContaining('Error in middleware for event'), 
+          expect.stringContaining('Error in middleware for event'),
           expect.any(Error)
         );
       } finally {
@@ -224,7 +224,7 @@ describe('Middleware', () => {
       evem.use(enrichMiddleware);
 
       // Set up a handler
-      const handler = vi.fn((data) => {
+      const handler = vi.fn(data => {
         expect(data.timestamp).toBe(1234567890);
         expect(data.originalEvent).toBe('test.event');
       });
@@ -261,10 +261,10 @@ describe('Middleware', () => {
 
       // Verify the handler was called
       expect(handler).toHaveBeenCalledTimes(1);
-      
+
       // Verify the middleware was not executed
       expect(middlewareExecuted).toBe(false);
-      
+
       // Verify the data was not processed by the middleware
       expect(handler).toHaveBeenCalledWith(expect.not.objectContaining({ processed: true }));
     });
@@ -281,7 +281,7 @@ describe('Middleware', () => {
       evem.use(middleware);
 
       // Set up a handler that checks for the property and cancels the event
-      const handler1 = vi.fn((event) => {
+      const handler1 = vi.fn(event => {
         expect(event.middlewareProcessed).toBe(true);
         event.cancel();
       });
@@ -297,10 +297,10 @@ describe('Middleware', () => {
 
       // Verify the first handler was called with the processed data
       expect(handler1).toHaveBeenCalledTimes(1);
-      
+
       // Verify the second handler was not called due to cancellation
       expect(handler2).not.toHaveBeenCalled();
-      
+
       // Verify the result indicates the event was canceled
       expect(result).toBe(false);
     });
@@ -317,7 +317,7 @@ describe('Middleware', () => {
       // Set up a handler with a filter
       const handler = vi.fn();
       evem.subscribe('test.event', handler, {
-        filter: (data) => data.importance === 'high'
+        filter: data => data.importance === 'high'
       });
 
       // Publish the event

@@ -1,4 +1,3 @@
-
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { EvEm } from '~/eventEmitter';
 
@@ -39,12 +38,12 @@ describe('EvEm - Edge Cases and Special Scenarios Tests', () => {
   });
 
   test('should throw an error when maximum recursion depth is exceeded', async () => {
-    // We need to modify our approach since errors in callbacks are now caught 
+    // We need to modify our approach since errors in callbacks are now caught
     // rather than propagated with our cancelable events implementation
-    
+
     // Set up a spy on console.error to capture the error message
     const consoleErrorSpy = vi.spyOn(console, 'error');
-    
+
     let recursionCount = 0;
     emitter.subscribe('recursive.event', async () => {
       if (++recursionCount < 4) {
@@ -54,7 +53,7 @@ describe('EvEm - Edge Cases and Special Scenarios Tests', () => {
 
     // The publish call will now complete, but it will log an error
     await emitter.publish('recursive.event');
-    
+
     // Verify that the error about max recursion depth was logged
     expect(consoleErrorSpy).toHaveBeenCalled();
     const errorArgs = consoleErrorSpy.mock.calls.find(
@@ -62,13 +61,12 @@ describe('EvEm - Edge Cases and Special Scenarios Tests', () => {
     );
     expect(errorArgs).toBeDefined();
     expect(errorArgs![1].message).toBe("Max recursion depth of 3 exceeded for event 'recursive.event'");
-    
+
     // Restore the original console.error
     consoleErrorSpy.mockRestore();
   });
 
   test('should handle unexpected input types gracefully', () => {
-
     const callback = vi.fn(() => {
       throw new Error('Callback Error');
     });
@@ -77,7 +75,6 @@ describe('EvEm - Edge Cases and Special Scenarios Tests', () => {
     expect(() => emitter.unsubscribe('event', callback)).not.toThrow();
 
     expect(() => emitter.publish('event', null));
-
   });
 });
 
@@ -86,10 +83,10 @@ describe('EvEm - Custom Recursion Limit Tests', () => {
     // Similar approach as the previous test, but with a custom recursion depth
     const customMaxDepth = 5;
     const emitter = new EvEm(customMaxDepth);
-    
+
     // Set up a spy on console.error
     const consoleErrorSpy = vi.spyOn(console, 'error');
-    
+
     let recursionCount = 0;
     emitter.subscribe('recursive.event', async () => {
       if (++recursionCount < customMaxDepth + 1) {
@@ -99,7 +96,7 @@ describe('EvEm - Custom Recursion Limit Tests', () => {
 
     // The publish call will complete but log an error
     await emitter.publish('recursive.event');
-    
+
     // Verify the correct error was logged
     expect(consoleErrorSpy).toHaveBeenCalled();
     const errorArgs = consoleErrorSpy.mock.calls.find(
@@ -107,7 +104,7 @@ describe('EvEm - Custom Recursion Limit Tests', () => {
     );
     expect(errorArgs).toBeDefined();
     expect(errorArgs![1].message).toBe(`Max recursion depth of ${customMaxDepth} exceeded for event 'recursive.event'`);
-    
+
     // Restore console.error
     consoleErrorSpy.mockRestore();
   });
@@ -123,9 +120,7 @@ describe('EvEm - Recursion guard vs. concurrency', () => {
       received.push(n);
     });
 
-    const results = await Promise.all(
-      [1, 2, 3, 4, 5, 6].map(n => emitter.publish('slow.event', n))
-    );
+    const results = await Promise.all([1, 2, 3, 4, 5, 6].map(n => emitter.publish('slow.event', n)));
 
     expect(results).toEqual([true, true, true, true, true, true]);
     expect(received.sort()).toEqual([1, 2, 3, 4, 5, 6]);
@@ -137,9 +132,7 @@ describe('EvEm - Recursion guard vs. concurrency', () => {
     const handler = vi.fn();
     emitter.subscribe('fast.event', handler);
 
-    const results = await Promise.all(
-      [1, 2, 3, 4, 5].map(n => emitter.publish('fast.event', n))
-    );
+    const results = await Promise.all([1, 2, 3, 4, 5].map(n => emitter.publish('fast.event', n)));
 
     expect(results.every(Boolean)).toBe(true);
     expect(handler).toHaveBeenCalledTimes(5);
@@ -179,12 +172,20 @@ describe('EvEm - Recursion guard vs. concurrency', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     let filteredCalls = 0;
     let validatedCalls = 0;
-    emitter.subscribe('filtered.loop', async () => {
-      if (++filteredCalls < 10) await emitter.publish('filtered.loop');
-    }, { filter: async () => true });
-    emitter.subscribe('validated.loop', async () => {
-      if (++validatedCalls < 10) await emitter.publish('validated.loop');
-    }, { schema: async () => true });
+    emitter.subscribe(
+      'filtered.loop',
+      async () => {
+        if (++filteredCalls < 10) await emitter.publish('filtered.loop');
+      },
+      { filter: async () => true }
+    );
+    emitter.subscribe(
+      'validated.loop',
+      async () => {
+        if (++validatedCalls < 10) await emitter.publish('validated.loop');
+      },
+      { schema: async () => true }
+    );
 
     await emitter.publish('filtered.loop');
     await emitter.publish('validated.loop');

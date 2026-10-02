@@ -54,7 +54,9 @@ describe('SseHandler against a real HTTP server', () => {
     server = started.server;
     const evem = new EvEm();
     const ticks: number[] = [];
-    evem.subscribe('server.tick', ({ n }: { n: number }) => { ticks.push(n); });
+    evem.subscribe('server.tick', ({ n }: { n: number }) => {
+      ticks.push(n);
+    });
 
     handler = new SseHandler(started.url, evem);
     await waitFor(() => ticks.length === 5);
@@ -68,7 +70,9 @@ describe('SseHandler against a real HTTP server', () => {
   it('sends headers and a POST body, and stops on 401', async () => {
     const started = await startServer((request, response) => {
       let body = '';
-      request.on('data', chunk => { body += chunk; });
+      request.on('data', chunk => {
+        body += chunk;
+      });
       request.on('end', () => {
         if (request.headers.authorization !== 'Bearer good') {
           response.writeHead(401).end();
@@ -82,13 +86,17 @@ describe('SseHandler against a real HTTP server', () => {
     const evem = new EvEm();
     const echoes: unknown[] = [];
     const errors: unknown[] = [];
-    evem.subscribe('server.echo', (data: unknown) => { echoes.push(data); });
-    evem.subscribe('sse.error', (error: unknown) => { errors.push(error); });
+    evem.subscribe('server.echo', (data: unknown) => {
+      echoes.push(data);
+    });
+    evem.subscribe('sse.error', (error: unknown) => {
+      errors.push(error);
+    });
 
     handler = new SseHandler(started.url, evem, {
       method: 'POST',
       headers: { Authorization: 'Bearer good', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic: 'orders' }),
+      body: JSON.stringify({ topic: 'orders' })
     });
     await waitFor(() => echoes.length === 1);
     expect(echoes).toEqual([{ topic: 'orders' }]);

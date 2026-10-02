@@ -186,20 +186,17 @@ export class RequestTimeoutError extends WebSocketError {
     public method: string,
     public timeout: number
   ) {
-    super(
-      `Request ${method} (id: ${requestId}) timed out after ${timeout}ms`,
-      'REQUEST_TIMEOUT'
-    );
+    super(`Request ${method} (id: ${requestId}) timed out after ${timeout}ms`, 'REQUEST_TIMEOUT');
     this.name = 'RequestTimeoutError';
   }
 }
 
 export class QueueOverflowError extends WebSocketError {
-  constructor(public maxSize: number, public attempted: number) {
-    super(
-      `Message queue overflow: attempted to queue ${attempted} messages, max is ${maxSize}`,
-      'QUEUE_OVERFLOW'
-    );
+  constructor(
+    public maxSize: number,
+    public attempted: number
+  ) {
+    super(`Message queue overflow: attempted to queue ${attempted} messages, max is ${maxSize}`, 'QUEUE_OVERFLOW');
     this.name = 'QueueOverflowError';
   }
 }

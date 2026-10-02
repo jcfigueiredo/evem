@@ -59,15 +59,18 @@
     "test:nowatch": "vitest --watch=false",
     "test:coverage": "vitest --coverage",
     "typecheck": "tsc --noEmit",
+    "format": "prettier --write src tests scripts vitest.config.ts",
+    "format:check": "prettier --check src tests scripts vitest.config.ts",
     "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
     "test:package": "pnpm build && node scripts/check-package.mjs",
-    "check": "pnpm typecheck && pnpm test:nowatch && pnpm test:package",
+    "check": "pnpm format:check && pnpm typecheck && pnpm test:nowatch && pnpm test:package",
     "release": "node scripts/release.mjs",
     "prepublishOnly": "pnpm check"
   },
   "devDependencies": {
     "@types/node": "^18.17.0",
     "@vitest/coverage-v8": "^1.0.4",
+    "prettier": "3.9.9",
     "typescript": "^5.1.6",
     "vite-tsconfig-paths": "^4.2.1",
     "vitest": "^1.0.4"
