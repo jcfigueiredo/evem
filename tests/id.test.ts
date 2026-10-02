@@ -27,7 +27,9 @@ describe('Subscription and request ids', () => {
     expect(new Set(ids).size).toBe(100);
 
     const sent: any[] = [];
-    evem.subscribe('ws.send.request', (request: any) => { sent.push(request); });
+    evem.subscribe('ws.send.request', (request: any) => {
+      sent.push(request);
+    });
     const manager = new RequestResponseManager(evem);
     const pending = manager.request('ping', undefined, { timeout: 10 }).catch(() => undefined);
     await new Promise(resolve => setTimeout(resolve, 0));

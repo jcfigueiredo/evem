@@ -3,11 +3,7 @@ import { ConnectionManager } from './ConnectionManager.js';
 import { MessageQueue } from './MessageQueue.js';
 import { RequestResponseManager } from './RequestResponseManager.js';
 import { routeServerMessage } from '../shared/routing.js';
-import type {
-  IWebSocket,
-  WebSocketHandlerOptions,
-  RequestOptions,
-} from './types.js';
+import type { IWebSocket, WebSocketHandlerOptions, RequestOptions } from './types.js';
 
 /**
  * WebSocketHandler - Automatically wires WebSocket events to EvEm
@@ -52,7 +48,7 @@ export class WebSocketHandler {
    */
   private readonly requestFormatMiddleware: MiddlewareConfig = {
     pattern: 'ws.send.request',
-    handler: (_event: string, request: any) => ({ type: 'request', ...request }),
+    handler: (_event: string, request: any) => ({ type: 'request', ...request })
   };
 
   /**
@@ -70,7 +66,7 @@ export class WebSocketHandler {
         this.sendOrQueue(data, false, 'Failed to send message:');
       }
       return data;
-    },
+    }
   };
 
   /**
@@ -80,11 +76,7 @@ export class WebSocketHandler {
    * @param evem - EvEm instance for event management
    * @param options - Configuration options
    */
-  constructor(
-    urlOrSocket: string | IWebSocket,
-    evem: EvEm,
-    options: WebSocketHandlerOptions = {}
-  ) {
+  constructor(urlOrSocket: string | IWebSocket, evem: EvEm, options: WebSocketHandlerOptions = {}) {
     this.evem = evem;
 
     // Set default options
@@ -100,7 +92,7 @@ export class WebSocketHandler {
       WebSocketConstructor: options.WebSocketConstructor,
       onError: options.onError,
       messageParser: options.messageParser ?? ((data: string) => JSON.parse(data)),
-      messageFormatter: options.messageFormatter ?? ((data: any) => JSON.stringify(data)),
+      messageFormatter: options.messageFormatter ?? ((data: any) => JSON.stringify(data))
     };
 
     // Create or use provided WebSocket. First, so that if the socket can't be created,
@@ -125,7 +117,7 @@ export class WebSocketHandler {
     if (this.options.enableQueue) {
       this.messageQueue = new MessageQueue(evem, this.connectionManager);
       this.messageQueue.enable(this.options.queueSize, {
-        autoFlush: this.options.autoFlush,
+        autoFlush: this.options.autoFlush
       });
     }
 
@@ -158,13 +150,13 @@ export class WebSocketHandler {
    */
   private autoWireWebSocketEvents(): void {
     // Wire onopen
-    this.ws.onopen = async (event) => {
+    this.ws.onopen = async event => {
       this.reconnectAttempts = 0;
       await this.connectionManager.transitionTo('connected');
     };
 
     // Wire onclose
-    this.ws.onclose = async (event) => {
+    this.ws.onclose = async event => {
       if (!this.isDisconnecting) {
         await this.handleUnexpectedClose();
       }
@@ -185,7 +177,7 @@ export class WebSocketHandler {
     };
 
     // Wire onmessage
-    this.ws.onmessage = (event) => {
+    this.ws.onmessage = event => {
       this.handleIncomingMessage(event.data);
     };
   }
@@ -325,14 +317,14 @@ export class WebSocketHandler {
       const routed = routeServerMessage(message, {
         prefix: this.options.serverEventPrefix,
         channel: 'ws',
-        handleResponses: this.options.enableRequestResponse,
+        handleResponses: this.options.enableRequestResponse
       });
       this.evem.publish(routed.event, routed.data);
     } catch (error) {
       // Emit parse error event
       this.evem.publish('ws.parse.error', {
         error,
-        rawData,
+        rawData
       });
 
       if (this.options.onError && error instanceof Error) {

@@ -35,7 +35,7 @@ export interface FormatSseMessageOptions {
 export const SSE_HEADERS: Readonly<Record<string, string>> = Object.freeze({
   'Content-Type': 'text/event-stream; charset=utf-8',
   'Cache-Control': 'no-cache, no-transform',
-  'X-Accel-Buffering': 'no',
+  'X-Accel-Buffering': 'no'
 });
 
 const LINE_BREAK = /\r\n|\r|\n/;
@@ -93,9 +93,7 @@ export function formatSseMessage(message: SseMessage, options: FormatSseMessageO
 
   if (event || data !== undefined) {
     const payload = options.envelope ? { event, data: data ?? null } : data;
-    const text = options.raw && typeof payload === 'string'
-      ? payload
-      : JSON.stringify(payload) ?? 'null';
+    const text = options.raw && typeof payload === 'string' ? payload : (JSON.stringify(payload) ?? 'null');
     for (const line of text.split(LINE_BREAK)) {
       lines.push(`data: ${line}`);
     }

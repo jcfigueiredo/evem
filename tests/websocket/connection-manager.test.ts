@@ -96,7 +96,7 @@ describe('ConnectionManager', () => {
       expect(stateChanges).toHaveLength(1);
       expect(stateChanges[0]).toMatchObject({
         from: 'disconnected',
-        to: 'connecting',
+        to: 'connecting'
       });
       expect(stateChanges[0]?.timestamp).toBeGreaterThan(0);
     });
@@ -132,7 +132,7 @@ describe('ConnectionManager', () => {
           connectedEvents.push(event);
         },
         {
-          filter: (event: ConnectionStateChangeEvent) => event.to === 'connected',
+          filter: (event: ConnectionStateChangeEvent) => event.to === 'connected'
         }
       );
 
@@ -235,7 +235,7 @@ describe('ConnectionManager', () => {
       expect(stateChanges).toHaveLength(1);
       expect(stateChanges[0]).toMatchObject({
         from: 'disconnected',
-        to: 'disconnected',
+        to: 'disconnected'
       });
     });
 
@@ -257,7 +257,7 @@ describe('ConnectionManager', () => {
       expect(subscriber1).toHaveBeenCalledWith(
         expect.objectContaining({
           from: 'disconnected',
-          to: 'connecting',
+          to: 'connecting'
         })
       );
     });
@@ -280,9 +280,9 @@ describe('ConnectionManager', () => {
       });
 
       await connectionManager.transitionTo('connecting');
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, 10));
       await connectionManager.transitionTo('connected');
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(transitions).toEqual(['connecting', 'connected']);
     });
@@ -294,15 +294,21 @@ describe('ConnectionManager', () => {
 
       evem.subscribe(
         'ws.connection.state',
-        () => { executionOrder.push('high'); },
+        () => {
+          executionOrder.push('high');
+        },
         { priority: 'high' }
       );
       evem.subscribe(
         'ws.connection.state',
-        () => { executionOrder.push('low'); },
+        () => {
+          executionOrder.push('low');
+        },
         { priority: 'low' }
       );
-      evem.subscribe('ws.connection.state', () => { executionOrder.push('normal'); });
+      evem.subscribe('ws.connection.state', () => {
+        executionOrder.push('normal');
+      });
 
       await connectionManager.transitionTo('connecting');
 
@@ -333,7 +339,7 @@ describe('ConnectionManager', () => {
         {
           transform: (event: ConnectionStateChangeEvent) => {
             return `${event.from} -> ${event.to}`;
-          },
+          }
         }
       );
 
@@ -350,10 +356,7 @@ describe('ConnectionManager', () => {
       expect(originalEvents[0]).toMatchObject({ from: 'disconnected', to: 'connecting' });
 
       // Second subscriber gets transformed data
-      expect(transformedEvents).toEqual([
-        'disconnected -> connecting',
-        'connecting -> connected',
-      ]);
+      expect(transformedEvents).toEqual(['disconnected -> connecting', 'connecting -> connected']);
     });
   });
 });

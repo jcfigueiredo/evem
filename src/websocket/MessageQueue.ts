@@ -76,24 +76,21 @@ export class MessageQueue {
     // We need both because 'ws.send*' doesn't match 'ws.send' exactly
     this.evem.use({
       pattern: 'ws.send',
-      handler: this.middlewareHandler,
+      handler: this.middlewareHandler
     });
 
     this.evem.use({
       pattern: 'ws.send.*',
-      handler: this.middlewareHandler,
+      handler: this.middlewareHandler
     });
 
     // Subscribe to connection state changes for auto-flush (only if enabled)
     if (this.options.autoFlush === true) {
-      this.stateSubscriptionId = this.evem.subscribe(
-        'ws.connection.state',
-        async (event: any) => {
-          if (event.to === 'connected' && this.queue.length > 0) {
-            await this.flush();
-          }
+      this.stateSubscriptionId = this.evem.subscribe('ws.connection.state', async (event: any) => {
+        if (event.to === 'connected' && this.queue.length > 0) {
+          await this.flush();
         }
-      );
+      });
     }
   }
 
@@ -178,7 +175,7 @@ export class MessageQueue {
       const message: QueuedMessage = {
         event: 'ws.send',
         data,
-        timestamp: Date.now(),
+        timestamp: Date.now()
       };
 
       // Check if queue is full
@@ -190,7 +187,7 @@ export class MessageQueue {
         // This is safe to do synchronously because 'ws.queue.overflow' won't match our middleware pattern
         this.evem.publish('ws.queue.overflow', {
           maxSize: this.maxSize,
-          droppedMessage: droppedMessage?.data,
+          droppedMessage: droppedMessage?.data
         });
       }
 

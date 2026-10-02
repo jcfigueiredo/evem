@@ -13,7 +13,25 @@ function parseAll(stream: string) {
 
 /** Deterministic pseudo-random strings mixing line breaks, spaces, colons, field-like text and non-ASCII */
 function* generatedStrings(count: number) {
-  const pieces = ['a', 'Z', ' ', '  ', ':', '\n', '\r', '\r\n', '\n\n', 'data: x', 'event: forged', 'id: 9', '\t', 'é', '😀', ' ', '{"k":1}'];
+  const pieces = [
+    'a',
+    'Z',
+    ' ',
+    '  ',
+    ':',
+    '\n',
+    '\r',
+    '\r\n',
+    '\n\n',
+    'data: x',
+    'event: forged',
+    'id: 9',
+    '\t',
+    'é',
+    '😀',
+    ' ',
+    '{"k":1}'
+  ];
   let seed = 12345;
   const next = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
   for (let n = 0; n < count; n++) {
@@ -26,8 +44,9 @@ function* generatedStrings(count: number) {
 
 describe('formatSseMessage', () => {
   it('writes named JSON events in the documented format', () => {
-    expect(formatSseMessage({ event: 'order.updated', id: 42, data: { id: 7, status: 'shipped' } }))
-      .toBe('event: order.updated\nid: 42\ndata: {"id":7,"status":"shipped"}\n\n');
+    expect(formatSseMessage({ event: 'order.updated', id: 42, data: { id: 7, status: 'shipped' } })).toBe(
+      'event: order.updated\nid: 42\ndata: {"id":7,"status":"shipped"}\n\n'
+    );
   });
 
   it('JSON-encodes strings by default, so a default client parses them', () => {
@@ -35,8 +54,9 @@ describe('formatSseMessage', () => {
   });
 
   it('writes raw text one data line per line', () => {
-    expect(formatSseMessage({ data: 'line one\nline two\r\nline three' }, { raw: true }))
-      .toBe('data: line one\ndata: line two\ndata: line three\n\n');
+    expect(formatSseMessage({ data: 'line one\nline two\r\nline three' }, { raw: true })).toBe(
+      'data: line one\ndata: line two\ndata: line three\n\n'
+    );
   });
 
   it('writes null for a named event without data, so it is still dispatched', () => {
@@ -49,8 +69,9 @@ describe('formatSseMessage', () => {
   });
 
   it('writes an unnamed { event, data } envelope', () => {
-    expect(formatSseMessage({ event: 'order.updated', id: '3', data: { id: 7 } }, { envelope: true }))
-      .toBe('id: 3\ndata: {"event":"order.updated","data":{"id":7}}\n\n');
+    expect(formatSseMessage({ event: 'order.updated', id: '3', data: { id: 7 } }, { envelope: true })).toBe(
+      'id: 3\ndata: {"event":"order.updated","data":{"id":7}}\n\n'
+    );
   });
 
   it('rejects field values that would corrupt the stream', () => {
@@ -104,7 +125,7 @@ describe('SSE_HEADERS', () => {
     expect(SSE_HEADERS).toEqual({
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
-      'X-Accel-Buffering': 'no',
+      'X-Accel-Buffering': 'no'
     });
     expect(Object.isFrozen(SSE_HEADERS)).toBe(true);
   });

@@ -13,7 +13,10 @@ export class MockEventSource {
   onmessage: ((event: MessageEvent) => void) | null = null;
   private listeners = new Map<string, Array<(event: MessageEvent) => void>>();
 
-  constructor(public url: string, public init?: { withCredentials?: boolean }) {
+  constructor(
+    public url: string,
+    public init?: { withCredentials?: boolean }
+  ) {
     MockEventSource.instances.push(this);
   }
 

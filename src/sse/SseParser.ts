@@ -44,7 +44,10 @@ export class SseParser {
    * @param initialLastEventId - Last event id carried over from a previous connection, so events
    *   without an `id:` field keep reporting it
    */
-  constructor(private readonly callbacks: SseParserCallbacks, initialLastEventId = '') {
+  constructor(
+    private readonly callbacks: SseParserCallbacks,
+    initialLastEventId = ''
+  ) {
     this.lastEventIdBuffer = initialLastEventId;
     this.dispatchedLastEventId = initialLastEventId;
   }
@@ -163,7 +166,7 @@ export class SseParser {
     const event: SseParsedEvent = {
       type: this.eventType || 'message',
       data: this.data.endsWith('\n') ? this.data.slice(0, -1) : this.data,
-      lastEventId,
+      lastEventId
     };
     this.data = '';
     this.eventType = '';

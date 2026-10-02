@@ -120,7 +120,9 @@ describe('MessageQueue', () => {
 
     it('should handle multiple flushes', async () => {
       const flushed: any[] = [];
-      evem.subscribe('ws.send.queued', (data: any) => { flushed.push(data); });
+      evem.subscribe('ws.send.queued', (data: any) => {
+        flushed.push(data);
+      });
 
       await evem.publish('ws.send', { msg: 1 });
       await messageQueue.flush();
@@ -155,7 +157,9 @@ describe('MessageQueue', () => {
       expect(messageQueue.getQueueSize()).toBe(2);
 
       const flushed: any[] = [];
-      evem.subscribe('ws.send.queued', (data: any) => { flushed.push(data); });
+      evem.subscribe('ws.send.queued', (data: any) => {
+        flushed.push(data);
+      });
       await messageQueue.flush();
 
       // Should have ids 2 and 3, not 1
@@ -179,7 +183,7 @@ describe('MessageQueue', () => {
       expect(overflowEvents).toHaveLength(1);
       expect(overflowEvents[0]).toMatchObject({
         maxSize: 2,
-        droppedMessage: expect.objectContaining({ id: 1 }),
+        droppedMessage: expect.objectContaining({ id: 1 })
       });
     });
   });
@@ -264,7 +268,9 @@ describe('MessageQueue', () => {
 
     it('should automatically flush queue when connecting to connected', async () => {
       const flushed: any[] = [];
-      evem.subscribe('ws.send.queued', (data: any) => { flushed.push(data); });
+      evem.subscribe('ws.send.queued', (data: any) => {
+        flushed.push(data);
+      });
 
       // Queue messages while disconnected
       await evem.publish('ws.send', { msg: 1 });
@@ -291,7 +297,9 @@ describe('MessageQueue', () => {
       freshQueue.enable(100, { autoFlush: false });
 
       const flushed: any[] = [];
-      freshEvem.subscribe('ws.send.queued', (data: any) => { flushed.push(data); });
+      freshEvem.subscribe('ws.send.queued', (data: any) => {
+        flushed.push(data);
+      });
 
       await freshEvem.publish('ws.send', { msg: 1 });
 
@@ -368,7 +376,9 @@ describe('MessageQueue', () => {
       expect(messageQueue.getQueueSize()).toBe(1);
 
       const flushed: any[] = [];
-      evem.subscribe('ws.send.queued', (data: any) => { flushed.push(data); });
+      evem.subscribe('ws.send.queued', (data: any) => {
+        flushed.push(data);
+      });
       await messageQueue.flush();
 
       expect(flushed[0].data).toHaveLength(10000);
@@ -402,9 +412,11 @@ describe('MessageQueue', () => {
 
       evem.subscribe(
         'ws.send.queued',
-        (data: any) => { filtered.push(data); },
+        (data: any) => {
+          filtered.push(data);
+        },
         {
-          filter: (data: any) => data.priority === 'high',
+          filter: (data: any) => data.priority === 'high'
         }
       );
 
@@ -427,7 +439,7 @@ describe('MessageQueue', () => {
           // First subscriber receives original
         },
         {
-          transform: (data: any) => JSON.stringify(data),
+          transform: (data: any) => JSON.stringify(data)
         }
       );
 
@@ -447,15 +459,21 @@ describe('MessageQueue', () => {
 
       evem.subscribe(
         'ws.send.queued',
-        () => { executionOrder.push('high'); },
+        () => {
+          executionOrder.push('high');
+        },
         { priority: 'high' }
       );
       evem.subscribe(
         'ws.send.queued',
-        () => { executionOrder.push('low'); },
+        () => {
+          executionOrder.push('low');
+        },
         { priority: 'low' }
       );
-      evem.subscribe('ws.send.queued', () => { executionOrder.push('normal'); });
+      evem.subscribe('ws.send.queued', () => {
+        executionOrder.push('normal');
+      });
 
       await evem.publish('ws.send', { msg: 'test' });
       await messageQueue.flush();
@@ -470,8 +488,7 @@ describe('MessageQueue - cleanup', () => {
   let connectionManager: ConnectionManager;
   let messageQueue: MessageQueue;
 
-  const stateSubscriptionCount = () =>
-    evem.info('ws.connection.state').filter(info => !info.isMiddleware).length;
+  const stateSubscriptionCount = () => evem.info('ws.connection.state').filter(info => !info.isMiddleware).length;
 
   beforeEach(() => {
     evem = new EvEm();

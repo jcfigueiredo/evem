@@ -28,7 +28,7 @@ describe('RequestResponseManager', () => {
           evem.publish('ws.response', {
             id: req.id,
             result: responseData,
-            timestamp: Date.now(),
+            timestamp: Date.now()
           });
         }, 100);
       });
@@ -70,16 +70,20 @@ describe('RequestResponseManager', () => {
         method: 'testMethod',
         params: { param1: 'value1', param2: 42 },
         id: expect.any(String),
-        timestamp: expect.any(Number),
+        timestamp: expect.any(Number)
       });
     });
   });
 
   describe('Timeout Handling', () => {
     it('should reject request after timeout', async () => {
-      const responsePromise = requestResponseManager.request('slowMethod', {}, {
-        timeout: 1000,
-      });
+      const responsePromise = requestResponseManager.request(
+        'slowMethod',
+        {},
+        {
+          timeout: 1000
+        }
+      );
 
       vi.advanceTimersByTime(1000);
 
@@ -104,14 +108,18 @@ describe('RequestResponseManager', () => {
           evem.publish('ws.response', {
             id: req.id,
             result: { success: true },
-            timestamp: Date.now(),
+            timestamp: Date.now()
           });
         }, 500);
       });
 
-      const responsePromise = requestResponseManager.request('method', {}, {
-        timeout: 1000,
-      });
+      const responsePromise = requestResponseManager.request(
+        'method',
+        {},
+        {
+          timeout: 1000
+        }
+      );
 
       vi.advanceTimersByTime(500);
       const result = await responsePromise;
@@ -124,9 +132,13 @@ describe('RequestResponseManager', () => {
     });
 
     it('should include request info in timeout error', async () => {
-      const responsePromise = requestResponseManager.request('myMethod', { id: 123 }, {
-        timeout: 2000,
-      });
+      const responsePromise = requestResponseManager.request(
+        'myMethod',
+        { id: 123 },
+        {
+          timeout: 2000
+        }
+      );
 
       vi.advanceTimersByTime(2000);
 
@@ -149,7 +161,7 @@ describe('RequestResponseManager', () => {
           evem.publish('ws.response', {
             id: req.id,
             result: { method: req.method, processed: true },
-            timestamp: Date.now(),
+            timestamp: Date.now()
           });
         }, 100);
       });
@@ -157,7 +169,7 @@ describe('RequestResponseManager', () => {
       const promises = [
         requestResponseManager.request('method1', {}),
         requestResponseManager.request('method2', {}),
-        requestResponseManager.request('method3', {}),
+        requestResponseManager.request('method3', {})
       ];
 
       vi.advanceTimersByTime(100);
@@ -167,7 +179,7 @@ describe('RequestResponseManager', () => {
       expect(results).toEqual([
         { method: 'method1', processed: true },
         { method: 'method2', processed: true },
-        { method: 'method3', processed: true },
+        { method: 'method3', processed: true }
       ]);
     });
 
@@ -178,13 +190,16 @@ describe('RequestResponseManager', () => {
         requestMap.set(req.id, req.method);
 
         // Respond in reverse order
-        setTimeout(() => {
-          evem.publish('ws.response', {
-            id: req.id,
-            result: { originalMethod: req.method },
-            timestamp: Date.now(),
-          });
-        }, req.method === 'first' ? 300 : req.method === 'second' ? 200 : 100);
+        setTimeout(
+          () => {
+            evem.publish('ws.response', {
+              id: req.id,
+              result: { originalMethod: req.method },
+              timestamp: Date.now()
+            });
+          },
+          req.method === 'first' ? 300 : req.method === 'second' ? 200 : 100
+        );
       });
 
       const first = requestResponseManager.request('first', {});
@@ -195,11 +210,7 @@ describe('RequestResponseManager', () => {
 
       const results = await Promise.all([first, second, third]);
 
-      expect(results).toEqual([
-        { originalMethod: 'first' },
-        { originalMethod: 'second' },
-        { originalMethod: 'third' },
-      ]);
+      expect(results).toEqual([{ originalMethod: 'first' }, { originalMethod: 'second' }, { originalMethod: 'third' }]);
     });
   });
 
@@ -211,9 +222,9 @@ describe('RequestResponseManager', () => {
             id: req.id,
             error: {
               code: 404,
-              message: 'Not found',
+              message: 'Not found'
             },
-            timestamp: Date.now(),
+            timestamp: Date.now()
           });
         }, 100);
       });
@@ -233,9 +244,9 @@ describe('RequestResponseManager', () => {
             error: {
               code: 400,
               message: 'Invalid input',
-              data: { field: 'email', reason: 'invalid format' },
+              data: { field: 'email', reason: 'invalid format' }
             },
-            timestamp: Date.now(),
+            timestamp: Date.now()
           });
         }, 100);
       });
@@ -263,9 +274,13 @@ describe('RequestResponseManager', () => {
         responseId = req.id;
       });
 
-      const responsePromise = requestResponseManager.request('slowMethod', {}, {
-        timeout: 100,
-      });
+      const responsePromise = requestResponseManager.request(
+        'slowMethod',
+        {},
+        {
+          timeout: 100
+        }
+      );
 
       vi.advanceTimersByTime(100);
 
@@ -275,7 +290,7 @@ describe('RequestResponseManager', () => {
       await evem.publish('ws.response', {
         id: responseId!,
         result: { data: 'late' },
-        timestamp: Date.now(),
+        timestamp: Date.now()
       });
 
       // Should not cause any issues (response is ignored)
@@ -293,14 +308,18 @@ describe('RequestResponseManager', () => {
           evem.publish('ws.response', {
             id: req.id,
             result: { success: true },
-            timestamp: Date.now(),
+            timestamp: Date.now()
           });
         }, 100);
       });
 
-      const responsePromise = requestResponseManager.request('method', {}, {
-        id: customId,
-      });
+      const responsePromise = requestResponseManager.request(
+        'method',
+        {},
+        {
+          id: customId
+        }
+      );
 
       vi.advanceTimersByTime(100);
       await responsePromise;
@@ -313,9 +332,13 @@ describe('RequestResponseManager', () => {
     it('should clean up pending request after timeout', async () => {
       const pendingCountBefore = requestResponseManager.getPendingRequestCount();
 
-      const responsePromise = requestResponseManager.request('method', {}, {
-        timeout: 100,
-      });
+      const responsePromise = requestResponseManager.request(
+        'method',
+        {},
+        {
+          timeout: 100
+        }
+      );
 
       expect(requestResponseManager.getPendingRequestCount()).toBe(pendingCountBefore + 1);
 
@@ -334,7 +357,7 @@ describe('RequestResponseManager', () => {
           evem.publish('ws.response', {
             id: req.id,
             result: {},
-            timestamp: Date.now(),
+            timestamp: Date.now()
           });
         }, 100);
       });
@@ -356,7 +379,7 @@ describe('RequestResponseManager', () => {
         setTimeout(() => {
           evem.publish('ws.response', {
             id: req.id,
-            timestamp: Date.now(),
+            timestamp: Date.now()
           });
         }, 100);
       });
@@ -375,7 +398,7 @@ describe('RequestResponseManager', () => {
         evem.publish('ws.response', {
           id: 'unknown-id',
           result: {},
-          timestamp: Date.now(),
+          timestamp: Date.now()
         })
       ).resolves.not.toThrow();
     });

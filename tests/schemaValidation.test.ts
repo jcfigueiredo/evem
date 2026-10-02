@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { EvEm, ErrorPolicy, SchemaValidator, AdvancedSchemaValidator, SchemaValidationError } from '../src/eventEmitter';
+import {
+  EvEm,
+  ErrorPolicy,
+  SchemaValidator,
+  AdvancedSchemaValidator,
+  SchemaValidationError
+} from '../src/eventEmitter';
 
 describe('Event Schema Validation', () => {
   let evem: EvEm;
@@ -26,7 +32,7 @@ describe('Event Schema Validation', () => {
       }
 
       // Simple schema validator that checks required fields
-      const userSchema: SchemaValidator<UserData> = (data) => {
+      const userSchema: SchemaValidator<UserData> = data => {
         return (
           typeof data === 'object' &&
           typeof data.id === 'number' &&
@@ -58,10 +64,10 @@ describe('Event Schema Validation', () => {
       // Valid handler should only be called for valid data
       expect(validHandler).toHaveBeenCalledTimes(1);
       expect(validHandler).toHaveBeenCalledWith(validUser);
-      
+
       // Invalid handler should be called for both (no schema validation)
       expect(invalidHandler).toHaveBeenCalledTimes(2);
-      
+
       // Error should be logged for invalid data
       expect(console.error).toHaveBeenCalledTimes(1);
       expect(console.error).toHaveBeenCalledWith(
@@ -72,7 +78,7 @@ describe('Event Schema Validation', () => {
 
     it('should support asynchronous schema validators', async () => {
       // Async schema validator
-      const asyncSchema: SchemaValidator = async (data) => {
+      const asyncSchema: SchemaValidator = async data => {
         // Simulate async validation (e.g., checking database)
         await new Promise(resolve => setTimeout(resolve, 10));
         return typeof data === 'object' && data !== null && 'value' in data;
@@ -86,7 +92,7 @@ describe('Event Schema Validation', () => {
 
       // Valid data
       await evem.publish('async.validated', { value: 42 });
-      
+
       // Invalid data
       await evem.publish('async.validated', 'not an object');
 
@@ -106,7 +112,7 @@ describe('Event Schema Validation', () => {
       }
 
       // Advanced schema validator that returns detailed error information
-      const articleSchema: AdvancedSchemaValidator<ArticleData> = (data) => {
+      const articleSchema: AdvancedSchemaValidator<ArticleData> = data => {
         const errors: SchemaValidationError[] = [];
 
         if (!data || typeof data !== 'object') {
@@ -114,41 +120,41 @@ describe('Event Schema Validation', () => {
         }
 
         if (!data.title || typeof data.title !== 'string') {
-          errors.push({ 
-            message: 'Title is required and must be a string', 
-            path: 'title' 
+          errors.push({
+            message: 'Title is required and must be a string',
+            path: 'title'
           });
         } else if (data.title.length < 3) {
-          errors.push({ 
-            message: 'Title must be at least 3 characters', 
-            path: 'title' 
+          errors.push({
+            message: 'Title must be at least 3 characters',
+            path: 'title'
           });
         }
 
         if (!data.content || typeof data.content !== 'string') {
-          errors.push({ 
-            message: 'Content is required and must be a string', 
-            path: 'content' 
+          errors.push({
+            message: 'Content is required and must be a string',
+            path: 'content'
           });
         }
 
         if (!Array.isArray(data.tags)) {
-          errors.push({ 
-            message: 'Tags must be an array', 
-            path: 'tags' 
+          errors.push({
+            message: 'Tags must be an array',
+            path: 'tags'
           });
         }
 
         if (typeof data.authorId !== 'number') {
-          errors.push({ 
-            message: 'AuthorId must be a number', 
-            path: 'authorId' 
+          errors.push({
+            message: 'AuthorId must be a number',
+            path: 'authorId'
           });
         }
 
-        return { 
+        return {
           valid: errors.length === 0,
-          errors: errors.length > 0 ? errors : undefined 
+          errors: errors.length > 0 ? errors : undefined
         };
       };
 
@@ -168,7 +174,7 @@ describe('Event Schema Validation', () => {
 
       // Invalid article with multiple errors
       const invalidArticle = {
-        title: 'A',  // Too short
+        title: 'A', // Too short
         content: 123, // Wrong type
         tags: 'test', // Not an array
         authorId: '1' // Wrong type
@@ -185,7 +191,7 @@ describe('Event Schema Validation', () => {
       expect(console.error).toHaveBeenCalledTimes(1);
       // Should include multiple error messages
       expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining('Schema validation failed for event'), 
+        expect.stringContaining('Schema validation failed for event'),
         expect.arrayContaining([
           expect.objectContaining({ path: 'title' }),
           expect.objectContaining({ path: 'content' }),
@@ -197,17 +203,17 @@ describe('Event Schema Validation', () => {
 
     it('should support async advanced schema validators', async () => {
       // Async advanced schema validator
-      const asyncAdvancedSchema: AdvancedSchemaValidator = async (data) => {
+      const asyncAdvancedSchema: AdvancedSchemaValidator = async data => {
         // Simulate async validation
         await new Promise(resolve => setTimeout(resolve, 10));
-        
+
         if (!data || typeof data !== 'object') {
-          return { 
-            valid: false, 
-            errors: [{ message: 'Data must be an object' }] 
+          return {
+            valid: false,
+            errors: [{ message: 'Data must be an object' }]
           };
         }
-        
+
         return { valid: true };
       };
 
@@ -226,7 +232,7 @@ describe('Event Schema Validation', () => {
 
   describe('Error Policies', () => {
     it('should respect SILENT error policy for schema validation', async () => {
-      const schema: SchemaValidator = (data) => false; // Always fails
+      const schema: SchemaValidator = data => false; // Always fails
       const handler = vi.fn();
 
       evem.subscribe('silent.validation', handler, {
@@ -238,13 +244,13 @@ describe('Event Schema Validation', () => {
 
       // Handler should not be called due to schema validation failure
       expect(handler).not.toHaveBeenCalled();
-      
+
       // No errors should be logged with SILENT policy
       expect(console.error).not.toHaveBeenCalled();
     });
 
     it('should respect LOG_AND_CONTINUE error policy for schema validation', async () => {
-      const schema: SchemaValidator = (data) => false; // Always fails
+      const schema: SchemaValidator = data => false; // Always fails
       const handler = vi.fn();
 
       evem.subscribe('continue.validation', handler, {
@@ -256,13 +262,13 @@ describe('Event Schema Validation', () => {
 
       // Handler should be called despite schema validation failure
       expect(handler).toHaveBeenCalledTimes(1);
-      
+
       // Error should be logged
       expect(console.error).toHaveBeenCalledTimes(1);
     });
 
     it('should respect CANCEL_ON_ERROR error policy for schema validation (default)', async () => {
-      const schema: SchemaValidator = (data) => false; // Always fails
+      const schema: SchemaValidator = data => false; // Always fails
       const handler = vi.fn();
 
       // CANCEL_ON_ERROR is the default policy
@@ -274,7 +280,7 @@ describe('Event Schema Validation', () => {
 
       // Handler should not be called due to schema validation failure
       expect(handler).not.toHaveBeenCalled();
-      
+
       // Error should be logged
       expect(console.error).toHaveBeenCalledTimes(1);
     });
@@ -291,14 +297,14 @@ describe('Event Schema Validation', () => {
       evem.subscribe('throw.validation', laterHandler);
 
       // schemaErrorPolicy THROW rejects publish on its own, whatever the publish errorPolicy
-      await expect(
-        evem.publish('throw.validation', { data: 'test' })
-      ).rejects.toThrow("Schema validation failed for event 'throw.validation'");
+      await expect(evem.publish('throw.validation', { data: 'test' })).rejects.toThrow(
+        "Schema validation failed for event 'throw.validation'"
+      );
 
       // Handler should not be called due to schema validation failure, and propagation stops
       expect(handler).not.toHaveBeenCalled();
       expect(laterHandler).not.toHaveBeenCalled();
-      
+
       // No errors should be logged with THROW policy (they're thrown instead)
       expect(console.error).not.toHaveBeenCalled();
     });
@@ -327,7 +333,7 @@ describe('Event Schema Validation', () => {
   describe('Integration with other features', () => {
     it('should work with filtering', async () => {
       // Schema validator
-      const schema: SchemaValidator<any> = (data) => {
+      const schema: SchemaValidator<any> = data => {
         return data && typeof data === 'object' && typeof data.value === 'number';
       };
 
@@ -343,10 +349,10 @@ describe('Event Schema Validation', () => {
 
       // Valid schema and passes filter
       await evem.publish('schema.and.filter', { value: 20 });
-      
+
       // Valid schema but fails filter
       await evem.publish('schema.and.filter', { value: 5 });
-      
+
       // Invalid schema
       await evem.publish('schema.and.filter', { value: 'not a number' });
 
@@ -357,7 +363,7 @@ describe('Event Schema Validation', () => {
 
     it('should work with transformation and priority', async () => {
       // Schema validator
-      const schema: SchemaValidator<any> = (data) => {
+      const schema: SchemaValidator<any> = data => {
         return data && typeof data === 'object' && typeof data.id === 'number';
       };
 
@@ -387,7 +393,7 @@ describe('Event Schema Validation', () => {
       // First handler should be called with valid data
       expect(handler1).toHaveBeenCalledTimes(1);
       expect(handler1).toHaveBeenCalledWith({ id: 1, name: 'Test' });
-      
+
       // Second handler should get transformed data
       expect(handler2).toHaveBeenCalledTimes(1);
       expect(handler2).toHaveBeenCalledWith({ id: 1, name: 'Test', transformed: true });
@@ -400,7 +406,7 @@ describe('Event Schema Validation', () => {
 
       // First handler should not be called due to schema validation failure
       expect(handler1).not.toHaveBeenCalled();
-      
+
       // Second handler should still be called (no schema validation)
       expect(handler2).toHaveBeenCalledTimes(1);
     });
@@ -419,13 +425,17 @@ describe('Schema validation - errors thrown by the handler itself', () => {
   });
 
   it('should honor the publish errorPolicy for handler errors when data is valid', async () => {
-    evem.subscribe('user.created', () => {
-      throw new Error('handler bug');
-    }, { schema: () => true });
+    evem.subscribe(
+      'user.created',
+      () => {
+        throw new Error('handler bug');
+      },
+      { schema: () => true }
+    );
 
-    await expect(
-      evem.publish('user.created', { id: 1 }, { errorPolicy: ErrorPolicy.THROW })
-    ).rejects.toThrow('handler bug');
+    await expect(evem.publish('user.created', { id: 1 }, { errorPolicy: ErrorPolicy.THROW })).rejects.toThrow(
+      'handler bug'
+    );
   });
 
   it('should call the handler only once when it throws under LOG_AND_CONTINUE schema policy', async () => {
@@ -444,16 +454,18 @@ describe('Schema validation - errors thrown by the handler itself', () => {
 
   it('should report handler errors as handler errors, not schema errors', async () => {
     const handlerError = new Error('handler bug');
-    evem.subscribe('user.created', () => {
-      throw handlerError;
-    }, { schema: () => ({ valid: true }) });
+    evem.subscribe(
+      'user.created',
+      () => {
+        throw handlerError;
+      },
+      { schema: () => ({ valid: true }) }
+    );
 
     await evem.publish('user.created', { id: 1 });
 
     expect(console.error).toHaveBeenCalledWith('Error in event handler for "user.created":', handlerError);
-    expect(
-      vi.mocked(console.error).mock.calls.some(args => String(args[0]).includes('schema validation'))
-    ).toBe(false);
+    expect(vi.mocked(console.error).mock.calls.some(args => String(args[0]).includes('schema validation'))).toBe(false);
   });
 
   it('should still apply schemaErrorPolicy when the validator itself throws', async () => {
@@ -476,9 +488,9 @@ describe('Schema validation - errors thrown by the handler itself', () => {
       schemaErrorPolicy: ErrorPolicy.THROW
     });
 
-    await expect(
-      evem.publish('user.created', { id: 1 }, { errorPolicy: ErrorPolicy.THROW })
-    ).rejects.toMatchObject({ validationErrors: errors });
+    await expect(evem.publish('user.created', { id: 1 }, { errorPolicy: ErrorPolicy.THROW })).rejects.toMatchObject({
+      validationErrors: errors
+    });
   });
 });
 

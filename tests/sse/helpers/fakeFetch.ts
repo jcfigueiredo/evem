@@ -25,11 +25,15 @@ export function createFakeFetch(responseFor: (call: number) => FakeResponseOptio
 
   const fetch = async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
     let controller!: ReadableStreamDefaultController<Uint8Array>;
-    const body = new ReadableStream<Uint8Array>({ start: c => { controller = c; } });
+    const body = new ReadableStream<Uint8Array>({
+      start: c => {
+        controller = c;
+      }
+    });
     const stream: FakeStream = {
       push: text => controller.enqueue(encoder.encode(text)),
       close: () => controller.close(),
-      fail: error => controller.error(error),
+      fail: error => controller.error(error)
     };
     init.signal?.addEventListener('abort', () => {
       try {

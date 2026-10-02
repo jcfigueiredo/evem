@@ -20,7 +20,9 @@ describe('SseHandler', () => {
   };
   const received = (event: string) => {
     const values: unknown[] = [];
-    evem.subscribe(event, (value: unknown) => { values.push(value); });
+    evem.subscribe(event, (value: unknown) => {
+      values.push(value);
+    });
     return values;
   };
 
@@ -28,7 +30,9 @@ describe('SseHandler', () => {
     evem = new EvEm();
     transport = new FakeTransport();
     states = [];
-    evem.subscribe('sse.connection.state', (change: { to: string }) => { states.push(change.to); });
+    evem.subscribe('sse.connection.state', (change: { to: string }) => {
+      states.push(change.to);
+    });
     vi.spyOn(Math, 'random').mockReturnValue(0.5); // no jitter
   });
 
@@ -100,12 +104,14 @@ describe('SseHandler', () => {
       transport.send('{"id":1}', 'order.updated', '4');
       await tick();
 
-      expect(parseErrors).toEqual([{
-        error: expect.any(SyntaxError),
-        rawData: 'not json',
-        eventType: 'order.updated',
-        lastEventId: '3',
-      }]);
+      expect(parseErrors).toEqual([
+        {
+          error: expect.any(SyntaxError),
+          rawData: 'not json',
+          eventType: 'order.updated',
+          lastEventId: '3'
+        }
+      ]);
       expect(onError).toHaveBeenCalledWith(expect.any(SyntaxError));
       expect(orders).toEqual([{ id: 1 }]);
     });
@@ -333,7 +339,11 @@ describe('SseHandler', () => {
   });
 
   describe('reconnect delays', () => {
-    const delaysOf = async (options: SseHandlerOptions, ends: Array<Parameters<FakeTransport['end']>[0]>, openFirst = false) => {
+    const delaysOf = async (
+      options: SseHandlerOptions,
+      ends: Array<Parameters<FakeTransport['end']>[0]>,
+      openFirst = false
+    ) => {
       vi.useFakeTimers();
       create(options);
       await vi.advanceTimersByTimeAsync(0);
@@ -354,18 +364,19 @@ describe('SseHandler', () => {
     const networkError = { reason: 'network-error' as const, error: new Error('down') };
 
     it('backs off exponentially from reconnectDelay, up to maxReconnectDelay', async () => {
-      expect(await delaysOf({ reconnectDelay: 1000, maxReconnectDelay: 5000 }, Array(5).fill(networkError)))
-        .toEqual([1000, 2000, 4000, 5000, 5000]);
+      expect(await delaysOf({ reconnectDelay: 1000, maxReconnectDelay: 5000 }, Array(5).fill(networkError))).toEqual([
+        1000, 2000, 4000, 5000, 5000
+      ]);
     });
 
     it('uses a fixed delay with backoff: false', async () => {
-      expect(await delaysOf({ reconnectDelay: 1000, backoff: false }, Array(3).fill(networkError)))
-        .toEqual([1000, 1000, 1000]);
+      expect(await delaysOf({ reconnectDelay: 1000, backoff: false }, Array(3).fill(networkError))).toEqual([
+        1000, 1000, 1000
+      ]);
     });
 
     it('starts again from the base delay after a successful connection', async () => {
-      expect(await delaysOf({ reconnectDelay: 1000 }, Array(3).fill(networkError), true))
-        .toEqual([1000, 1000, 1000]);
+      expect(await delaysOf({ reconnectDelay: 1000 }, Array(3).fill(networkError), true)).toEqual([1000, 1000, 1000]);
     });
 
     it('uses the server retry value as the base delay', async () => {
@@ -383,8 +394,9 @@ describe('SseHandler', () => {
     });
 
     it('waits at least as long as Retry-After', async () => {
-      expect(await delaysOf({ reconnectDelay: 1000 }, [{ reason: 'http-error', status: 503, retryAfter: 7000 }]))
-        .toEqual([7000]);
+      expect(
+        await delaysOf({ reconnectDelay: 1000 }, [{ reason: 'http-error', status: 503, retryAfter: 7000 }])
+      ).toEqual([7000]);
     });
   });
 
@@ -446,17 +458,29 @@ describe('SseHandler', () => {
 
   describe('transports', () => {
     it('rejects options the EventSource transport cannot honour', () => {
-      for (const options of [{ headers: { a: 'b' } }, { method: 'POST' }, { heartbeatTimeout: 1000 }, { fetch: globalThis.fetch }]) {
-        expect(() => new SseHandler('/events', evem, {
-          transport: 'eventsource', EventSourceConstructor: MockEventSource, autoConnect: false, ...options,
-        })).toThrow(/doesn't support/);
+      for (const options of [
+        { headers: { a: 'b' } },
+        { method: 'POST' },
+        { heartbeatTimeout: 1000 },
+        { fetch: globalThis.fetch }
+      ]) {
+        expect(
+          () =>
+            new SseHandler('/events', evem, {
+              transport: 'eventsource',
+              EventSourceConstructor: MockEventSource,
+              autoConnect: false,
+              ...options
+            })
+        ).toThrow(/doesn't support/);
       }
     });
 
     it('rejects EventSource-only options with the fetch transport', () => {
       for (const options of [{ eventTypes: ['a'] }, { lastEventIdParam: 'since' }]) {
-        expect(() => new SseHandler('https://api.test/events', evem, { autoConnect: false, ...options }))
-          .toThrow(/only apply to the EventSource transport/);
+        expect(() => new SseHandler('https://api.test/events', evem, { autoConnect: false, ...options })).toThrow(
+          /only apply to the EventSource transport/
+        );
       }
     });
 
@@ -481,7 +505,13 @@ describe('SseHandler', () => {
     it('keeps reconnecting when onError throws', async () => {
       vi.useFakeTimers();
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-      create({ onError: () => { throw new Error('bad handler'); }, backoff: false, reconnectDelay: 100 });
+      create({
+        onError: () => {
+          throw new Error('bad handler');
+        },
+        backoff: false,
+        reconnectDelay: 100
+      });
       await vi.advanceTimersByTimeAsync(0);
       transport.open();
       transport.end({ reason: 'network-error', error: new Error('down') });
@@ -494,7 +524,11 @@ describe('SseHandler', () => {
     it('falls back to the default policy when shouldReconnect throws', async () => {
       vi.useFakeTimers();
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-      create({ shouldReconnect: () => { throw new Error('bad policy'); } });
+      create({
+        shouldReconnect: () => {
+          throw new Error('bad policy');
+        }
+      });
       await vi.advanceTimersByTimeAsync(0);
       transport.open();
       transport.end({ reason: 'network-error', error: new Error('down') });
@@ -580,12 +614,20 @@ describe('SseHandler', () => {
       // A relative URL needs a browser to resolve it
       expect(() => new SseHandler('/events', evem, { autoConnect: false })).toThrow(/absolute URL/);
       // No EventSource implementation in Node.js
-      expect(() => new SseHandler('https://api.test/events', evem, { transport: 'eventsource', autoConnect: false }))
-        .toThrow(/EventSource/);
+      expect(
+        () => new SseHandler('https://api.test/events', evem, { transport: 'eventsource', autoConnect: false })
+      ).toThrow(/EventSource/);
       // Options a custom transport would never see
-      for (const options of [{ headers: { a: 'b' } }, { method: 'POST' }, { body: 'x' }, { fetch: globalThis.fetch }, { withCredentials: true }]) {
-        expect(() => new SseHandler('/events', evem, { transport, autoConnect: false, ...options }))
-          .toThrow(/custom transport/);
+      for (const options of [
+        { headers: { a: 'b' } },
+        { method: 'POST' },
+        { body: 'x' },
+        { fetch: globalThis.fetch },
+        { withCredentials: true }
+      ]) {
+        expect(() => new SseHandler('/events', evem, { transport, autoConnect: false, ...options })).toThrow(
+          /custom transport/
+        );
       }
     });
   });

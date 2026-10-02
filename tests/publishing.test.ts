@@ -13,7 +13,7 @@ describe('EvEm - Publishing Tests', () => {
   });
 
   test('should throw error when publishing with an empty event name', async () => {
-    await expect(emitter.publish('')).rejects.toThrow("Event name cannot be empty.");
+    await expect(emitter.publish('')).rejects.toThrow('Event name cannot be empty.');
   });
 
   test('should notify multiple subscribers when an event is published', () => {

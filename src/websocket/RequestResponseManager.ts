@@ -1,11 +1,6 @@
 import type { EvEm } from '../eventEmitter.js';
 import { generateId } from '../id.js';
-import type {
-  RequestMessage,
-  ResponseMessage,
-  PendingRequest,
-  RequestOptions,
-} from './types.js';
+import type { RequestMessage, ResponseMessage, PendingRequest, RequestOptions } from './types.js';
 import { RequestTimeoutError } from './types.js';
 
 /**
@@ -26,31 +21,21 @@ export class RequestResponseManager {
    */
   private setupResponseHandlers(): void {
     // Handle successful responses
-    this.responseSubscriptionId = this.evem.subscribe(
-      'ws.response',
-      (response: ResponseMessage) => {
-        this.handleResponse(response, false);
-      }
-    );
+    this.responseSubscriptionId = this.evem.subscribe('ws.response', (response: ResponseMessage) => {
+      this.handleResponse(response, false);
+    });
 
     // Handle error responses
-    this.errorSubscriptionId = this.evem.subscribe(
-      'ws.response.error',
-      (response: ResponseMessage) => {
-        this.handleResponse(response, true);
-      }
-    );
+    this.errorSubscriptionId = this.evem.subscribe('ws.response.error', (response: ResponseMessage) => {
+      this.handleResponse(response, true);
+    });
   }
 
   /**
    * Send a request and wait for response
    * Rejects immediately if a request with the same custom id is still pending
    */
-  async request(
-    method: string,
-    params?: any,
-    options: RequestOptions = {}
-  ): Promise<any> {
+  async request(method: string, params?: any, options: RequestOptions = {}): Promise<any> {
     const timeout = options.timeout ?? 5000;
     const id = options.id ?? generateId();
 
@@ -64,7 +49,7 @@ export class RequestResponseManager {
       id,
       method,
       params,
-      timestamp: Date.now(),
+      timestamp: Date.now()
     };
 
     // Create promise that will be resolved/rejected when response arrives
@@ -85,7 +70,7 @@ export class RequestResponseManager {
         resolve,
         reject,
         timeoutId,
-        timestamp: Date.now(),
+        timestamp: Date.now()
       });
 
       // Publish the request

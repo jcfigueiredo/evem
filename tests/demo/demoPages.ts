@@ -1,7 +1,7 @@
-import { execFileSync } from "child_process";
-import { readdirSync, readFileSync } from "fs";
-import { join } from "path";
-import { fileURLToPath } from "url";
+import { execFileSync } from 'child_process';
+import { readdirSync, readFileSync } from 'fs';
+import { join } from 'path';
+import { fileURLToPath } from 'url';
 
 /**
  * Helpers for testing the demo pages in demo/examples without a browser.
@@ -11,8 +11,8 @@ import { fileURLToPath } from "url";
  * the page's <pre><code> blocks, so tests can check both against the real library.
  */
 
-const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const DEMO_DIR = join(REPO_ROOT, "demo", "examples");
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
+const DEMO_DIR = join(REPO_ROOT, 'demo', 'examples');
 
 /** Features a demo page's inline EvEm copy implements (tests only exercise what a copy supports) */
 export interface InlineEvEmFeatures {
@@ -26,15 +26,15 @@ export interface InlineEvEmFeatures {
 
 /** Every demo page that contains an inline EvEm copy, with the features that copy implements */
 export const INLINE_EVEM_PAGES: Record<string, InlineEvEmFeatures> = {
-  "cancelable-errors.html": { wildcards: false, priority: false, transforms: false },
-  "chat-demo.html": { wildcards: true, priority: false, transforms: false },
-  "core-features.html": { wildcards: true, priority: true, transforms: false },
-  "flow-control.html": { wildcards: false, priority: false, transforms: false },
-  "history-replay.html": { wildcards: true, priority: false, transforms: false },
-  "middleware-transforms.html": { wildcards: true, priority: true, transforms: true },
-  "schema-validation.html": { wildcards: false, priority: false, transforms: false },
-  "sse-demo.html": { wildcards: true, priority: false, transforms: false },
-  "websocket-demo.html": { wildcards: true, priority: false, transforms: false },
+  'cancelable-errors.html': { wildcards: false, priority: false, transforms: false },
+  'chat-demo.html': { wildcards: true, priority: false, transforms: false },
+  'core-features.html': { wildcards: true, priority: true, transforms: false },
+  'flow-control.html': { wildcards: false, priority: false, transforms: false },
+  'history-replay.html': { wildcards: true, priority: false, transforms: false },
+  'middleware-transforms.html': { wildcards: true, priority: true, transforms: true },
+  'schema-validation.html': { wildcards: false, priority: false, transforms: false },
+  'sse-demo.html': { wildcards: true, priority: false, transforms: false },
+  'websocket-demo.html': { wildcards: true, priority: false, transforms: false }
 };
 
 /**
@@ -43,21 +43,21 @@ export const INLINE_EVEM_PAGES: Record<string, InlineEvEmFeatures> = {
  * counts must be equal and each pattern segment must be equal or '*'.
  */
 export const WILDCARD_CASES: ReadonlyArray<readonly [event: string, pattern: string, matches: boolean]> = [
-  ["user.login", "user.login", true],
-  ["a.b", "a.*", true],
-  ["api.users.get", "api.*", true],
-  ["api.users.get", "api.*.*", true],
-  ["api.users.get.extra", "api.*.*", true],
-  ["api.users.get", "api.*.get", true],
-  ["api.users.get", "*.users.get", true],
-  ["user.login", "*", true],
-  ["x.y", "*.*", true],
-  ["api", "api.*", false],
-  ["a.b", "a.b.*", false],
-  ["system.startup", "user.*", false],
-  ["api.users.get", "api.*.post", false],
-  ["a.b.c", "*.c", false],
-  ["a.b.c", "a.b", false],
+  ['user.login', 'user.login', true],
+  ['a.b', 'a.*', true],
+  ['api.users.get', 'api.*', true],
+  ['api.users.get', 'api.*.*', true],
+  ['api.users.get.extra', 'api.*.*', true],
+  ['api.users.get', 'api.*.get', true],
+  ['api.users.get', '*.users.get', true],
+  ['user.login', '*', true],
+  ['x.y', '*.*', true],
+  ['api', 'api.*', false],
+  ['a.b', 'a.b.*', false],
+  ['system.startup', 'user.*', false],
+  ['api.users.get', 'api.*.post', false],
+  ['a.b.c', '*.c', false],
+  ['a.b.c', 'a.b', false]
 ];
 
 /** Constructor of a demo page's inline EvEm (its API differs per page, so it is loosely typed) */
@@ -70,11 +70,20 @@ export interface LoadedInlineEvEm {
 }
 
 /** Page globals the inline classes touch, stubbed so the classes can run in Node */
-const STUBBED_PAGE_GLOBALS = ["window", "log", "updateStats", "updateQueueUI", "updateQueueDisplay", "updateUI"] as const;
+const STUBBED_PAGE_GLOBALS = [
+  'window',
+  'log',
+  'updateStats',
+  'updateQueueUI',
+  'updateQueueDisplay',
+  'updateUI'
+] as const;
 
 /** All demo pages in demo/examples */
 export function listDemoPages(): string[] {
-  return readdirSync(DEMO_DIR).filter(file => file.endsWith(".html")).sort();
+  return readdirSync(DEMO_DIR)
+    .filter(file => file.endsWith('.html'))
+    .sort();
 }
 
 /**
@@ -85,17 +94,17 @@ export function listDemoPages(): string[] {
 export function readDemoPage(file: string): string {
   const ref = process.env.DEMO_GIT_REF;
   if (ref) {
-    return execFileSync("git", ["show", `${ref}:demo/examples/${file}`], { cwd: REPO_ROOT, encoding: "utf8" });
+    return execFileSync('git', ['show', `${ref}:demo/examples/${file}`], { cwd: REPO_ROOT, encoding: 'utf8' });
   }
-  return readFileSync(join(DEMO_DIR, file), "utf8");
+  return readFileSync(join(DEMO_DIR, file), 'utf8');
 }
 
 /** Contents of a page's inline <script> elements (scripts loaded with src are skipped) */
 export function inlineScripts(html: string): string[] {
   const scripts: string[] = [];
   for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
-    if (/\bsrc\s*=/i.test(match[1] ?? "")) continue;
-    scripts.push(match[2] ?? "");
+    if (/\bsrc\s*=/i.test(match[1] ?? '')) continue;
+    scripts.push(match[2] ?? '');
   }
   return scripts;
 }
@@ -112,7 +121,7 @@ export function extractClassSource(html: string, className: string): string | nu
   return null;
 }
 
-const CLOSING_BRACKETS: Record<string, string> = { "(": ")", "{": "}", "[": "]" };
+const CLOSING_BRACKETS: Record<string, string> = { '(': ')', '{': '}', '[': ']' };
 
 /**
  * Source of a top-level declaration in a page's inline scripts, or null if there is none:
@@ -126,15 +135,15 @@ export function extractDeclarationSource(html: string, name: string): string | n
   for (const script of inlineScripts(html)) {
     const fn = new RegExp(`\\bfunction\\s+${name}\\s*\\(`).exec(script);
     if (fn) {
-      const closeParen = findMatchingBrace(script, fn.index + fn[0].length - 1, "(", ")");
-      const openBrace = script.indexOf("{", closeParen);
+      const closeParen = findMatchingBrace(script, fn.index + fn[0].length - 1, '(', ')');
+      const openBrace = script.indexOf('{', closeParen);
       return script.slice(fn.index, findMatchingBrace(script, openBrace) + 1);
     }
     const constant = new RegExp(`\\bconst\\s+${name}\\s*=`).exec(script);
     if (constant) {
       const valueStart = constant.index + constant[0].length;
       const open = script.slice(valueStart).search(/[({[]/) + valueStart;
-      const opening = script[open] ?? "";
+      const opening = script[open] ?? '';
       const close = findMatchingBrace(script, open, opening, CLOSING_BRACKETS[opening]);
       return `${script.slice(constant.index, close + 1)};`;
     }
@@ -152,7 +161,7 @@ export function loadInlineDeclarations(file: string, names: string[]): Record<st
 
 /** Evaluate a demo page's inline `class EvEm` in Node, with the page globals it uses stubbed out */
 export function loadInlineEvEm(file: string): LoadedInlineEvEm {
-  const { classes, logs } = loadInlineClasses(file, ["EvEm"]);
+  const { classes, logs } = loadInlineClasses(file, ['EvEm']);
   return { EvEm: classes.EvEm!, logs };
 }
 
@@ -182,32 +191,37 @@ export function loadInlineClasses(file: string, classNames: string[]): LoadedInl
   const noop = () => undefined;
   const pageGlobals: Record<(typeof STUBBED_PAGE_GLOBALS)[number], unknown> = {
     window: {},
-    log: (message: string) => { logs.push(message); },
+    log: (message: string) => {
+      logs.push(message);
+    },
     updateStats: noop,
     updateQueueUI: noop,
     updateQueueDisplay: noop,
-    updateUI: noop,
+    updateUI: noop
   };
 
-  const factory = new Function(...STUBBED_PAGE_GLOBALS, `${sources.join("\n")}; return { ${classNames.join(", ")} };`) as
-    (...args: unknown[]) => LoadedInlineClasses["classes"];
+  const factory = new Function(
+    ...STUBBED_PAGE_GLOBALS,
+    `${sources.join('\n')}; return { ${classNames.join(', ')} };`
+  ) as (...args: unknown[]) => LoadedInlineClasses['classes'];
   const classes = factory(...STUBBED_PAGE_GLOBALS.map(name => pageGlobals[name]));
   return { classes, logs };
 }
 
 /** The "View Code" samples of a page: the text of each <pre><code> block, with HTML entities decoded */
 export function extractCodeSamples(html: string): string[] {
-  return [...html.matchAll(/<pre>\s*<code\b[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi)]
-    .map(match => decodeHtmlEntities(match[1] ?? ""));
+  return [...html.matchAll(/<pre>\s*<code\b[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi)].map(match =>
+    decodeHtmlEntities(match[1] ?? '')
+  );
 }
 
 function decodeHtmlEntities(text: string): string {
   return text
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&");
+    .replace(/&amp;/g, '&');
 }
 
 /**
@@ -215,23 +229,23 @@ function decodeHtmlEntities(text: string): string {
  * bracket, such as `(` and `)`).
  * Skips brackets inside strings, template literals (including nested `${...}`), comments and regex literals.
  */
-export function findMatchingBrace(src: string, openIndex: number, open = "{", close = "}"): number {
+export function findMatchingBrace(src: string, openIndex: number, open = '{', close = '}'): number {
   let depth = 0;
   // Last non-whitespace character, used to tell a regex literal from a division operator
-  let previous = "";
+  let previous = '';
   let i = openIndex;
 
   while (i < src.length) {
     const ch = src[i]!;
     const next = src[i + 1];
 
-    if (ch === "/" && next === "/") {
-      const lineEnd = src.indexOf("\n", i);
+    if (ch === '/' && next === '/') {
+      const lineEnd = src.indexOf('\n', i);
       i = lineEnd === -1 ? src.length : lineEnd;
       continue;
     }
-    if (ch === "/" && next === "*") {
-      const commentEnd = src.indexOf("*/", i + 2);
+    if (ch === '/' && next === '*') {
+      const commentEnd = src.indexOf('*/', i + 2);
       i = commentEnd === -1 ? src.length : commentEnd + 2;
       continue;
     }
@@ -240,14 +254,14 @@ export function findMatchingBrace(src: string, openIndex: number, open = "{", cl
       previous = ch;
       continue;
     }
-    if (ch === "`") {
+    if (ch === '`') {
       i = skipTemplateLiteral(src, i);
       previous = ch;
       continue;
     }
-    if (ch === "/" && (previous === "" || "(,=:[!&|?{};+-*%<>~^}".includes(previous))) {
+    if (ch === '/' && (previous === '' || '(,=:[!&|?{};+-*%<>~^}'.includes(previous))) {
       i = skipRegexLiteral(src, i);
-      previous = "/";
+      previous = '/';
       continue;
     }
 
@@ -269,7 +283,7 @@ function skipString(src: string, start: number): number {
   const quote = src[start];
   let i = start + 1;
   while (i < src.length) {
-    if (src[i] === "\\") {
+    if (src[i] === '\\') {
       i += 2;
     } else if (src[i] === quote) {
       return i + 1;
@@ -284,11 +298,11 @@ function skipString(src: string, start: number): number {
 function skipTemplateLiteral(src: string, start: number): number {
   let i = start + 1;
   while (i < src.length) {
-    if (src[i] === "\\") {
+    if (src[i] === '\\') {
       i += 2;
-    } else if (src[i] === "`") {
+    } else if (src[i] === '`') {
       return i + 1;
-    } else if (src[i] === "$" && src[i + 1] === "{") {
+    } else if (src[i] === '$' && src[i + 1] === '{') {
       i = findMatchingBrace(src, i + 1) + 1;
     } else {
       i++;
@@ -303,17 +317,17 @@ function skipRegexLiteral(src: string, start: number): number {
   let i = start + 1;
   while (i < src.length) {
     const ch = src[i];
-    if (ch === "\\") {
+    if (ch === '\\') {
       i += 2;
-    } else if (ch === "\n") {
+    } else if (ch === '\n') {
       return start + 1;
-    } else if (ch === "[") {
+    } else if (ch === '[') {
       inCharacterClass = true;
       i++;
-    } else if (ch === "]") {
+    } else if (ch === ']') {
       inCharacterClass = false;
       i++;
-    } else if (ch === "/" && !inCharacterClass) {
+    } else if (ch === '/' && !inCharacterClass) {
       i++;
       while (i < src.length && /[a-z]/i.test(src[i]!)) i++;
       return i;

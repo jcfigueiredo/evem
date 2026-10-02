@@ -79,7 +79,14 @@ const MAX_TIMEOUT = 2_147_483_647;
 
 const FETCH_ONLY_OPTIONS = ['headers', 'method', 'body', 'fetch', 'heartbeatTimeout'] as const;
 const EVENTSOURCE_ONLY_OPTIONS = ['EventSourceConstructor', 'eventTypes', 'lastEventIdParam'] as const;
-const BUILT_IN_TRANSPORT_OPTIONS = ['headers', 'method', 'body', 'fetch', 'withCredentials', ...EVENTSOURCE_ONLY_OPTIONS] as const;
+const BUILT_IN_TRANSPORT_OPTIONS = [
+  'headers',
+  'method',
+  'body',
+  'fetch',
+  'withCredentials',
+  ...EVENTSOURCE_ONLY_OPTIONS
+] as const;
 
 /**
  * Build the transport. Options the chosen transport can't honour, and configurations that could
@@ -93,7 +100,9 @@ function createTransport(url: string, options: SseHandlerOptions): SseTransport 
   if (typeof transport === 'object') {
     const ignored = given(BUILT_IN_TRANSPORT_OPTIONS);
     if (ignored.length > 0) {
-      throw new TypeError(`${ignored.join(', ')} would be ignored with a custom transport; configure the transport instead.`);
+      throw new TypeError(
+        `${ignored.join(', ')} would be ignored with a custom transport; configure the transport instead.`
+      );
     }
     return transport;
   }
@@ -101,16 +110,23 @@ function createTransport(url: string, options: SseHandlerOptions): SseTransport 
   if (transport === 'eventsource') {
     const unsupported = given(FETCH_ONLY_OPTIONS);
     if (unsupported.length > 0) {
-      throw new TypeError(`The EventSource transport doesn't support: ${unsupported.join(', ')}. Use the fetch transport.`);
+      throw new TypeError(
+        `The EventSource transport doesn't support: ${unsupported.join(', ')}. Use the fetch transport.`
+      );
     }
-    if (!options.EventSourceConstructor && typeof (globalThis as { EventSource?: unknown }).EventSource !== 'function') {
-      throw new TypeError('There is no global EventSource (e.g. in Node.js): pass EventSourceConstructor or use the fetch transport.');
+    if (
+      !options.EventSourceConstructor &&
+      typeof (globalThis as { EventSource?: unknown }).EventSource !== 'function'
+    ) {
+      throw new TypeError(
+        'There is no global EventSource (e.g. in Node.js): pass EventSourceConstructor or use the fetch transport.'
+      );
     }
     return new EventSourceSseTransport({
       EventSourceConstructor: options.EventSourceConstructor,
       withCredentials: options.withCredentials,
       eventTypes: options.eventTypes,
-      lastEventIdParam: options.lastEventIdParam,
+      lastEventIdParam: options.lastEventIdParam
     });
   }
 
@@ -133,7 +149,7 @@ function createTransport(url: string, options: SseHandlerOptions): SseTransport 
     headers: options.headers,
     method: options.method,
     body: options.body,
-    withCredentials: options.withCredentials,
+    withCredentials: options.withCredentials
   });
 }
 
@@ -337,7 +353,7 @@ export class SseHandler {
         if (!isCurrent()) return;
         clearTimeout(this.heartbeatTimer);
         void this.connectionManager.transitionTo('reconnecting');
-      },
+      }
     };
   }
 
@@ -355,9 +371,12 @@ export class SseHandler {
 
     const error = errorFor(end, this.heartbeatTimeout);
     if (error) {
-      const details = end.reason === 'http-error'
-        ? { status: end.status }
-        : end.reason === 'bad-content-type' ? { contentType: end.contentType } : {};
+      const details =
+        end.reason === 'http-error'
+          ? { status: end.status }
+          : end.reason === 'bad-content-type'
+            ? { contentType: end.contentType }
+            : {};
       void this.publishSafely('sse.error', { error, reason: end.reason, ...details });
       this.callOnError(error);
     }
@@ -435,11 +454,14 @@ export class SseHandler {
       return;
     }
     clearTimeout(this.heartbeatTimer);
-    this.heartbeatTimer = setTimeout(() => {
-      if (generation !== this.generation) return;
-      this.heartbeatExpired = true;
-      this.transport.abort();
-    }, Math.min(MAX_TIMEOUT, this.heartbeatTimeout));
+    this.heartbeatTimer = setTimeout(
+      () => {
+        if (generation !== this.generation) return;
+        this.heartbeatExpired = true;
+        this.transport.abort();
+      },
+      Math.min(MAX_TIMEOUT, this.heartbeatTimeout)
+    );
   }
 
   private clearTimers(): void {
@@ -463,15 +485,19 @@ export class SseHandler {
       if (this.options.rawEvents) {
         publishes.push(['sse.event', { type: event.type, data, rawData: event.data, lastEventId: event.lastEventId }]);
       }
-      const routed = event.type !== 'message'
-        ? { event: toServerEventName(event.type, this.serverEventPrefix), data }
-        : this.options.unwrapEnvelope ?? true
-          ? routeServerMessage(data, { prefix: this.serverEventPrefix, channel: 'sse', handleResponses: false })
-          : { event: 'sse.message', data };
+      const routed =
+        event.type !== 'message'
+          ? { event: toServerEventName(event.type, this.serverEventPrefix), data }
+          : (this.options.unwrapEnvelope ?? true)
+            ? routeServerMessage(data, { prefix: this.serverEventPrefix, channel: 'sse', handleResponses: false })
+            : { event: 'sse.message', data };
       publishes.push([routed.event, routed.data]);
     } catch (caught) {
       const error = caught instanceof Error ? caught : new Error(String(caught));
-      publishes.push(['sse.parse.error', { error, rawData: event.data, eventType: event.type, lastEventId: event.lastEventId }]);
+      publishes.push([
+        'sse.parse.error',
+        { error, rawData: event.data, eventType: event.type, lastEventId: event.lastEventId }
+      ]);
       this.callOnError(error);
     }
 

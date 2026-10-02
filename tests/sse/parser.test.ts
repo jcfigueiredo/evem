@@ -10,7 +10,7 @@ function parse(chunks: string[], initialLastEventId?: string) {
     {
       onEvent: event => events.push(event),
       onRetry: milliseconds => retries.push(milliseconds),
-      onComment: text => comments.push(text),
+      onComment: text => comments.push(text)
     },
     initialLastEventId
   );
@@ -31,7 +31,7 @@ describe('SseParser - examples from the HTML specification', () => {
     expect(parse([stream]).events).toEqual([
       message('first event', '1'),
       message('second event', ''),
-      message(' third event', ''),
+      message(' third event', '')
     ]);
   });
 
@@ -48,7 +48,7 @@ describe('SseParser - fields', () => {
   it('sets the event type, defaulting to "message"', () => {
     expect(parse(['event: order.updated\ndata: {"id":7}\n\ndata: plain\n\n']).events).toEqual([
       message('{"id":7}', '', 'order.updated'),
-      message('plain'),
+      message('plain')
     ]);
   });
 

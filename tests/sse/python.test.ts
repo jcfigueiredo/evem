@@ -48,7 +48,7 @@ function formatWithPython(input: string): { headers: Record<string, string>; res
   const run = spawnSync(PYTHON, ['-B', formatVectorsScript, examplesDirectory], {
     input,
     encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
+    maxBuffer: 64 * 1024 * 1024
   });
   if (run.status !== 0) {
     throw new Error(`format_vectors.py failed (${run.status}): ${run.stderr}`);
@@ -59,10 +59,38 @@ function formatWithPython(input: string): { headers: Record<string, string>; res
 /** Deterministic pseudo-random strings mixing line breaks, other Unicode separators, field-like text and non-ASCII */
 function* generatedStrings(count: number) {
   const pieces = [
-    'a', 'Z', ' ', ':', '\n', '\r', '\r\n', '\n\n', 'data: x', 'event: forged', 'id: 9', '\t', '"', '\\', '\0',
+    'a',
+    'Z',
+    ' ',
+    ':',
+    '\n',
+    '\r',
+    '\r\n',
+    '\n\n',
+    'data: x',
+    'event: forged',
+    'id: 9',
+    '\t',
+    '"',
+    '\\',
+    '\0',
     // str.splitlines() would split on these; the SSE format and the JS helper don't
-    '\v', '\f', '\x1c', '\x1d', '\x1e', '\x85', '\u2028', '\u2029',
-    'é', 'ß', '日本', '😀', '👍🏽', '\ud800', '\udfff', '{"k":1}',
+    '\v',
+    '\f',
+    '\x1c',
+    '\x1d',
+    '\x1e',
+    '\x85',
+    '\u2028',
+    '\u2029',
+    'é',
+    'ß',
+    '日本',
+    '😀',
+    '👍🏽',
+    '\ud800',
+    '\udfff',
+    '{"k":1}'
   ];
   let seed = 4242;
   const next = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
@@ -157,7 +185,7 @@ const handwrittenVectors: Vector[] = [
   { comment: 'a\n\ndata: forged' },
   { comment: ' leading space' },
   { comment: 'café 😀' },
-  { comment: 'v\vf\fu\u2028end' },
+  { comment: 'v\vf\fu\u2028end' }
 ];
 
 const generatedVectors: Vector[] = [...generatedStrings(250)].flatMap((text): Vector[] => {
@@ -168,7 +196,7 @@ const generatedVectors: Vector[] = [...generatedStrings(250)].flatMap((text): Ve
     { message: { data: text } },
     { message: { data: text }, options: { raw: true } },
     { message: { event: name, data: text }, options: { envelope: true } },
-    { comment: text },
+    { comment: text }
   ];
 });
 
@@ -191,7 +219,7 @@ const invalidVectors: Vector[] = [
   { message: { retry: true as unknown as number } },
   { message: { data: 1 }, options: { envelope: true } },
   { message: { event: '', data: 1 }, options: { envelope: true } },
-  { message: {}, options: { envelope: true } },
+  { message: {}, options: { envelope: true } }
 ];
 
 /** What the parser should produce for a message, given what was passed to the formatter */
@@ -203,7 +231,7 @@ function expectedRoundTrip({ message, options = {} }: MessageVector) {
     return { events: [], retries };
   }
   const type = event && !options.envelope ? event : 'message';
-  const payload = options.envelope ? { event, data: data ?? null } : data ?? null;
+  const payload = options.envelope ? { event, data: data ?? null } : (data ?? null);
   return { events: [{ type, lastEventId, payload }], retries, rawText: options.raw && typeof payload === 'string' };
 }
 
@@ -243,7 +271,9 @@ describe.skipIf(!hasPython)('Python SSE helper (examples/python/evem_sse.py)', (
     const js = invalidVectors.map(formatWithJs);
     const python = formatWithPython(JSON.stringify(invalidVectors)).results;
 
-    expect(js.map(result => result.error)).toEqual(invalidVectors.map(() => expect.stringMatching(/^(TypeError|RangeError)$/)));
+    expect(js.map(result => result.error)).toEqual(
+      invalidVectors.map(() => expect.stringMatching(/^(TypeError|RangeError)$/))
+    );
     expect(python.map(result => result.error)).toEqual(invalidVectors.map(() => 'ValueError'));
   });
 
@@ -269,7 +299,7 @@ describe.skipIf(!hasPython)('Python SSE helper (examples/python/evem_sse.py)', (
       'ValueError', // JS accepts 5000.0, which is the number 5000
       'TypeError', // JS: id: 1.5
       'TypeError', // JS: id: true (not allowed by the TS types)
-      'TypeError', // JS: event: 5 (not allowed by the TS types)
+      'TypeError' // JS: event: 5 (not allowed by the TS types)
     ]);
     // Floats are written differently but read back as the same numbers
     expect(JSON.parse(parse(python[0]!).events[0]!.data)).toBe(1);
@@ -280,7 +310,7 @@ describe.skipIf(!hasPython)('Python SSE helper (examples/python/evem_sse.py)', (
     for (const file of [`${examplesDirectory}evem_sse.py`, pythonGuide]) {
       const run = spawnSync(PYTHON, ['-B', '-m', 'doctest', file], {
         encoding: 'utf8',
-        env: { ...process.env, PYTHONPATH: examplesDirectory },
+        env: { ...process.env, PYTHONPATH: examplesDirectory }
       });
       expect(run.stdout + run.stderr).toBe('');
       expect(run.status).toBe(0);
@@ -295,13 +325,15 @@ describe.skipIf(!hasPython)('Python SSE helper (examples/python/evem_sse.py)', (
       const expected = expectedRoundTrip(vector);
       const { events, retries } = parse(python[i]!.output!);
       expect(retries).toEqual(expected.retries);
-      expect(events.map(({ type, lastEventId }) => ({ type, lastEventId })))
-        .toEqual(expected.events.map(({ type, lastEventId }) => ({ type, lastEventId })));
+      expect(events.map(({ type, lastEventId }) => ({ type, lastEventId }))).toEqual(
+        expected.events.map(({ type, lastEventId }) => ({ type, lastEventId }))
+      );
       if (events[0]) {
         const payload = expected.events[0]!.payload;
         // Raw text comes back with every line ending normalized to \n, as the format requires
-        expect(expected.rawText ? events[0].data : JSON.parse(events[0].data))
-          .toEqual(expected.rawText ? (payload as string).replace(/\r\n|\r/g, '\n') : payload);
+        expect(expected.rawText ? events[0].data : JSON.parse(events[0].data)).toEqual(
+          expected.rawText ? (payload as string).replace(/\r\n|\r/g, '\n') : payload
+        );
       }
     });
   });
@@ -321,17 +353,28 @@ describe.skipIf(!hasPython)('Python SSE helper (examples/python/evem_sse.py)', (
       { message: { event: 'server.notice', id: 3, data: 'not prefixed twice' } },
       { message: { event: 'refresh', id: 4 } },
       { message: { id: 5, data: { plain: 'message' } } },
-      { message: { event: 'note', id: 6, data: 'line one\nline two' }, options: { raw: true } },
+      { message: { event: 'note', id: 6, data: 'line one\nline two' }, options: { raw: true } }
     ];
-    const text = formatWithPython(JSON.stringify(stream)).results.map(result => result.output).join('');
-    const names = ['server.order.updated', 'server.notice', 'server.refresh', 'server.note', 'sse.message', 'sse.parse.error'];
+    const text = formatWithPython(JSON.stringify(stream))
+      .results.map(result => result.output)
+      .join('');
+    const names = [
+      'server.order.updated',
+      'server.notice',
+      'server.refresh',
+      'server.note',
+      'sse.message',
+      'sse.parse.error'
+    ];
 
     const receive = async (options: SseHandlerOptions) => {
       const { fetch, calls } = createFakeFetch();
       const evem = new EvEm();
       const received: Array<[string, unknown]> = [];
       for (const name of names) {
-        evem.subscribe(name, (data: unknown) => { received.push([name, data]); });
+        evem.subscribe(name, (data: unknown) => {
+          received.push([name, data]);
+        });
       }
       const handler = new SseHandler('https://example.test/events', evem, { ...options, fetch });
       await flush();
@@ -350,7 +393,7 @@ describe.skipIf(!hasPython)('Python SSE helper (examples/python/evem_sse.py)', (
       ['server.refresh', null],
       ['sse.message', { plain: 'message' }],
       // Raw text isn't JSON: it needs parseData: 'text'
-      ['sse.parse.error', expect.objectContaining({ rawData: 'line one\nline two', eventType: 'note' })],
+      ['sse.parse.error', expect.objectContaining({ rawData: 'line one\nline two', eventType: 'note' })]
     ]);
     expect(json.lastEventId).toBe('6');
 
@@ -433,8 +476,12 @@ describe.skipIf(!hasPython)('SseHandler against the Python server (examples/pyth
     const evem = new EvEm();
     const ticks: number[] = [];
     const errors: unknown[] = [];
-    evem.subscribe('server.tick', ({ n }: { n: number }) => { ticks.push(n); });
-    evem.subscribe('sse.error', (error: unknown) => { errors.push(error); });
+    evem.subscribe('server.tick', ({ n }: { n: number }) => {
+      ticks.push(n);
+    });
+    evem.subscribe('sse.error', (error: unknown) => {
+      errors.push(error);
+    });
 
     handler = new SseHandler(server.url, evem);
     await waitFor(() => ticks.length >= 10);
@@ -451,7 +498,7 @@ describe.skipIf(!hasPython)('SseHandler against the Python server (examples/pyth
       'connection 1: resuming after 0',
       'connection 1: ended by the server after 3',
       'connection 2: resuming after 3',
-      'connection 2: client disconnected',
+      'connection 2: client disconnected'
     ]);
   }, 20000);
 
@@ -473,7 +520,9 @@ describe.skipIf(!hasPython)('SseHandler against the Python server (examples/pyth
     server = await startPythonServer(['--interval', '30', '--heartbeat', '0.05']);
     const evem = new EvEm();
     const errors: unknown[] = [];
-    evem.subscribe('sse.error', (error: unknown) => { errors.push(error); });
+    evem.subscribe('sse.error', (error: unknown) => {
+      errors.push(error);
+    });
 
     handler = new SseHandler(server.url, evem, { heartbeatTimeout: 300 });
     await waitFor(() => handler!.isConnected());
@@ -481,6 +530,8 @@ describe.skipIf(!hasPython)('SseHandler against the Python server (examples/pyth
 
     expect(errors).toEqual([]);
     expect(handler.isConnected()).toBe(true);
-    expect(server.log.filter(line => /^connection \d+: resuming/.test(line))).toEqual(['connection 1: resuming after 0']);
+    expect(server.log.filter(line => /^connection \d+: resuming/.test(line))).toEqual([
+      'connection 1: resuming after 0'
+    ]);
   }, 20000);
 });

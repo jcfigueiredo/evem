@@ -1,12 +1,7 @@
 /**
  * Connection states shared by the WebSocket and SSE adapters
  */
-export type ConnectionState =
-  | 'disconnected'
-  | 'connecting'
-  | 'connected'
-  | 'reconnecting'
-  | 'disconnecting';
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'disconnecting';
 
 /**
  * Connection state change event payload

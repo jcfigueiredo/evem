@@ -4,7 +4,11 @@ import type { SseCloseInfo, SseConnectRequest, SseTransport, SseTransportListene
  * A transport the test drives by hand: open, send events, end connections
  */
 export class FakeTransport implements SseTransport {
-  connections: Array<{ request: SseConnectRequest; listener: SseTransportListener; end: (info: SseCloseInfo) => void }> = [];
+  connections: Array<{
+    request: SseConnectRequest;
+    listener: SseTransportListener;
+    end: (info: SseCloseInfo) => void;
+  }> = [];
   aborts = 0;
 
   connect(request: SseConnectRequest, listener: SseTransportListener): Promise<SseCloseInfo> {

@@ -1,16 +1,16 @@
 /// <reference types="vitest" />
 
-import { defineConfig } from "vitest/config";
-import tsconfigPaths from "vite-tsconfig-paths";
+import { defineConfig } from 'vitest/config';
+import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
     globals: true,
-    include: ["**/*.test.ts"],
+    include: ['**/*.test.ts'],
     coverage: {
-      provider: "v8",
-      reporter: ["html"]
+      provider: 'v8',
+      reporter: ['html']
     }
   }
 });

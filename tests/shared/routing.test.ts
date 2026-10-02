@@ -23,13 +23,17 @@ describe('routeServerMessage', () => {
   const options = { prefix: 'server', channel: 'ws', handleResponses: true };
 
   it('should route the { event, data } envelope to a prefixed server event', () => {
-    expect(routeServerMessage({ event: 'user.login', data: { id: 1 } }, options))
-      .toEqual({ event: 'server.user.login', data: { id: 1 } });
+    expect(routeServerMessage({ event: 'user.login', data: { id: 1 } }, options)).toEqual({
+      event: 'server.user.login',
+      data: { id: 1 }
+    });
   });
 
   it('should route the legacy { type, data } format to a prefixed server event', () => {
-    expect(routeServerMessage({ type: 'notification', data: 'hi' }, options))
-      .toEqual({ event: 'server.notification', data: 'hi' });
+    expect(routeServerMessage({ type: 'notification', data: 'hi' }, options)).toEqual({
+      event: 'server.notification',
+      data: 'hi'
+    });
   });
 
   it('should prefer event over type', () => {
@@ -37,16 +41,21 @@ describe('routeServerMessage', () => {
   });
 
   it('should route responses when enabled', () => {
-    expect(routeServerMessage({ type: 'response', id: 'r1', result: 42, timestamp: 5 }, options))
-      .toEqual({ event: 'ws.response', data: { id: 'r1', result: 42, timestamp: 5 } });
-    expect(routeServerMessage({ type: 'response', id: 'r2', error: { code: 1, message: 'no' }, timestamp: 5 }, options))
-      .toEqual({ event: 'ws.response.error', data: { id: 'r2', error: { code: 1, message: 'no' }, timestamp: 5 } });
+    expect(routeServerMessage({ type: 'response', id: 'r1', result: 42, timestamp: 5 }, options)).toEqual({
+      event: 'ws.response',
+      data: { id: 'r1', result: 42, timestamp: 5 }
+    });
+    expect(
+      routeServerMessage({ type: 'response', id: 'r2', error: { code: 1, message: 'no' }, timestamp: 5 }, options)
+    ).toEqual({ event: 'ws.response.error', data: { id: 'r2', error: { code: 1, message: 'no' }, timestamp: 5 } });
   });
 
   it('should send responses to <channel>.message when responses are not handled', () => {
     const response = { type: 'response', id: 'r1', result: 42 };
-    expect(routeServerMessage(response, { prefix: 'server', channel: 'sse', handleResponses: false }))
-      .toEqual({ event: 'sse.message', data: response });
+    expect(routeServerMessage(response, { prefix: 'server', channel: 'sse', handleResponses: false })).toEqual({
+      event: 'sse.message',
+      data: response
+    });
   });
 
   it('should send other messages, including non-objects, to <channel>.message', () => {

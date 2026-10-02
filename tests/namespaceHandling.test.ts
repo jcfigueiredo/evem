@@ -1,4 +1,3 @@
-
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { EvEm } from '~/eventEmitter';
 

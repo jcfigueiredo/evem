@@ -221,10 +221,12 @@ describe('WebSocketHandler', () => {
         serverEvents.push(data);
       });
 
-      await mockWs.simulateMessage(JSON.stringify({
-        event: 'server.user.login',
-        data: { userId: '123', username: 'john' }
-      }));
+      await mockWs.simulateMessage(
+        JSON.stringify({
+          event: 'server.user.login',
+          data: { userId: '123', username: 'john' }
+        })
+      );
 
       expect(serverEvents).toHaveLength(1);
       expect(serverEvents[0]).toMatchObject({
@@ -245,12 +247,14 @@ describe('WebSocketHandler', () => {
         responses.push(response);
       });
 
-      await mockWs.simulateMessage(JSON.stringify({
-        type: 'response',
-        id: 'req-123',
-        result: { userId: '456', name: 'John' },
-        timestamp: Date.now()
-      }));
+      await mockWs.simulateMessage(
+        JSON.stringify({
+          type: 'response',
+          id: 'req-123',
+          result: { userId: '456', name: 'John' },
+          timestamp: Date.now()
+        })
+      );
 
       expect(responses).toHaveLength(1);
       expect(responses[0]).toMatchObject({
@@ -271,15 +275,17 @@ describe('WebSocketHandler', () => {
         errorResponses.push(response);
       });
 
-      await mockWs.simulateMessage(JSON.stringify({
-        type: 'response',
-        id: 'req-456',
-        error: {
-          code: 404,
-          message: 'User not found'
-        },
-        timestamp: Date.now()
-      }));
+      await mockWs.simulateMessage(
+        JSON.stringify({
+          type: 'response',
+          id: 'req-456',
+          error: {
+            code: 404,
+            message: 'User not found'
+          },
+          timestamp: Date.now()
+        })
+      );
 
       expect(errorResponses).toHaveLength(1);
       expect(errorResponses[0]).toMatchObject({
@@ -301,15 +307,19 @@ describe('WebSocketHandler', () => {
         userEvents.push(data);
       });
 
-      await mockWs.simulateMessage(JSON.stringify({
-        event: 'server.user.login',
-        data: { userId: '123' }
-      }));
+      await mockWs.simulateMessage(
+        JSON.stringify({
+          event: 'server.user.login',
+          data: { userId: '123' }
+        })
+      );
 
-      await mockWs.simulateMessage(JSON.stringify({
-        event: 'server.user.logout',
-        data: { userId: '123' }
-      }));
+      await mockWs.simulateMessage(
+        JSON.stringify({
+          event: 'server.user.logout',
+          data: { userId: '123' }
+        })
+      );
 
       expect(userEvents).toHaveLength(2);
     });
@@ -327,10 +337,12 @@ describe('WebSocketHandler', () => {
       });
 
       // When server sends event without prefix, handler adds it
-      await mockWs.simulateMessage(JSON.stringify({
-        event: 'notification',
-        data: { message: 'Hello' }
-      }));
+      await mockWs.simulateMessage(
+        JSON.stringify({
+          event: 'notification',
+          data: { message: 'Hello' }
+        })
+      );
 
       expect(backendEvents).toHaveLength(1);
     });
@@ -345,10 +357,12 @@ describe('WebSocketHandler', () => {
         messages.push(data);
       });
 
-      await mockWs.simulateMessage(JSON.stringify({
-        type: 'notification',
-        data: { message: 'Legacy format' }
-      }));
+      await mockWs.simulateMessage(
+        JSON.stringify({
+          type: 'notification',
+          data: { message: 'Legacy format' }
+        })
+      );
 
       expect(messages).toHaveLength(1);
       expect(messages[0]).toMatchObject({ message: 'Legacy format' });
@@ -460,11 +474,13 @@ describe('WebSocketHandler', () => {
       });
 
       // Simulate response
-      await mockWs.simulateMessage(JSON.stringify({
-        type: 'response',
-        id: 'test-req',
-        result: { success: true }
-      }));
+      await mockWs.simulateMessage(
+        JSON.stringify({
+          type: 'response',
+          id: 'test-req',
+          result: { success: true }
+        })
+      );
 
       expect(responses).toHaveLength(1);
       expect(responses[0].result).toMatchObject({ success: true });
@@ -586,11 +602,13 @@ describe('WebSocketHandler', () => {
       });
 
       // Send a response - should not be processed
-      await mockWs.simulateMessage(JSON.stringify({
-        type: 'response',
-        id: 'test',
-        result: { data: 'test' }
-      }));
+      await mockWs.simulateMessage(
+        JSON.stringify({
+          type: 'response',
+          id: 'test',
+          result: { data: 'test' }
+        })
+      );
 
       // Handler won't route it since RequestResponseManager isn't enabled
       expect(responses).toHaveLength(0);
@@ -617,10 +635,12 @@ describe('WebSocketHandler', () => {
       await mockWs.simulateOpen();
 
       // Send message immediately after opening
-      await mockWs.simulateMessage(JSON.stringify({
-        event: 'server.early.message',
-        data: { test: true }
-      }));
+      await mockWs.simulateMessage(
+        JSON.stringify({
+          event: 'server.early.message',
+          data: { test: true }
+        })
+      );
 
       // Should not throw
       expect(handler).toBeDefined();
@@ -701,11 +721,7 @@ describe('WebSocketHandler - regressions', () => {
 
       await handler.disconnect();
 
-      expect(states).toEqual([
-        'disconnected->connected',
-        'connected->disconnecting',
-        'disconnecting->disconnected'
-      ]);
+      expect(states).toEqual(['disconnected->connected', 'connected->disconnecting', 'disconnecting->disconnected']);
     });
 
     it('should not emit state changes when already disconnected', async () => {
@@ -1172,11 +1188,13 @@ describe('WebSocketHandler - request() and ws.send.* events', () => {
 
       const pending = handler.request('deleteUser', { id: 7 }, { id: 'req-9' });
       await tick();
-      mockWs.simulateMessage(JSON.stringify({
-        type: 'response',
-        id: 'req-9',
-        error: { code: 403, message: 'Forbidden' }
-      }));
+      mockWs.simulateMessage(
+        JSON.stringify({
+          type: 'response',
+          id: 'req-9',
+          error: { code: 403, message: 'Forbidden' }
+        })
+      );
 
       await expect(pending).rejects.toMatchObject({ message: 'Forbidden', code: 403 });
     });
@@ -1217,10 +1235,7 @@ describe('WebSocketHandler - request() and ws.send.* events', () => {
       await evem.publish('ws.send', { text: 'plain' });
       await evem.publish('ws.send.request', { id: 'r1', method: 'ping', timestamp: 1 });
 
-      expect(sentMessages()).toEqual([
-        { text: 'plain' },
-        { type: 'request', id: 'r1', method: 'ping', timestamp: 1 }
-      ]);
+      expect(sentMessages()).toEqual([{ text: 'plain' }, { type: 'request', id: 'r1', method: 'ping', timestamp: 1 }]);
     });
 
     it('should remove all of its middleware on disconnect()', async () => {
@@ -1296,7 +1311,14 @@ describe('WebSocketHandler - edge cases found while documenting', () => {
     mockWs.simulateClose();
     await tick();
     let release!: () => void;
-    evem.subscribe('ws.send', () => new Promise<void>(resolve => { release = resolve; }), { priority: 10 });
+    evem.subscribe(
+      'ws.send',
+      () =>
+        new Promise<void>(resolve => {
+          release = resolve;
+        }),
+      { priority: 10 }
+    );
 
     const publishing = evem.publish('ws.send', { n: 1 }); // queued while offline
     await tick();
@@ -1353,9 +1375,12 @@ describe('WebSocketHandler - edge cases found while documenting', () => {
       }
     }
 
-    expect(() => new WebSocketHandler('wss://test.example.com', evem, {
-      WebSocketConstructor: FailingSocket as any
-    })).toThrow('no WebSocket here');
+    expect(
+      () =>
+        new WebSocketHandler('wss://test.example.com', evem, {
+          WebSocketConstructor: FailingSocket as any
+        })
+    ).toThrow('no WebSocket here');
     expect(evem.info()).toEqual([]);
   });
 
@@ -1364,7 +1389,9 @@ describe('WebSocketHandler - edge cases found while documenting', () => {
     mockWs.simulateOpen();
     const messages: unknown[] = [];
     const parseErrors = vi.fn();
-    evem.subscribe('ws.message', (message: unknown) => { messages.push(message); });
+    evem.subscribe('ws.message', (message: unknown) => {
+      messages.push(message);
+    });
     evem.subscribe('ws.parse.error', parseErrors);
 
     mockWs.simulateMessage('null');
