@@ -1073,7 +1073,7 @@ class EvEm implements IEventEmitter {
             await this.handlePromiseWithTimeout(callbackPromise, timeout);
           } catch (error) {
             // Special handling for schema validation errors with THROW policy
-            if (error && error.message && error.message.includes('Schema validation failed')) {
+            if (error instanceof Error && error.message.includes('Schema validation failed')) {
               if (errorPolicy === ErrorPolicy.THROW) {
                 throw error;
               }
@@ -1254,45 +1254,6 @@ class EvEm implements IEventEmitter {
     }
   }
 
-  private isEventMatch(event: string, pattern: string): boolean {
-    // If pattern is a single wildcard, it matches everything
-    if (pattern === '*') {
-      return true;
-    }
-    
-    const eventParts = event.split(".");
-    const patternParts = pattern.split(".");
-    
-    // If pattern has more parts than the event, it can't match
-    if (patternParts.length > eventParts.length) {
-      return false;
-    }
-    
-    // Special case for wildcard at end (e.g. "user.*")
-    if (patternParts.length < eventParts.length && patternParts[patternParts.length - 1] === '*') {
-      // Check all parts before the last one
-      for (let i = 0; i < patternParts.length - 1; i++) {
-        if (patternParts[i] !== '*' && patternParts[i] !== eventParts[i]) {
-          return false;
-        }
-      }
-      return true;
-    }
-    
-    // If parts length is different but the last part isn't a wildcard, it can't match
-    if (patternParts.length !== eventParts.length) {
-      return false;
-    }
-    
-    // Check each part
-    for (let i = 0; i < patternParts.length; i++) {
-      if (patternParts[i] !== '*' && patternParts[i] !== eventParts[i]) {
-        return false;
-      }
-    }
-    
-    return true;
-  }
   
   /**
    * Get information about event subscriptions and middleware
@@ -1346,21 +1307,13 @@ class EvEm implements IEventEmitter {
   }
 }
 
+// Types declared with `export` above are already exported; only list the rest here
 export { 
   EvEm,
   type IEventEmitter, 
   type EventCallback, 
   type FilterPredicate,
   type TransformFunction,
-  type MiddlewareFunction,
-  type MiddlewareResult,
-  type MiddlewareConfig,
-  type EventInfo,
-  type EventRecord,
   type SubscriptionOptions,
-  type PriorityLevel,
-  type MemoryLeakOptions,
-  type SchemaValidator,
-  type AdvancedSchemaValidator,
-  type SchemaValidationError
+  type PriorityLevel
 };

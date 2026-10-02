@@ -98,7 +98,7 @@ describe('ConnectionManager', () => {
         from: 'disconnected',
         to: 'connecting',
       });
-      expect(stateChanges[0].timestamp).toBeGreaterThan(0);
+      expect(stateChanges[0]?.timestamp).toBeGreaterThan(0);
     });
 
     it('should emit multiple state change events in sequence', async () => {
@@ -119,8 +119,8 @@ describe('ConnectionManager', () => {
       await connectionManager.transitionTo('connecting');
       const after = Date.now();
 
-      expect(stateChanges[0].timestamp).toBeGreaterThanOrEqual(before);
-      expect(stateChanges[0].timestamp).toBeLessThanOrEqual(after);
+      expect(stateChanges[0]?.timestamp).toBeGreaterThanOrEqual(before);
+      expect(stateChanges[0]?.timestamp).toBeLessThanOrEqual(after);
     });
 
     it('should emit events that can be subscribed to with filters', async () => {
@@ -141,7 +141,7 @@ describe('ConnectionManager', () => {
       await connectionManager.transitionTo('disconnecting');
 
       expect(connectedEvents).toHaveLength(1);
-      expect(connectedEvents[0].to).toBe('connected');
+      expect(connectedEvents[0]?.to).toBe('connected');
     });
   });
 
@@ -294,15 +294,15 @@ describe('ConnectionManager', () => {
 
       evem.subscribe(
         'ws.connection.state',
-        () => executionOrder.push('high'),
+        () => { executionOrder.push('high'); },
         { priority: 'high' }
       );
       evem.subscribe(
         'ws.connection.state',
-        () => executionOrder.push('low'),
+        () => { executionOrder.push('low'); },
         { priority: 'low' }
       );
-      evem.subscribe('ws.connection.state', () => executionOrder.push('normal'));
+      evem.subscribe('ws.connection.state', () => { executionOrder.push('normal'); });
 
       await connectionManager.transitionTo('connecting');
 

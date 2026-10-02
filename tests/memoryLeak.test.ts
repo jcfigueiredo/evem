@@ -143,7 +143,7 @@ describe('Memory Leak Detection', () => {
     
     // Unsubscribe until we're below threshold
     for (let i = 0; i < 3; i++) {
-      evem.unsubscribe('test.event', handlers[i]);
+      evem.unsubscribe('test.event', handlers[i]!);
     }
     
     // Add several more handlers to ensure we cross the threshold again
@@ -173,7 +173,7 @@ describe('Memory Leak Detection', () => {
     
     // Unsubscribe by ID until we're below threshold
     for (let i = 0; i < 3; i++) {
-      evem.unsubscribeById(ids[i]);
+      evem.unsubscribeById(ids[i]!);
     }
     
     // Add several more handlers to ensure we cross the threshold again

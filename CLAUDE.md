@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 - **Run all tests**: `pnpm test:nowatch`
-- **Run single test file**: `pnpm test:nowatch -- tests/priority.test.ts`
-- **Run specific test by name**: `pnpm test:nowatch -- -t "callbacks should be executed in priority order"`
+- **Run single test file**: `pnpm test:nowatch tests/priority.test.ts`
+- **Run specific test by name**: `pnpm test:nowatch -t "callbacks should be executed in priority order"`
 - **Coverage report**: `pnpm test:coverage`
 - **Watch mode tests**: `pnpm test`
 - **TypeScript check**: `pnpm tsc --noEmit`

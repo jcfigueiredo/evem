@@ -125,12 +125,12 @@ describe('Pattern-based middleware', () => {
   
   test('middleware should be applied in registration order', async () => {
     // First middleware - adds firstRun
-    emitter.use((event, data) => {
+    emitter.use((event, data: any) => {
       return { ...data, firstRun: true };
     });
     
     // Second middleware - adds secondRun
-    emitter.use((event, data) => {
+    emitter.use((event, data: any) => {
       return { ...data, secondRun: true };
     });
     

@@ -18,8 +18,8 @@ describe("EvEm - Event History Tests", () => {
     const history = emitter.getEventHistory();
     
     expect(history).toHaveLength(1);
-    expect(history[0].event).toBe("test.event");
-    expect(history[0].data).toEqual({ message: "Hello, World!" });
+    expect(history[0]?.event).toBe("test.event");
+    expect(history[0]?.data).toEqual({ message: "Hello, World!" });
   });
 
   test("should limit event history size to the specified limit", async () => {
@@ -37,9 +37,9 @@ describe("EvEm - Event History Tests", () => {
     
     // Should only keep the most recent 3 events
     expect(history).toHaveLength(historyLimit);
-    expect(history[0].data).toEqual({ id: 3 });
-    expect(history[1].data).toEqual({ id: 4 });
-    expect(history[2].data).toEqual({ id: 5 });
+    expect(history[0]?.data).toEqual({ id: 3 });
+    expect(history[1]?.data).toEqual({ id: 4 });
+    expect(history[2]?.data).toEqual({ id: 5 });
   });
 
   test("should not record events if history is disabled", async () => {

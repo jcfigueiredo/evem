@@ -12,7 +12,7 @@ describe('Cancelable Events Tests', () => {
     const executed: string[] = [];
     
     // First handler that cancels the event
-    emitter.subscribe('test.cancelable', (event) => {
+    emitter.subscribe('test.cancelable', (event: any) => {
       executed.push('first');
       event.cancel();
     });
@@ -35,7 +35,7 @@ describe('Cancelable Events Tests', () => {
     const executed: string[] = [];
     
     // High priority handler cancels the event
-    emitter.subscribe('priority.cancel', (event) => {
+    emitter.subscribe('priority.cancel', (event: any) => {
       executed.push('high');
       event.cancel();
     }, { priority: 'high' });
@@ -60,7 +60,7 @@ describe('Cancelable Events Tests', () => {
     const executed: string[] = [];
     
     // First handler tries to cancel a non-cancelable event
-    emitter.subscribe('non.cancelable', (event) => {
+    emitter.subscribe('non.cancelable', (event: any) => {
       executed.push('first');
       // This should do nothing since the event is not cancelable
       if (typeof event.cancel === 'function') {
@@ -86,7 +86,7 @@ describe('Cancelable Events Tests', () => {
     const executed: string[] = [];
     
     // First async handler that cancels
-    emitter.subscribe('async.cancel', async (event) => {
+    emitter.subscribe('async.cancel', async (event: any) => {
       await new Promise(resolve => setTimeout(resolve, 10));
       executed.push('first');
       event.cancel();
@@ -106,7 +106,7 @@ describe('Cancelable Events Tests', () => {
 
   test('should be able to access original event data with cancel method', async () => {
     // Handler that checks the event data and then cancels
-    emitter.subscribe('data.cancel', (event) => {
+    emitter.subscribe('data.cancel', (event: any) => {
       expect(event.id).toBe(123);
       expect(event.name).toBe('test');
       expect(typeof event.cancel).toBe('function');
@@ -136,7 +136,7 @@ describe('Cancelable Events Tests', () => {
     let executed = false;
     
     // Handler that takes longer than the timeout
-    emitter.subscribe('timeout.test', async (event) => {
+    emitter.subscribe('timeout.test', async (event: any) => {
       await new Promise(resolve => setTimeout(resolve, 50));
       executed = true;
       event.cancel();
@@ -154,7 +154,7 @@ describe('Cancelable Events Tests', () => {
     const executed: string[] = [];
     
     // Handler for wildcard that cancels
-    emitter.subscribe('wildcard.*', (event) => {
+    emitter.subscribe('wildcard.*', (event: any) => {
       executed.push('wildcard');
       event.cancel();
     });

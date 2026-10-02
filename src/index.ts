@@ -11,6 +11,8 @@ export {
   type MiddlewareResult,
   type MiddlewareConfig,
   type EventInfo,
+  type EventRecord,
+  type MemoryLeakOptions,
   type SubscriptionOptions,
   type PriorityLevel,
   type CancelableEvent,
