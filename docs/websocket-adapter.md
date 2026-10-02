@@ -16,15 +16,15 @@ The WebSocket adapter provides common patterns for real-time communication built
 
 ```typescript
 // Core EvEm
-import { EvEm } from 'evem';
+import { EvEm } from '@jcfigueiredo/evem';
 
-// WebSocket components (future - when exports are configured)
+// WebSocket adapter (separate entry point)
 import {
   WebSocketHandler,      // ✨ Recommended: auto-wiring
   ConnectionManager,
   MessageQueue,
   RequestResponseManager
-} from 'evem/websocket';
+} from '@jcfigueiredo/evem/websocket';
 ```
 
 ## Quick Start with WebSocketHandler (Recommended)
@@ -32,8 +32,8 @@ import {
 The easiest way to integrate WebSocket with EvEm is using `WebSocketHandler`, which eliminates all manual wiring:
 
 ```typescript
-import { EvEm } from 'evem';
-import { WebSocketHandler } from 'evem/websocket';
+import { EvEm } from '@jcfigueiredo/evem';
+import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';
 
 // Create EvEm instance
 const evem = new EvEm();
@@ -124,8 +124,8 @@ handler.disconnect();
 For more control, you can wire components manually:
 
 ```typescript
-import { EvEm } from 'evem';
-import { ConnectionManager, MessageQueue, RequestResponseManager } from './websocket';
+import { EvEm } from '@jcfigueiredo/evem';
+import { ConnectionManager, MessageQueue, RequestResponseManager } from '@jcfigueiredo/evem/websocket';
 
 // Create EvEm instance
 const evem = new EvEm();
@@ -538,8 +538,8 @@ const [user, posts, comments] = await Promise.all([
 ## Complete Example: WebSocket Chat Client
 
 ```typescript
-import { EvEm } from 'evem';
-import { ConnectionManager, MessageQueue, RequestResponseManager } from './websocket';
+import { EvEm } from '@jcfigueiredo/evem';
+import { ConnectionManager, MessageQueue, RequestResponseManager } from '@jcfigueiredo/evem/websocket';
 
 class ChatClient {
   private evem: EvEm;
@@ -712,8 +712,8 @@ console.log('History:', history);
 Complete example for browser-based applications:
 
 ```typescript
-import { EvEm } from 'evem';
-import { ConnectionManager, MessageQueue, RequestResponseManager } from 'evem/websocket';
+import { EvEm } from '@jcfigueiredo/evem';
+import { ConnectionManager, MessageQueue, RequestResponseManager } from '@jcfigueiredo/evem/websocket';
 
 class BrowserWebSocketClient {
   private evem: EvEm;
@@ -985,8 +985,8 @@ Example using the `ws` library on Node.js:
 
 ```typescript
 import { WebSocketServer, WebSocket } from 'ws';
-import { EvEm } from 'evem';
-import { ConnectionManager, MessageQueue, RequestResponseManager } from 'evem/websocket';
+import { EvEm } from '@jcfigueiredo/evem';
+import { ConnectionManager, MessageQueue, RequestResponseManager } from '@jcfigueiredo/evem/websocket';
 
 class NodeWebSocketClient {
   private evem: EvEm;
@@ -1134,8 +1134,8 @@ Using the WebSocket adapter in a React application:
 
 ```typescript
 import React, { useEffect, useState, useRef } from 'react';
-import { EvEm } from 'evem';
-import { ConnectionManager, MessageQueue, RequestResponseManager } from 'evem/websocket';
+import { EvEm } from '@jcfigueiredo/evem';
+import { ConnectionManager, MessageQueue, RequestResponseManager } from '@jcfigueiredo/evem/websocket';
 
 interface Message {
   id: string;

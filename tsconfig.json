@@ -19,8 +19,6 @@
     "noEmit": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "jsx": "preserve",
-    "plugins": [{ "name": "next" }],
     "incremental": true,
 
     /* Path Aliases */
@@ -36,5 +34,5 @@
     "**/*.cjs",
     "**/*.js",
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "dist"]
 }

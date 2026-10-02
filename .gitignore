@@ -19,6 +19,8 @@ next-env.d.ts
 
 # production
 /build
+/dist
+*.tgz
 
 # misc
 .DS_Store

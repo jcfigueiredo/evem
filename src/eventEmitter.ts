@@ -1,5 +1,3 @@
-import { v4 as uuid } from "uuid";
-
 /**
  * Interface for cancelable events that can be canceled by subscribers
  */
@@ -199,8 +197,8 @@ class EvEm implements IEventEmitter {
   // Per-event depths of the publish chain whose handler is currently running.
   // A publish started from inside a handler inherits it; unrelated (concurrent) publishes start fresh.
   private activePublishChain: Map<string, number> | null = null;
-  private debounceTimers = new Map<string, NodeJS.Timeout>();
-  private throttleTimers = new Map<string, { timer: NodeJS.Timeout, expiresAt: number }>();
+  private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private throttleTimers = new Map<string, { timer: ReturnType<typeof setTimeout>, expiresAt: number }>();
   private middleware: Array<{ pattern?: string; handler: MiddlewareFunction }> = [];
   private subscriptionSequence = 0; // Orders subscriptions with equal priority by subscription time
   private maxRecursionDepth: number;
@@ -425,7 +423,7 @@ class EvEm implements IEventEmitter {
     if (!event) throw new Error("Event name cannot be empty.");
 
     // Generate a subscription ID early so we can use it in the throttle/debounce callbacks
-    const subscriptionId = uuid();
+    const subscriptionId = crypto.randomUUID();
     
     // Reference to the original callback
     let finalCallback: EventCallback<T> = callback;

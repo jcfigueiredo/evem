@@ -1,0 +1,16 @@
+{
+  // Compiles src/ to dist/ as ES modules with type declarations (pnpm build)
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowJs": false,
+    "checkJs": false,
+    "incremental": false
+  },
+  "include": ["src"]
+}

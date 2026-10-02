@@ -8,7 +8,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Run specific test by name**: `pnpm test:nowatch -t "callbacks should be executed in priority order"`
 - **Coverage report**: `pnpm test:coverage`
 - **Watch mode tests**: `pnpm test`
-- **TypeScript check**: `pnpm tsc --noEmit`
+- **TypeScript check**: `pnpm typecheck` (same as `pnpm tsc --noEmit`)
+- **Build**: `pnpm build` (compiles `src/` to `dist/` as ES modules with `.d.ts` files, via `tsconfig.build.json`)
+- **Package check**: `pnpm test:package` (builds, packs, installs the tarball into a temp project, imports both entry points from Node and type-checks a strict TypeScript consumer)
+
+## Packaging and Releases
+- Published to npm as `@jcfigueiredo/evem`: ESM only, no runtime dependencies, Node.js 20+
+- Two entry points (`exports` in package.json): `.` → `src/index.ts`, `./websocket` → `src/websocket/index.ts`. New public exports must go through one of these index files
+- Relative imports in `src/` must use `.js` extensions (Node ESM output); public types must not reference `NodeJS.*` (browser consumers have no Node types) — `pnpm test:package` catches both
+- Releasing: bump `version` in package.json and update CHANGELOG.md, merge to main, then publish a GitHub release tagged `v<version>`. `.github/workflows/release.yml` checks the tag, runs `prepublishOnly` (typecheck, tests, package check) and publishes with provenance using the `NPM_TOKEN` secret
 
 ## Architecture
 
@@ -127,7 +135,7 @@ The WebSocket adapter provides common patterns for real-time communication built
 - **Testing**: TDD approach - write tests first to validate simple designs
 
 ## Development Approach
-- Minimize external dependencies (only uuid for ID generation)
+- No runtime dependencies (subscription and request IDs come from `crypto.randomUUID()`)
 - Focus on performance with Map-based lookups and efficient iteration
 - Maintain backward compatibility when adding features
 - Each feature should be independently testable and composable

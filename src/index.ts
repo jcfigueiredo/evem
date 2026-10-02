@@ -20,4 +20,4 @@ export {
   type SchemaValidator,
   type AdvancedSchemaValidator,
   type SchemaValidationError
-} from "./eventEmitter";
+} from "./eventEmitter.js";

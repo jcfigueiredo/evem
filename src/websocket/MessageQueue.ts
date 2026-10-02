@@ -1,6 +1,6 @@
-import type { EvEm } from '../eventEmitter';
-import type { ConnectionManager } from './ConnectionManager';
-import type { QueuedMessage } from './types';
+import type { EvEm } from '../eventEmitter.js';
+import type { ConnectionManager } from './ConnectionManager.js';
+import type { QueuedMessage } from './types.js';
 
 /**
  * Options for MessageQueue

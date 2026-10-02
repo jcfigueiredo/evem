@@ -5,7 +5,7 @@ This document provides a comprehensive list of examples for all the features of 
 ## Importing and Initializing EvEm
 
 ```typescript
-import { EvEm } from "evem";
+import { EvEm } from "@jcfigueiredo/evem";
 const evem = new EvEm();
 ```
 
@@ -236,7 +236,7 @@ console.log(apiResult ? "API request succeeded" : "API request failed or was can
 ### Basic WebSocket Connection with State Management
 
 ```typescript
-import { EvEm } from 'evem';
+import { EvEm } from '@jcfigueiredo/evem';
 import { ConnectionManager } from '../src/websocket/ConnectionManager';
 
 const evem = new EvEm();
@@ -276,8 +276,8 @@ if (connectionManager.isConnected()) {
 ### Message Queue with Auto-Flush
 
 ```typescript
-import { EvEm } from 'evem';
-import { ConnectionManager, MessageQueue } from '../src/websocket';
+import { EvEm } from '@jcfigueiredo/evem';
+import { ConnectionManager, MessageQueue } from '@jcfigueiredo/evem/websocket';
 
 const evem = new EvEm();
 const connectionManager = new ConnectionManager(evem);
@@ -311,8 +311,8 @@ await connectionManager.transitionTo('connected');
 ### Request-Response Pattern with Timeout
 
 ```typescript
-import { EvEm } from 'evem';
-import { RequestResponseManager, RequestTimeoutError } from '../src/websocket';
+import { EvEm } from '@jcfigueiredo/evem';
+import { RequestResponseManager, RequestTimeoutError } from '@jcfigueiredo/evem/websocket';
 
 const evem = new EvEm();
 const requestResponse = new RequestResponseManager(evem);
@@ -374,8 +374,8 @@ try {
 ### Complete WebSocket Chat Application
 
 ```typescript
-import { EvEm } from 'evem';
-import { ConnectionManager, MessageQueue, RequestResponseManager } from '../src/websocket';
+import { EvEm } from '@jcfigueiredo/evem';
+import { ConnectionManager, MessageQueue, RequestResponseManager } from '@jcfigueiredo/evem/websocket';
 
 class ChatClient {
   private evem: EvEm;
@@ -531,8 +531,8 @@ chat.disconnect();
 ### Concurrent Requests Example
 
 ```typescript
-import { EvEm } from 'evem';
-import { RequestResponseManager } from '../src/websocket';
+import { EvEm } from '@jcfigueiredo/evem';
+import { RequestResponseManager } from '@jcfigueiredo/evem/websocket';
 
 const evem = new EvEm();
 const requestResponse = new RequestResponseManager(evem);

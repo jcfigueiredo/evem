@@ -1,5 +1,5 @@
-import type { EvEm } from '../eventEmitter';
-import type { ConnectionState, ConnectionStateChangeEvent } from './types';
+import type { EvEm } from '../eventEmitter.js';
+import type { ConnectionState, ConnectionStateChangeEvent } from './types.js';
 
 /**
  * Manages WebSocket connection state transitions and emits state change events

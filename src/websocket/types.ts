@@ -118,7 +118,7 @@ export interface ResponseMessage {
 export interface PendingRequest {
   resolve: (value: any) => void;
   reject: (reason: any) => void;
-  timeoutId: NodeJS.Timeout | number;
+  timeoutId: ReturnType<typeof setTimeout> | number;
   timestamp: number;
 }
 

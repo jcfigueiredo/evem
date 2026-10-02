@@ -1,17 +1,61 @@
 {
-  "name": "evem",
-  "version": "0.1.0",
+  "name": "@jcfigueiredo/evem",
+  "version": "0.2.0",
+  "description": "Lightweight TypeScript event emitter with wildcards, priorities, middleware, filters, throttle/debounce, schema validation, event history, and an optional WebSocket adapter",
+  "keywords": [
+    "event-emitter",
+    "events",
+    "pubsub",
+    "wildcard",
+    "middleware",
+    "websocket",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jcfigueiredo/evem.git"
+  },
+  "homepage": "https://github.com/jcfigueiredo/evem#readme",
+  "bugs": {
+    "url": "https://github.com/jcfigueiredo/evem/issues"
+  },
   "type": "module",
-  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./websocket": {
+      "types": "./dist/websocket/index.d.ts",
+      "default": "./dist/websocket/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "test": "vitest",
     "test:nowatch": "vitest --watch=false",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "typecheck": "tsc --noEmit",
+    "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
+    "test:package": "pnpm build && node scripts/check-package.mjs",
+    "prepublishOnly": "pnpm typecheck && pnpm test:nowatch && pnpm test:package"
   },
   "devDependencies": {
     "@types/eslint": "^8.44.7",
     "@types/node": "^18.17.0",
-    "@types/uuid": "^9.0.7",
     "@typescript-eslint/eslint-plugin": "^6.11.0",
     "@typescript-eslint/parser": "^6.11.0",
     "@vitest/coverage-v8": "^1.0.4",
@@ -20,11 +64,5 @@
     "vite-tsconfig-paths": "^4.2.1",
     "vitest": "^1.0.4"
   },
-  "ct3aMetadata": {
-    "initVersion": "7.24.0"
-  },
-  "packageManager": "pnpm@8.7.6",
-  "dependencies": {
-    "uuid": "^9.0.1"
-  }
+  "packageManager": "pnpm@9.15.9"
 }

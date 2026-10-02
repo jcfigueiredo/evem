@@ -1,0 +1,127 @@
+// Checks the package as users get it: packs the tarball, installs it into a throwaway project,
+// imports both entry points from Node (ESM and require), and type-checks a TypeScript consumer.
+// Run with `pnpm test:package` (which builds first). Exits non-zero on the first failure.
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const pkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+const tsc = join(repoRoot, "node_modules", "typescript", "bin", "tsc");
+
+const run = (command, args, cwd) =>
+  execFileSync(command, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+
+const check = (description, fn) => {
+  try {
+    fn();
+    console.log(`✓ ${description}`);
+  } catch (error) {
+    console.error(`✗ ${description}`);
+    console.error(error.stdout || error.stderr || error.message);
+    process.exitCode = 1;
+    throw error;
+  }
+};
+
+if (!existsSync(join(repoRoot, "dist", "index.js"))) {
+  console.error("dist/ is missing: run `pnpm build` first (or use `pnpm test:package`)");
+  process.exit(1);
+}
+
+const workDir = mkdtempSync(join(tmpdir(), "evem-package-check-"));
+
+try {
+  let tarball;
+  check("npm pack produces a tarball with only the built files", () => {
+    const [packed] = JSON.parse(run("npm", ["pack", "--json", "--pack-destination", workDir], repoRoot));
+    tarball = join(workDir, packed.filename);
+    const files = packed.files.map(file => file.path);
+    for (const required of [
+      "package.json",
+      "README.md",
+      "LICENSE.md",
+      "dist/index.js",
+      "dist/index.d.ts",
+      "dist/websocket/index.js",
+      "dist/websocket/index.d.ts"
+    ]) {
+      if (!files.includes(required)) throw new Error(`missing ${required}; packed: ${files.join(", ")}`);
+    }
+    const unexpected = files.filter(file => /^(src|tests|demo|docs|scripts)\//.test(file));
+    if (unexpected.length > 0) throw new Error(`unexpected files: ${unexpected.join(", ")}`);
+  });
+
+  const consumer = join(workDir, "consumer");
+  check("the tarball installs without network access (no runtime dependencies)", () => {
+    mkdirSync(consumer);
+    writeFileSync(join(consumer, "package.json"), JSON.stringify({ name: "consumer", private: true, type: "module" }));
+    run("npm", ["install", tarball, "--offline", "--no-audit", "--no-fund", "--ignore-scripts"], consumer);
+  });
+
+  check("both entry points import as ES modules and work", () => {
+    const script = `
+      import { EvEm, ErrorPolicy, Priority } from "${pkg.name}";
+      import { WebSocketHandler, MessageQueue, RequestTimeoutError } from "${pkg.name}/websocket";
+      const evem = new EvEm();
+      let received;
+      evem.subscribe("user.*", data => { received = data; });
+      await evem.publish("user.login", { id: 1 });
+      if (received?.id !== 1) throw new Error("publish did not reach the subscriber");
+      for (const value of [ErrorPolicy, Priority, WebSocketHandler, MessageQueue, RequestTimeoutError]) {
+        if (!value) throw new Error("missing export");
+      }
+    `;
+    run(process.execPath, ["--input-type=module", "-e", script], consumer);
+  });
+
+  check("both entry points load with require()", () => {
+    const script = `
+      const { EvEm } = require("${pkg.name}");
+      const { WebSocketHandler } = require("${pkg.name}/websocket");
+      if (typeof EvEm !== "function" || typeof WebSocketHandler !== "function") throw new Error("missing export");
+    `;
+    run(process.execPath, ["-e", script], consumer);
+  });
+
+  for (const moduleResolution of ["nodenext", "bundler"]) {
+    check(`a strict TypeScript consumer type-checks (moduleResolution: ${moduleResolution})`, () => {
+      writeFileSync(join(consumer, "index.ts"), `
+        import { EvEm, ErrorPolicy, type EventRecord, type MemoryLeakOptions } from "${pkg.name}";
+        import { WebSocketHandler, type WebSocketHandlerOptions } from "${pkg.name}/websocket";
+        const evem = new EvEm();
+        evem.subscribe<{ id: number }>("user.login", user => { user.id.toFixed(); });
+        const history: EventRecord<{ id: number }>[] = evem.getEventHistory();
+        const leakOptions: Partial<MemoryLeakOptions> = { threshold: 20 };
+        const options: WebSocketHandlerOptions = { reconnect: true };
+        export { history, leakOptions, options, ErrorPolicy, WebSocketHandler };
+      `);
+      writeFileSync(join(consumer, "tsconfig.json"), JSON.stringify({
+        compilerOptions: {
+          strict: true,
+          noEmit: true,
+          skipLibCheck: false,
+          target: "es2022",
+          module: moduleResolution === "nodenext" ? "nodenext" : "esnext",
+          moduleResolution,
+          lib: ["es2022", "dom"],
+          types: []
+        },
+        files: ["index.ts"]
+      }));
+      run(process.execPath, [tsc, "-p", "tsconfig.json"], consumer);
+    });
+  }
+} catch {
+  // check() already reported the failure
+} finally {
+  rmSync(workDir, { recursive: true, force: true });
+}
+
+if (process.exitCode) {
+  console.error("Package check failed");
+} else {
+  console.log("Package check passed");
+}

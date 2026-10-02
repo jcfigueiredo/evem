@@ -230,7 +230,7 @@ class EvEm {
 > **Note**: This example shows the original proposal's API design. For the **actual implemented API**, see the [WebSocket Adapter Documentation](websocket-adapter.md) which provides working examples of the implemented features.
 
 ```typescript
-import { EvEm, ConnectionState } from 'evem';
+import { EvEm, ConnectionState } from '@jcfigueiredo/evem';
 
 class WebSocketClient {
   private evem: EvEm;

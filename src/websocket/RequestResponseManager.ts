@@ -1,12 +1,11 @@
-import { v4 as uuidv4 } from 'uuid';
-import type { EvEm } from '../eventEmitter';
+import type { EvEm } from '../eventEmitter.js';
 import type {
   RequestMessage,
   ResponseMessage,
   PendingRequest,
   RequestOptions,
-} from './types';
-import { RequestTimeoutError } from './types';
+} from './types.js';
+import { RequestTimeoutError } from './types.js';
 
 /**
  * Manages request-response pattern for WebSocket communication
@@ -52,7 +51,7 @@ export class RequestResponseManager {
     options: RequestOptions = {}
   ): Promise<any> {
     const timeout = options.timeout ?? 5000;
-    const id = options.id ?? uuidv4();
+    const id = options.id ?? crypto.randomUUID();
 
     // Responses are matched by id, so a second pending request with the same id can't be told apart
     if (this.pendingRequests.has(id)) {
@@ -105,7 +104,7 @@ export class RequestResponseManager {
     }
 
     // Clear timeout
-    clearTimeout(pending.timeoutId as NodeJS.Timeout);
+    clearTimeout(pending.timeoutId as ReturnType<typeof setTimeout>);
 
     // Remove from pending requests
     this.pendingRequests.delete(response.id);
@@ -146,7 +145,7 @@ export class RequestResponseManager {
 
     // Clear all pending requests
     for (const [id, pending] of this.pendingRequests) {
-      clearTimeout(pending.timeoutId as NodeJS.Timeout);
+      clearTimeout(pending.timeoutId as ReturnType<typeof setTimeout>);
       pending.reject(new Error('RequestResponseManager cleanup'));
     }
     this.pendingRequests.clear();

@@ -154,8 +154,8 @@ EvEm includes an optional WebSocket adapter that provides common patterns for re
 The simplest way to integrate WebSocket with EvEm is using `WebSocketHandler`, which automatically wires everything:
 
 ```typescript
-import { EvEm } from 'evem';
-import { WebSocketHandler } from 'evem/websocket';
+import { EvEm } from '@jcfigueiredo/evem';
+import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';
 
 const evem = new EvEm();
 const handler = new WebSocketHandler('wss://api.example.com', evem);
@@ -231,8 +231,8 @@ const handler = new WebSocketHandler('wss://api.example.com', evem, {
 For more control, you can wire components manually:
 
 ```typescript
-import { EvEm } from 'evem';
-import { ConnectionManager, MessageQueue, RequestResponseManager } from 'evem/websocket';
+import { EvEm } from '@jcfigueiredo/evem';
+import { ConnectionManager, MessageQueue, RequestResponseManager } from '@jcfigueiredo/evem/websocket';
 
 const evem = new EvEm();
 const ws = new WebSocket('wss://api.example.com');
@@ -288,12 +288,21 @@ For complete documentation, examples, and API reference, see:
 
 ### Installation
 
-Pick your favorite package manager and get going:
-
-**pnpm:**
+EvEm is published on npm as `@jcfigueiredo/evem`. It's an ES module with TypeScript types and no runtime dependencies, and needs Node.js 20 or later (or any modern browser or bundler).
 
 ```bash
-pnpm add evem
+pnpm add @jcfigueiredo/evem
+# or
+npm install @jcfigueiredo/evem
+# or
+yarn add @jcfigueiredo/evem
+```
+
+The core lives in the main entry point and the optional WebSocket adapter in its own:
+
+```typescript
+import { EvEm } from '@jcfigueiredo/evem';
+import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';
 ```
 
 ## Quick Start
@@ -301,7 +310,7 @@ pnpm add evem
 Jump right in!
 
 ```typescript
-import { EvEm } from "evem";
+import { EvEm } from "@jcfigueiredo/evem";
 const evem = new EvEm();
 
 // Subscribe to a party start event
@@ -598,7 +607,7 @@ EvEm allows you to register middleware functions that can intercept, transform, 
 ### Basic Middleware Usage
 
 ```typescript
-import { EvEm, MiddlewareFunction } from "evem";
+import { EvEm, MiddlewareFunction } from "@jcfigueiredo/evem";
 const evem = new EvEm();
 
 // Create a middleware that adds metadata to all events
@@ -633,7 +642,7 @@ await evem.publish('user.login', { username: 'alice' });
 You can apply middleware to specific event patterns, allowing for more targeted event processing:
 
 ```typescript
-import { EvEm, MiddlewareConfig } from "evem";
+import { EvEm, MiddlewareConfig } from "@jcfigueiredo/evem";
 const evem = new EvEm();
 
 // Middleware that only applies to user events
@@ -761,7 +770,7 @@ EvEm allows you to configure how errors in event callbacks are handled through d
 ### Using Different Error Policies
 
 ```typescript
-import { EvEm, ErrorPolicy } from "evem";
+import { EvEm, ErrorPolicy } from "@jcfigueiredo/evem";
 const evem = new EvEm();
 
 // Register handlers
@@ -816,7 +825,7 @@ EvEm allows you to configure how errors in event callbacks are handled through d
 ### Using Different Error Policies
 
 ```typescript
-import { EvEm, ErrorPolicy } from "evem";
+import { EvEm, ErrorPolicy } from "@jcfigueiredo/evem";
 const evem = new EvEm();
 
 // Register handlers
@@ -1080,7 +1089,7 @@ await evem.publish('system.startup');
 For better type safety and code readability, you can use the built-in Priority enum:
 
 ```typescript
-import { EvEm, Priority } from 'evem';
+import { EvEm, Priority } from '@jcfigueiredo/evem';
 const evem = new EvEm();
 
 // Subscribe with Priority enum values
@@ -1397,7 +1406,7 @@ Filtering provides a clean and declarative way to handle complex event processin
 EvEm can maintain a history of published events, allowing new subscribers to catch up on what they missed.
 
 ```typescript
-import { EvEm } from "evem";
+import { EvEm } from "@jcfigueiredo/evem";
 const evem = new EvEm();
 
 // Enable history recording with a maximum of 100 events
@@ -1456,7 +1465,7 @@ Event history is particularly useful for:
 The `info` method provides a convenient way to inspect the current state of the event emitter, which is useful for debugging and monitoring.
 
 ```typescript
-import { EvEm } from "evem";
+import { EvEm } from "@jcfigueiredo/evem";
 const evem = new EvEm();
 
 // Set up some subscriptions and middleware

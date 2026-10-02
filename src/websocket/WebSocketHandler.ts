@@ -1,12 +1,12 @@
-import type { EvEm, MiddlewareConfig } from '../eventEmitter';
-import { ConnectionManager } from './ConnectionManager';
-import { MessageQueue } from './MessageQueue';
-import { RequestResponseManager } from './RequestResponseManager';
+import type { EvEm, MiddlewareConfig } from '../eventEmitter.js';
+import { ConnectionManager } from './ConnectionManager.js';
+import { MessageQueue } from './MessageQueue.js';
+import { RequestResponseManager } from './RequestResponseManager.js';
 import type {
   IWebSocket,
   WebSocketHandlerOptions,
   IncomingMessage,
-} from './types';
+} from './types.js';
 
 /**
  * WebSocketHandler - Automatically wires WebSocket events to EvEm

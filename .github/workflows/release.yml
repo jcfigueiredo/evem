@@ -1,0 +1,36 @@
+name: Release
+
+# Publishes to npm when a GitHub release is published. The release tag must be
+# `v` + the version in package.json (e.g. v0.2.0). Needs an npm automation token
+# in the NPM_TOKEN repository secret.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write # Lets npm attach provenance to the published package
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - name: Check the release tag matches package.json
+        run: |
+          expected="v$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+            echo "Release tag $GITHUB_REF_NAME doesn't match package.json version ($expected)"
+            exit 1
+          fi
+      # prepublishOnly runs the typecheck, the tests and the package check before publishing
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -20,8 +20,8 @@ Server                    WebSocket                 EvEm                   Your 
 ## Basic Example
 
 ```typescript
-import { EvEm } from 'evem';
-import { ConnectionManager } from 'evem/websocket';
+import { EvEm } from '@jcfigueiredo/evem';
+import { ConnectionManager } from '@jcfigueiredo/evem/websocket';
 
 const evem = new EvEm();
 const connectionManager = new ConnectionManager(evem);
@@ -74,8 +74,8 @@ The server should send messages in this format:
 ## Complete WebSocket Client with Server Events
 
 ```typescript
-import { EvEm } from 'evem';
-import { ConnectionManager, MessageQueue, RequestResponseManager } from 'evem/websocket';
+import { EvEm } from '@jcfigueiredo/evem';
+import { ConnectionManager, MessageQueue, RequestResponseManager } from '@jcfigueiredo/evem/websocket';
 
 class WebSocketClient {
   private evem: EvEm;
@@ -503,8 +503,8 @@ interface ServerMessage {
 ## Complete Real-World Example: Chat Application
 
 ```typescript
-import { EvEm } from 'evem';
-import { ConnectionManager, MessageQueue } from 'evem/websocket';
+import { EvEm } from '@jcfigueiredo/evem';
+import { ConnectionManager, MessageQueue } from '@jcfigueiredo/evem/websocket';
 
 class ChatClient {
   private evem: EvEm;
