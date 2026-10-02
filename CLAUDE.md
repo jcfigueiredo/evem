@@ -10,13 +10,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Watch mode tests**: `pnpm test`
 - **TypeScript check**: `pnpm typecheck` (same as `pnpm tsc --noEmit`)
 - **Build**: `pnpm build` (compiles `src/` to `dist/` as ES modules with `.d.ts` files, via `tsconfig.build.json`)
-- **Everything CI runs**: `pnpm check` (typecheck, tests and package check; also the `prepublishOnly` hook)
+- **Everything CI runs**: `pnpm check` (typecheck, tests and package check; also the `prepublishOnly` hook). CI runs these steps on Node 20 and 22 (Node 20 has no global `WebSocket`)
+- **No lint or format step**: `.eslintrc.cjs` extends `plugin:@next/next/recommended`, which isn't installed, so `eslint` fails, and Prettier isn't a dependency (`.prettierrc` is never applied). `pnpm typecheck` is the only static check
 - **Package check**: `pnpm test:package` (builds, packs, installs the tarball into a temp project, imports every entry point from Node and type-checks a strict TypeScript consumer, with and without Node.js types)
 
 ## Packaging and Releases
 - Published to npm as `@jcfigueiredo/evem`: ESM only, no runtime dependencies, Node.js 20+
 - Four entry points (`exports` in package.json): `.` → `src/index.ts`, `./websocket` → `src/websocket/index.ts`, `./sse` → `src/sse/index.ts`, `./sse/server` → `src/sse/server.ts`. New public exports must go through one of these files; `./sse/server` exports only the formatting helpers, so servers don't load the client
-- Relative imports in `src/` must use `.js` extensions (Node ESM output); public types must not reference `NodeJS.*` (browser consumers have no Node types) — `pnpm test:package` catches both
+- Relative imports in `src/` must use `.js` extensions (Node ESM output), and `src/` can't use the `~/` alias (`tsc` doesn't rewrite it in `dist/`; tests can, through `vite-tsconfig-paths`); public types must not reference `NodeJS.*` (browser consumers have no Node types) — `pnpm test:package` catches all three
 - Changes go under `## Unreleased` (or `## <version> (unreleased)`) at the top of CHANGELOG.md; that section becomes the release notes
 - Releasing (`docs/releasing.md`): `pnpm release <version>` (`scripts/release.mjs`; `--dry-run`, `--yes`) runs from a clean `main` that matches `origin/main`, refuses existing tags, versions lower than package.json's, pre-releases and a missing or empty unreleased section, then dates that section, sets package.json's `version`, runs `pnpm check` (restoring both files if it fails), commits `Release v<version>`, pushes and runs `gh release create v<version> --target <sha>` with the section as notes. Publishing the release starts `.github/workflows/release.yml`, which checks the tag, runs `prepublishOnly` (`pnpm check`) and publishes with provenance using the `NPM_TOKEN` secret
 
@@ -26,7 +27,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 The event emitter is a single class, `EvEm`, in `src/eventEmitter.ts`, together with its public types; `src/index.ts` re-exports the public API.
 
 - **Subscription storage**: `Map<pattern, Map<subscriptionId, CallbackInfo>>`, keyed by the event name or pattern exactly as subscribed. Lookups are not O(1): `publish` runs `isEventMatch` against every registered pattern, `unsubscribeById` scans every event, and `unsubscribe(event, callback)` scans that event's subscriptions. An event's entry is deleted when its last subscription goes.
-- **IDs**: subscription (and request) ids come from `crypto.randomUUID()`.
+- **IDs**: subscription (and request) ids come from `generateId()` in `src/id.ts`: `crypto.randomUUID()`, or `crypto.getRandomValues()` where browsers don't expose it outside secure contexts.
 - **Wildcards** (`isEventMatch`): `*` alone matches everything; a trailing `*` matches one or more segments; a `*` elsewhere matches exactly one; `user.*` does not match `user`.
 - **`publish` pipeline**:
   1. Empty event name → rejected promise (`publish` never throws synchronously)
@@ -151,6 +152,7 @@ A receive-only Server-Sent Events client in `src/sse/`, published as `@jcfigueir
 **Type definitions** (`types.ts`): the transport contract (`SseTransport`, `SseTransportListener`, `SseConnectRequest`, `SseCloseInfo`), `SseHeaders`, `SseBody`, `SseFetch` (the `fetch` option's type; not `typeof fetch`, which DOM + `@types/node` 18 overload incompatibly, so hand-written fetches wouldn't type-check), and `SseEvents`, which maps each event the adapter publishes to its payload type; keep it in sync when adding events.
 
 ## Code Style Guidelines
+- **Formatting**: no formatter runs, so match the file you're editing: the core (`eventEmitter.ts`) uses double quotes, the adapters single quotes
 - **Imports**: Use named imports; sort imports alphabetically
 - **Types**: Strong typing with TS; use interfaces for public APIs and types for internal structures
 - **Naming**: camelCase for variables/methods; PascalCase for classes/interfaces; UPPERCASE for constants
@@ -159,7 +161,8 @@ A receive-only Server-Sent Events client in `src/sse/`, published as `@jcfigueir
 - **Testing**: TDD approach - write tests first to validate simple designs
 
 ## Development Approach
-- No runtime dependencies (subscription and request IDs come from `generateId()` in `src/id.ts`: `crypto.randomUUID()`, or `crypto.getRandomValues()` where browsers don't expose it outside secure contexts)
+- No runtime dependencies
 - Focus on performance with Map-based lookups and efficient iteration
 - Maintain backward compatibility when adding features; record behavior changes in CHANGELOG.md, under `## Unreleased`
+- Update the user docs in the same change as the behavior they describe: README.md (core API, adapter quick starts), `docs/websocket-adapter.md`, `docs/sse-adapter.md`, `docs/sse-python.md` (with `examples/python/`), and this file
 - Each feature should be independently testable and composable
