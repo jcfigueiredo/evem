@@ -1,1466 +1,613 @@
-# WebSocket Adapter for EvEm
+# WebSocket Adapter
 
-The WebSocket adapter provides common patterns for real-time communication built on top of EvEm. It's designed as a separate, optional module that doesn't modify the core library.
+The WebSocket adapter connects a WebSocket to an `EvEm` instance. It's an optional entry point, `@jcfigueiredo/evem/websocket`, and doesn't change the core emitter.
 
-## Features
+Use **`WebSocketHandler`**. It covers the whole connection:
 
-- **Auto-Wiring with WebSocketHandler**: Zero boilerplate - automatically connects WebSocket events to EvEm
-- **Connection State Management**: Track connection lifecycle with state machine
-- **Message Queue**: Automatic queueing of messages while disconnected
-- **Request-Response Pattern**: RPC-style communication with correlation IDs
-- **Universal Compatibility**: Works with browser WebSocket and Node.js `ws` library
-- **Zero Core Modifications**: Completely separate from EvEm core
-- **100% Test Coverage**: 115 comprehensive tests covering edge cases
+- **Outgoing:** events you publish to `ws.send` (or `ws.send.<name>`) are sent to the socket.
+- **Incoming:** server messages become EvEm events (`server.<name>`).
+- **Offline queue:** messages published while offline are queued and sent once the connection is up.
+- **Request-response:** `handler.request()` sends a request and resolves with the server's reply.
+- **Reconnect:** optional automatic reconnection.
+- **State:** connection state changes are published as events.
+
+`ConnectionManager`, `MessageQueue` and `RequestResponseManager` are the building blocks `WebSocketHandler` is made of. You only need them if you want a wire protocol the handler doesn't support (see [Using the components directly](#using-the-components-directly)).
+
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Options](#options)
+- [Methods](#methods)
+- [Events reference](#events-reference)
+- [Wire format](#wire-format)
+- [Request-response](#request-response)
+- [Offline queue](#offline-queue)
+- [Connection state and reconnection](#connection-state-and-reconnection)
+- [Middleware on outgoing messages](#middleware-on-outgoing-messages)
+- [Node.js](#nodejs)
+- [Example: browser chat](#example-browser-chat)
+- [Testing](#testing)
+- [Using the components directly](#using-the-components-directly)
+- [Types](#types)
+
+Server-to-client routing is covered in more depth in [Server Events](websocket-server-events.md), which also includes a matching Node.js server and a React example.
 
 ## Installation
 
-```typescript
-// Core EvEm
-import { EvEm } from '@jcfigueiredo/evem';
-
-// WebSocket adapter (separate entry point)
-import {
-  WebSocketHandler,      // ✨ Recommended: auto-wiring
-  ConnectionManager,
-  MessageQueue,
-  RequestResponseManager
-} from '@jcfigueiredo/evem/websocket';
+```bash
+npm install @jcfigueiredo/evem
+npm install ws   # Node.js 20 only: it has no global WebSocket (see Node.js below)
 ```
 
-## Quick Start with WebSocketHandler (Recommended)
+The package is ES modules only and needs Node.js 20+ or a modern browser/bundler.
 
-The easiest way to integrate WebSocket with EvEm is using `WebSocketHandler`, which eliminates all manual wiring:
+```typescript
+import { EvEm } from '@jcfigueiredo/evem';
+import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';
+```
+
+## Quick start
+
+```typescript
+import { EvEm } from '@jcfigueiredo/evem';
+import { WebSocketHandler, type ConnectionStateChangeEvent } from '@jcfigueiredo/evem/websocket';
+
+interface ChatMessage {
+  user: string;
+  text: string;
+}
+
+const evem = new EvEm();
+const handler = new WebSocketHandler('wss://chat.example.com/ws', evem, { reconnect: true });
+
+// The server sends {"event":"chat.message","data":{...}}; it's published as 'server.chat.message'
+evem.subscribe<ChatMessage>('server.chat.message', (message) => {
+  console.log(`${message.user}: ${message.text}`);
+});
+
+evem.subscribe<ConnectionStateChangeEvent>('ws.connection.state', ({ from, to }) => {
+  console.log(`connection: ${from} -> ${to}`);
+});
+
+// Sent right away when connected; otherwise queued and sent once the socket opens
+await evem.publish('ws.send', { event: 'chat.send', data: { text: 'Hello!' } });
+
+// Request-response: resolves with the server's `result` (rejects after 5 s by default)
+const history = await handler.request<ChatMessage[]>('chat.history', { limit: 50 });
+console.log(`${history.length} earlier messages`);
+
+// When you're done: closes the socket and removes everything the handler registered
+await handler.disconnect();
+```
+
+Callbacks receive `unknown` unless you give a type argument (`subscribe<ChatMessage>(...)`). The type argument isn't checked at runtime; use the `schema` subscription option if you need validation.
+
+Use **one `WebSocketHandler` per `EvEm` instance**. Two handlers on the same emitter both send every `ws.send`, `ws.send.*` and `ws.send.request` event, each on its own socket, so every message and request goes out twice. For several connections, give each its own `EvEm`.
+
+## Options
+
+`new WebSocketHandler(urlOrSocket, evem, options?)` takes a URL or an existing socket (anything implementing [`IWebSocket`](#types), such as a browser `WebSocket` or a socket from the `ws` package).
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enableQueue` | `true` | Queue messages while not connected. With `false`, messages published while offline are dropped. |
+| `queueSize` | `100` | Maximum number of queued messages. When the queue is full, the oldest message is dropped and `ws.queue.overflow` is published. |
+| `autoFlush` | `true` | Send queued messages whenever the state becomes `connected`, including the first connection. With `false`, queued messages are never sent, because the handler has no public `flush()`. They're discarded by `disconnect()`. |
+| `enableRequestResponse` | `true` | Enables `request()`, the request format for `ws.send.request`, and routing of `{"type":"response"}` messages. |
+| `serverEventPrefix` | `'server'` | Prefix for incoming server events (`chat.message` → `server.chat.message`). With `''`, events are published under their own names. |
+| `reconnect` | `false` | Reconnect after an unexpected close. Never happens after `disconnect()`. |
+| `reconnectDelay` | `1000` | Milliseconds to wait before each reconnection attempt. The delay is fixed; there is no backoff. |
+| `maxReconnectAttempts` | `5` | How many consecutive failed attempts are allowed before giving up. The count resets when a socket opens. |
+| `WebSocketConstructor` | global `WebSocket` | Class used to create sockets from a URL: for the URL you pass, and for every reconnection. Required in Node.js 20 when you pass a URL or enable `reconnect`. |
+| `onError` | none | Called with an `Error` for socket errors, sockets that can't be created while reconnecting, and incoming messages that fail to parse. These are also published as `ws.error` / `ws.parse.error`. |
+| `messageParser` | `JSON.parse` | Turns each incoming `event.data` into a message object. |
+| `messageFormatter` | `JSON.stringify` | Turns each outgoing payload into the string that is sent. |
+
+## Methods
+
+| Method | Description |
+|--------|-------------|
+| `request<T>(method, params?, { timeout?, id? }?)` | Sends a request and resolves with the response's `result`. See [Request-response](#request-response). |
+| `disconnect(): Promise<void>` | Cancels any pending reconnection and rejects pending requests. Discards queued messages, closes the socket with code 1000, removes all of the handler's subscriptions and middleware, and moves the state through `disconnecting` to `disconnected` (unless it's already `disconnected`). The handler can't be reused afterwards; create a new one to connect again. |
+| `isConnected(): boolean` | `true` while the state is `connected`. |
+| `getConnectionState(): string` | The current state: `'disconnected'`, `'connected'`, `'reconnecting'` or `'disconnecting'`. |
+| `getQueueSize(): number` | Number of queued messages (0 when the queue is disabled). |
+
+## Events reference
+
+**You publish:**
+
+| Event | Payload | What happens |
+|-------|---------|--------------|
+| `ws.send` | any | Sent through `messageFormatter`. If the handler isn't connected, the message is queued instead (or dropped, with `enableQueue: false`). |
+| `ws.send.<name>` (e.g. `ws.send.chat`) | any | Same as `ws.send`. Only the payload is sent, not the event name. Names containing `queued` are reserved for the queue. |
+| `ws.send.request` | `RequestMessage` | Published by `request()`; you normally don't publish it yourself. It's sent as `{ type: 'request', ...request }`. |
+
+**The handler publishes:**
+
+| Event | Payload | When |
+|-------|---------|------|
+| `ws.connection.state` | `{ from, to, timestamp }` | On every state change (see [Connection state](#connection-state-and-reconnection)). |
+| `server.<name>` | the message's `data` | A server event arrives (see [Wire format](#wire-format)). |
+| `ws.message` | the whole parsed message | An incoming message matches no other route (see [Wire format](#wire-format)). |
+| `ws.parse.error` | `{ error, rawData }` | `messageParser` throws on an incoming message. |
+| `ws.error` | `{ error, event }` | The socket reports an error. While reconnecting, it's also published as `{ error }` when a new socket can't be created. In browsers, `error` is a generic `Error('WebSocket error')`, because the browser error event carries no details. |
+| `ws.send.queued` | the queued payload | For each queued message as the queue is flushed, just before it's sent. |
+| `ws.queue.overflow` | `{ maxSize, droppedMessage }` | The queue was full and its oldest message was dropped. |
+| `ws.reconnect.failed` | `{ attempts }` | `maxReconnectAttempts` consecutive attempts failed. The state is now `disconnected`. |
+| `ws.response` / `ws.response.error` | `{ id, result, timestamp }` / `{ id, error, timestamp }` | A `{"type":"response"}` message arrives. Used internally by `request()`. |
+
+Subscriber errors are handled by EvEm's default error policy: they're logged, and the next subscriber runs. Incoming messages are published as they arrive, without waiting for earlier async subscribers to finish.
+
+## Wire format
+
+**Outgoing:** the payload of each `ws.send` / `ws.send.*` event, passed through `messageFormatter` (JSON by default). The handler doesn't wrap it, so choose a shape your server understands. The examples here use `{ event, data }`:
+
+```json
+{"event":"chat.send","data":{"text":"Hello!"}}
+```
+
+**Incoming:** each message is passed through `messageParser` (JSON by default) and routed by its fields. These rules are for the default `serverEventPrefix: 'server'`:
+
+| Server sends | Published as | Subscribers receive |
+|--------------|--------------|---------------------|
+| `{"event":"chat.message","data":{…}}` | `server.chat.message` | `data` |
+| `{"event":"server.chat.message","data":{…}}` | `server.chat.message` (the prefix isn't added twice) | `data` |
+| `{"type":"chat.message","data":{…}}` (legacy) | `server.chat.message` (same rule as `event`) | `data` |
+| `{"type":"response","id":"…","result":…}` | `ws.response` | resolves the matching `request()` |
+| `{"type":"response","id":"…","error":{"code":…,"message":"…"}}` | `ws.response.error` | rejects the matching `request()` |
+| anything else, e.g. `{"ping":1}` | `ws.message` | the whole parsed message |
+| invalid JSON | `ws.parse.error` | `{ error, rawData }` |
+
+`event` takes precedence over `type`. If `data` is missing, subscribers receive `{}`. With `enableRequestResponse: false`, response messages go to `ws.message`. See [Server Events](websocket-server-events.md) for subscribing to these.
+
+## Request-response
+
+```typescript
+import { EvEm } from '@jcfigueiredo/evem';
+import { RequestTimeoutError, WebSocketHandler } from '@jcfigueiredo/evem/websocket';
+
+interface User {
+  id: number;
+  name: string;
+}
+
+const evem = new EvEm();
+const handler = new WebSocketHandler('wss://api.example.com/ws', evem);
+
+try {
+  const user = await handler.request<User>('users.get', { id: 42 }, { timeout: 10_000 });
+  console.log(user.name);
+} catch (error) {
+  if (error instanceof RequestTimeoutError) {
+    console.warn(`${error.method} (${error.requestId}) timed out after ${error.timeout} ms`);
+  } else if (error instanceof Error) {
+    // A {"type":"response","error":{...}} reply: the server's message, plus `code` and `data`
+    const { code } = error as Error & { code?: number };
+    console.error(`Request failed (${code}): ${error.message}`);
+  }
+}
+
+// Requests are independent; run them concurrently
+const [alice, bob] = await Promise.all([
+  handler.request<User>('users.get', { id: 1 }),
+  handler.request<User>('users.get', { id: 2 }),
+]);
+console.log(alice.name, bob.name);
+```
+
+- The request is sent as `{"type":"request","id":"<uuid>","method":"users.get","params":{"id":42},"timestamp":…}`. The server must reply with a `{"type":"response"}` message carrying the same `id` (see [Wire format](#wire-format)).
+- `timeout` defaults to 5000 ms. It starts when you call `request()`, so time spent in the offline queue counts. A request that times out while queued is still sent when the queue flushes, and its response is ignored.
+- `id` sets a custom request id. `request()` rejects immediately if a request with that id is still pending.
+- Rejections:
+  - `RequestTimeoutError` (extends `WebSocketError`, `code: 'REQUEST_TIMEOUT'`) when the timeout expires.
+  - An `Error` with the server's `message`, `code` and `data` for an error response. The message is `'Request failed'` if the response has no error details.
+  - An `Error` if request-response is disabled, if `request()` is called after `disconnect()`, or if the request is still pending when `disconnect()` is called.
+
+## Offline queue
+
+While the state isn't `connected`, `ws.send`, `ws.send.*` and request messages go into a FIFO queue instead of the socket. With `autoFlush` (the default), each transition to `connected` sends the queue in order: the first connection and every reconnection. Each flushed message is published as `ws.send.queued` and then sent.
+
+- **Full queue:** when `queueSize` messages are waiting, the oldest is dropped and `ws.queue.overflow` is published with `{ maxSize, droppedMessage }`.
+- **Closed socket:** a message the socket can't take, because it's no longer open, is put back in the queue. This happens when the socket closed before `onclose` updated the state, or when the connection dropped in the middle of a flush.
+- **Send errors:** if `messageFormatter` or `socket.send()` throws, the error is logged with `console.error` and that message is dropped.
+- **No queue:** with `enableQueue: false`, messages published while offline are dropped silently.
+- **Disconnect:** `disconnect()` discards anything still queued.
+
+Don't queue messages that are only meaningful in real time (cursor positions, live controls). Either disable the queue, or check `handler.isConnected()` before publishing them.
+
+## Connection state and reconnection
+
+The handler publishes `ws.connection.state` with `{ from, to, timestamp }` on each change:
+
+```
+new WebSocketHandler(url, ...)       disconnected   (the socket is still connecting)
+socket opens                       → connected      (queue flushed)
+socket closes unexpectedly
+  reconnect: false                 → disconnected   (stays there; create a new handler to retry)
+  reconnect: true                  → reconnecting   (a new socket to the same URL after reconnectDelay)
+    a new socket opens             → connected      (queue flushed, attempt count reset)
+    maxReconnectAttempts failures  → disconnected   + ws.reconnect.failed { attempts }
+await handler.disconnect()         → disconnecting → disconnected
+```
+
+- A socket that is already open when you pass it starts in `connected`.
+- The handler never uses the `connecting` state.
+- With `reconnect: true`, an initial connection that fails also moves to `reconnecting`.
+- Reconnecting needs a URL: the string you passed, or the `url` property of the socket you passed (browser and `ws` sockets have one). Without a URL, an unexpected close moves to `disconnected`.
+- New sockets are created with `WebSocketConstructor`, or the global `WebSocket` if you didn't set one.
+- Socket errors are published as `ws.error`. The state changes when the socket then closes.
+
+```typescript
+import { EvEm } from '@jcfigueiredo/evem';
+import { WebSocketHandler, type ConnectionStateChangeEvent } from '@jcfigueiredo/evem/websocket';
+
+const evem = new EvEm();
+const handler = new WebSocketHandler('wss://api.example.com/ws', evem, {
+  reconnect: true,
+  reconnectDelay: 2000,
+  maxReconnectAttempts: 10,
+});
+
+evem.subscribe<ConnectionStateChangeEvent>('ws.connection.state', ({ to }) => {
+  document.body.dataset.connection = to; // 'connected', 'reconnecting', ...
+});
+
+evem.subscribe<{ attempts: number }>('ws.reconnect.failed', ({ attempts }) => {
+  console.warn(`Gave up after ${attempts} attempts; queued: ${handler.getQueueSize()}`);
+});
+```
+
+## Middleware on outgoing messages
+
+Middleware runs in registration order, and the handler registers its own `ws.send*` middleware when it's created.
+
+**Register your middleware before you create the handler.** That way, messages are queued and sent as your middleware returns them. Middleware added later doesn't change messages published to `ws.send.*` names, and doesn't change what gets queued.
 
 ```typescript
 import { EvEm } from '@jcfigueiredo/evem';
 import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';
 
-// Create EvEm instance
 const evem = new EvEm();
+const token = 'session-token';
 
-// Create WebSocketHandler - that's it!
-const handler = new WebSocketHandler('wss://api.example.com', evem);
+// Adds a token to every outgoing message. Flushed messages (ws.send.queued) already have it.
+const addToken = (event: string, data: unknown) =>
+  event === 'ws.send.queued' ? data : { ...(data as object), token };
+evem.use({ pattern: 'ws.send', handler: addToken });
+evem.use({ pattern: 'ws.send.*', handler: addToken });
 
-// Subscribe to server events - everything is auto-wired!
-evem.subscribe('server.user.login', (data) => {
-  console.log('User logged in:', data);
-});
-
-evem.subscribe('server.notification.*', (notification) => {
-  showToast(notification.message);
-});
-
-// Send messages to server
-await evem.publish('ws.send', { type: 'chat', text: 'Hello!' });
-
-// Use the handler for state monitoring and lifecycle management
-if (handler.isConnected()) {
-  console.log('WebSocket is connected');
-  console.log('Messages in queue:', handler.getQueueSize());
-}
-
-// Clean up when component unmounts or app closes
-handler.disconnect();
+const handler = new WebSocketHandler('wss://api.example.com/ws', evem);
 ```
 
-**What WebSocketHandler handles automatically:**
-- ✅ Wires `ws.onopen` → ConnectionManager → `'connected'` state (a socket that is already open starts out `'connected'`)
-- ✅ Wires `ws.onclose` → ConnectionManager → `'disconnected'` state (or `'reconnecting'` with `reconnect: true`)
-- ✅ Wires `ws.onerror` → `'ws.error'` event
-- ✅ Wires `ws.onmessage` → parses and routes to `server.*` events
-- ✅ Wires `'ws.send'` events → `ws.send()` (with queueing when disconnected, or when the socket is no longer open but `onclose` hasn't fired yet)
-- ✅ Wires `'ws.send.queued'` events → `ws.send()` (when queue flushes)
-- ✅ Integrates ConnectionManager, MessageQueue, and RequestResponseManager
-- ✅ Provides customizable message parsing and formatting
+Two things to watch for:
 
-### Configuration Options
+- **Use both patterns.** `ws.send.*` doesn't match `ws.send` itself, so register the middleware on both.
+- **Don't return a bare `{ event, data }` copy.** If your middleware returns a new object with exactly two properties, `event` and `data`, EvEm treats it as a *reroute* to that event name. A message shaped like `{ event: 'chat.send', data }` would then be published as `chat.send` instead of being sent. Return the same object, or add a property, as above.
+
+## Node.js
+
+Node.js 22 and later have a global `WebSocket`, so a URL works as-is. Node.js 20 doesn't. On Node.js 20, a URL without `WebSocketConstructor` throws `ReferenceError: WebSocket is not defined`. Use the [`ws`](https://www.npmjs.com/package/ws) package instead:
 
 ```typescript
-const handler = new WebSocketHandler('wss://api.example.com', evem, {
-  // Message queue settings
-  enableQueue: true,          // Enable queue (default: true)
-  queueSize: 100,             // Max queued messages (default: 100)
-  autoFlush: true,            // Auto-flush on reconnect (default: true)
+import WebSocket from 'ws';
+import { EvEm } from '@jcfigueiredo/evem';
+import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';
 
-  // Request-response pattern
-  enableRequestResponse: true, // Enable RPC pattern (default: true)
+const evem = new EvEm();
 
-  // Server event routing
-  serverEventPrefix: 'server', // Prefix for server events (default: 'server')
+// Pass a URL plus the class to create sockets with (used again for each reconnection)
+const handler = new WebSocketHandler('ws://localhost:8080', evem, {
+  WebSocketConstructor: WebSocket,
+  reconnect: true,
+});
 
-  // Automatic reconnection after an unexpected close (not after disconnect())
-  reconnect: true,            // Enable reconnection (default: false)
-  reconnectDelay: 1000,       // Delay before each attempt in ms (default: 1000)
-  maxReconnectAttempts: 5,    // Consecutive failed attempts before giving up (default: 5)
-  WebSocketConstructor: WebSocket, // Creates sockets from the URL (default: global WebSocket)
-
-  // Custom parsing/formatting
-  messageParser: (data: string) => JSON.parse(data),
-  messageFormatter: (data: any) => JSON.stringify(data),
-
-  // Error handling
-  onError: (error: Error) => {
-    console.error('WebSocket error:', error);
-    logToSentry(error);
+// Need headers or other socket options? Bake them into a subclass so reconnections keep them
+class AuthenticatedSocket extends WebSocket {
+  constructor(url: string) {
+    super(url, { headers: { Authorization: `Bearer ${process.env.API_TOKEN}` } });
   }
+}
+const api = new WebSocketHandler('wss://api.example.com/ws', new EvEm(), {
+  WebSocketConstructor: AuthenticatedSocket,
+  reconnect: true,
 });
 
-// After maxReconnectAttempts failed attempts the state goes to 'disconnected'
-evem.subscribe('ws.reconnect.failed', ({ attempts }) => {
-  console.warn(`Gave up reconnecting after ${attempts} attempts`);
+process.on('SIGINT', async () => {
+  await Promise.all([handler.disconnect(), api.disconnect()]);
+  process.exit(0);
 });
-
-// Access integrated components
-console.log('Connected:', handler.isConnected());
-console.log('Queue size:', handler.getQueueSize());
-console.log('State:', handler.getConnectionState());
-
-// Clean up
-handler.disconnect();
 ```
 
-## Manual Setup (Advanced)
+You can also pass a `ws` socket you created yourself: `new WebSocketHandler(socket, evem)`. If you also want reconnection, set `WebSocketConstructor` as well. Reconnections create new sockets from the socket's `url` using that class, or the global `WebSocket` if it isn't set, and Node.js 20 has no global `WebSocket`.
 
-For more control, you can wire components manually:
+## Example: browser chat
+
+This example works with the Node.js server in [Server Events](websocket-server-events.md#example-chat-client-and-server).
 
 ```typescript
 import { EvEm } from '@jcfigueiredo/evem';
-import { ConnectionManager, MessageQueue, RequestResponseManager } from '@jcfigueiredo/evem/websocket';
+import { WebSocketHandler, type ConnectionStateChangeEvent } from '@jcfigueiredo/evem/websocket';
 
-// Create EvEm instance
+interface ChatMessage {
+  roomId: string;
+  user: string;
+  text: string;
+}
+
+const roomId = 'lobby';
 const evem = new EvEm();
+const handler = new WebSocketHandler('ws://localhost:8080', evem, { reconnect: true });
 
-// Setup WebSocket components
-const connectionManager = new ConnectionManager(evem);
-const messageQueue = new MessageQueue(evem, connectionManager);
-const requestResponse = new RequestResponseManager(evem);
+const status = document.querySelector<HTMLElement>('#status')!;
+const list = document.querySelector<HTMLUListElement>('#messages')!;
+const form = document.querySelector<HTMLFormElement>('#chat')!;
+const input = form.querySelector<HTMLInputElement>('input')!;
 
-// Enable message queue with auto-flush
-messageQueue.enable(100, { autoFlush: true });
+function show(message: ChatMessage): void {
+  const item = document.createElement('li');
+  item.textContent = `${message.user}: ${message.text}`;
+  list.append(item);
+}
 
-// Listen for connection state changes
-evem.subscribe('ws.connection.state', (event) => {
-  console.log(`Connection: ${event.from} -> ${event.to}`);
+evem.subscribe<ConnectionStateChangeEvent>('ws.connection.state', ({ to }) => {
+  status.textContent = to;
+});
+evem.subscribe('ws.reconnect.failed', () => {
+  status.textContent = 'offline (reload to retry)';
 });
 
-// Create WebSocket connection
-const ws = new WebSocket('wss://example.com');
-
-ws.onopen = async () => {
-  await connectionManager.transitionTo('connected');
-  // Queued messages automatically flushed when autoFlush is enabled
-};
-
-ws.onclose = async () => {
-  await connectionManager.transitionTo('disconnected');
-};
-
-// Send messages (will be queued if disconnected)
-evem.subscribe('ws.send.queued', (data) => {
-  ws.send(JSON.stringify(data));
+// The server broadcasts every room's messages as 'chat.message'; keep this room's
+evem.subscribe<ChatMessage>('server.chat.message', show, {
+  filter: (message) => message.roomId === roomId,
 });
 
-await evem.publish('ws.send', { type: 'chat', text: 'Hello!' });
+form.addEventListener('submit', (submit) => {
+  submit.preventDefault();
+  // Queued while offline and sent on reconnect
+  void evem.publish('ws.send', { event: 'chat.send', data: { roomId, text: input.value } });
+  input.value = '';
+});
 
-// Request-response pattern
-ws.onmessage = (event) => {
-  const message = JSON.parse(event.data);
+// Waits for the connection (the 5 s timeout includes that wait)
+handler
+  .request<ChatMessage[]>('chat.history', { roomId, limit: 50 })
+  .then((history) => history.forEach(show))
+  .catch((error: unknown) => console.error('Could not load history', error));
 
-  if (message.type === 'response') {
-    evem.publish('ws.response', {
-      id: message.id,
-      result: message.result,
-      timestamp: Date.now()
-    });
-  }
-};
-
-const result = await requestResponse.request('getUser', { id: 123 });
-console.log('User:', result);
+window.addEventListener('pagehide', () => {
+  void handler.disconnect();
+});
 ```
 
-## Server-Side Event Subscriptions
+For React, see [Using with React](websocket-server-events.md#using-with-react).
 
-The WebSocket adapter fully supports subscribing to server-sent events using EvEm's pattern matching. This allows you to:
+## Testing
 
-- Subscribe to specific server events (e.g., `server.user.login`)
-- Use wildcard patterns (e.g., `server.user.*` to match all user events)
-- Filter events based on data properties
-- Transform event data before handling
-- Handle events with priority ordering
-
-**Quick Example:**
+Pass a fake socket instead of a URL. Anything that implements `IWebSocket` works:
 
 ```typescript
-const evem = new EvEm();
+import { expect, it } from 'vitest';
+import { EvEm } from '@jcfigueiredo/evem';
+import { WebSocketHandler, type IWebSocket } from '@jcfigueiredo/evem/websocket';
 
-// Subscribe to server events using EvEm patterns
-evem.subscribe('server.user.login', (data) => {
-  console.log('User logged in:', data);
-});
+class FakeSocket implements IWebSocket {
+  readonly CONNECTING = 0;
+  readonly OPEN = 1;
+  readonly CLOSING = 2;
+  readonly CLOSED = 3;
+  readyState: number = this.CONNECTING;
+  sent: string[] = [];
+  onopen: ((event: any) => void) | null = null;
+  onclose: ((event: any) => void) | null = null;
+  onerror: ((event: any) => void) | null = null;
+  onmessage: ((event: any) => void) | null = null;
 
-evem.subscribe('server.notification.*', (notification) => {
-  showToast(notification.message);
-});
-
-// In your WebSocket onmessage handler, publish server events to EvEm
-ws.onmessage = (event) => {
-  const message = JSON.parse(event.data);
-
-  // Route server events through EvEm
-  if (message.event) {
-    evem.publish(message.event, message.data);
+  send(data: string | ArrayBuffer | Blob | ArrayBufferView): void {
+    this.sent.push(String(data));
   }
-};
-```
+  close(): void {
+    this.readyState = this.CLOSED;
+  }
 
-**Server Message Format:**
-
-```json
-{
-  "event": "server.user.login",
-  "data": {
-    "userId": "123",
-    "username": "john_doe"
+  // Test helpers
+  open(): void {
+    this.readyState = this.OPEN;
+    this.onopen?.({});
+  }
+  receive(message: unknown): void {
+    this.onmessage?.({ data: JSON.stringify(message) });
+  }
+  drop(): void {
+    this.readyState = this.CLOSED;
+    this.onclose?.({ code: 1006 });
   }
 }
+
+// State changes and the queue flush are async; let them finish
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+it('queues while offline, then sends and routes server events', async () => {
+  const evem = new EvEm();
+  const socket = new FakeSocket();
+  const handler = new WebSocketHandler(socket, evem);
+
+  await evem.publish('ws.send', { event: 'chat.send', data: { text: 'hi' } });
+  expect(socket.sent).toEqual([]);
+  expect(handler.getQueueSize()).toBe(1);
+
+  socket.open();
+  await settle();
+  expect(socket.sent).toEqual(['{"event":"chat.send","data":{"text":"hi"}}']);
+
+  const received: unknown[] = [];
+  evem.subscribe('server.chat.message', (data) => {
+    received.push(data);
+  });
+  socket.receive({ event: 'chat.message', data: { text: 'hello' } });
+  await settle();
+  expect(received).toEqual([{ text: 'hello' }]);
+
+  await handler.disconnect();
+});
 ```
 
-For complete examples, advanced patterns, and React integration, see the [Server-Side Event Subscriptions Guide](websocket-server-events.md).
+Some other things to test:
 
-## When to Use the WebSocket Adapter
+- **`request()`:** the request is sent asynchronously, so `await settle()` first. Then read its `id` from `JSON.parse(socket.sent[0])` and reply with `socket.receive({ type: 'response', id, result })`.
+- **Reconnection:** pass a URL with a fake class as `WebSocketConstructor`, so you can reach the sockets it creates. Use `vi.useFakeTimers()` and `await vi.advanceTimersByTimeAsync(reconnectDelay)`. A fake socket that never opens counts as a failed attempt once you call its `drop()`.
 
-### Use ConnectionManager When:
-- ✅ You need to **track connection lifecycle** (connecting, connected, disconnected, reconnecting)
-- ✅ You want to **trigger actions** based on connection state changes
-- ✅ You need to **coordinate behavior** across different parts of your application based on connectivity
-- ✅ You're building UI that shows connection status
-- ✅ You want to **prevent operations** when disconnected
+The repository's own `MockWebSocket` (`tests/websocket/mocks/MockWebSocket.ts`) is a fuller fake of this kind. Note that it opens itself on the next tick unless you set `autoConnect = false`.
 
-**Don't use if:** You only have a simple WebSocket connection with no state-dependent logic.
+## Using the components directly
 
-### Use MessageQueue When:
-- ✅ You need **offline support** - queue messages while disconnected
-- ✅ You want **automatic retry** - messages sent when connection is restored
-- ✅ You need to **handle unreliable networks** (mobile, poor WiFi)
-- ✅ You're building real-time features that must be resilient to disconnections
-- ✅ You want to **prevent message loss** during brief disconnections
+`WebSocketHandler` is built from three components. You can wire them yourself if you need a different transport or wire protocol. You then have to forward messages to the socket yourself. The components only queue messages, track state and match responses; none of them sends anything.
 
-**Don't use if:** Messages are only valid in real-time and shouldn't be sent after reconnection (e.g., live video controls).
-
-### Use RequestResponseManager When:
-- ✅ You need **RPC-style communication** - send request, wait for specific response
-- ✅ You want **timeout handling** - know when requests fail
-- ✅ You need to **correlate requests and responses** by ID
-- ✅ You're implementing API-like patterns over WebSocket
-- ✅ You need **concurrent requests** with individual error handling
-
-**Don't use if:** You only need one-way messaging or pub/sub patterns.
-
-### Use All Three Together When:
-- ✅ Building **production-grade WebSocket applications**
-- ✅ Need both **pub/sub messaging** (MessageQueue) and **RPC calls** (RequestResponseManager)
-- ✅ Want **comprehensive connection management** (ConnectionManager)
-- ✅ Building **collaborative apps** (chat, docs, gaming)
-- ✅ Need **resilient real-time features**
-
-## Components
-
-### 1. ConnectionManager
-
-Manages connection state with a simple state machine.
-
-**States:**
-- `disconnected` - Initial state, no connection
-- `connecting` - Connection attempt in progress
-- `connected` - Successfully connected
-- `reconnecting` - Reconnection attempt in progress
-- `disconnecting` - Closing connection
-
-**API:**
+### ConnectionManager
 
 ```typescript
-class ConnectionManager {
+import type { EvEm } from '@jcfigueiredo/evem';
+import type { ConnectionState } from '@jcfigueiredo/evem/websocket';
+
+declare class ConnectionManager {
   constructor(evem: EvEm);
-
-  // State transitions
-  async transitionTo(newState: ConnectionState): Promise<void>;
-
-  // State queries
-  getState(): ConnectionState;
-  isConnected(): boolean;
-  isConnecting(): boolean;
-  isDisconnected(): boolean;
+  transitionTo(state: ConnectionState): Promise<void>; // publishes ws.connection.state { from, to, timestamp }
+  getState(): ConnectionState;   // starts as 'disconnected'
+  isConnected(): boolean;        // 'connected'
+  isConnecting(): boolean;       // 'connecting' or 'reconnecting'
+  isReconnecting(): boolean;     // 'reconnecting'
+  isDisconnecting(): boolean;    // 'disconnecting'
+  isDisconnected(): boolean;     // 'disconnected'
 }
 ```
 
-**Events:**
+`ConnectionManager` records the state you give it and announces it. It doesn't enforce a state machine: any transition is accepted, including one to the current state. `transitionTo()` sets the state right away and always resolves. Subscriber errors are logged by EvEm's default error policy, and a rejected publish is ignored.
+
+### MessageQueue
 
 ```typescript
-// Listen for state changes
-evem.subscribe('ws.connection.state', (event: ConnectionStateChangeEvent) => {
-  console.log(`${event.from} -> ${event.to}`);
-  console.log(`Timestamp: ${event.timestamp}`);
-});
-```
+import type { EvEm } from '@jcfigueiredo/evem';
+import type { ConnectionManager } from '@jcfigueiredo/evem/websocket';
 
-**Example:**
-
-```typescript
-const connectionManager = new ConnectionManager(evem);
-
-// Track state changes
-evem.subscribe('ws.connection.state', (event) => {
-  if (event.to === 'connected') {
-    console.log('Connected!');
-  } else if (event.to === 'disconnected') {
-    console.log('Disconnected!');
-  }
-});
-
-// Transition states
-await connectionManager.transitionTo('connecting');
-await connectionManager.transitionTo('connected');
-
-// Query state
-if (connectionManager.isConnected()) {
-  console.log('Ready to send messages');
-}
-```
-
-### 2. MessageQueue
-
-Queues messages while disconnected and replays them on reconnection.
-
-**API:**
-
-```typescript
-class MessageQueue {
+declare class MessageQueue {
   constructor(evem: EvEm, connectionManager: ConnectionManager);
-
-  // Enable/disable queueing
-  enable(maxSize?: number, options?: MessageQueueOptions): void;
-  disable(): void;
-
-  // Queue operations
-  enqueue(data: any): void; // Queue explicitly, whatever the connection state
-  async flush(): Promise<void>;
-  clear(): void;
-
-  // Status queries
+  enable(maxSize?: number, options?: { autoFlush?: boolean }): void; // defaults: 100, autoFlush true
+  disable(): void;          // stops queueing; removes its middleware and subscription; keeps queued messages
+  enqueue(data: any): void; // queue explicitly, whatever the state (no-op while disabled)
+  flush(): Promise<void>;   // publishes each queued message to ws.send.queued, in order
+  clear(): void;            // drop queued messages
   isEnabled(): boolean;
   getQueueSize(): number;
   getMaxSize(): number;
 }
-
-interface MessageQueueOptions {
-  autoFlush?: boolean; // Auto-flush when connected (default: true)
-}
 ```
 
-**Events:**
+When enabled, `MessageQueue` registers middleware on `ws.send` and on `ws.send.*` (needed because `ws.send.*` doesn't match `ws.send`). While the `ConnectionManager` isn't `connected`, it queues the payload of every such event, except names containing `queued`. The event itself still reaches subscribers.
+
+With `autoFlush`, every transition to `connected` flushes the queue, including the first. A full queue drops its oldest message and publishes `ws.queue.overflow`.
+
+### RequestResponseManager
 
 ```typescript
-// Published when queue is flushed (subscribe to this to send messages)
-evem.subscribe('ws.send.queued', (data) => {
-  websocket.send(JSON.stringify(data));
-});
+import type { EvEm } from '@jcfigueiredo/evem';
 
-// Emitted when queue overflows
-evem.subscribe('ws.queue.overflow', (event) => {
-  console.warn(`Queue full! Dropped message:`, event.droppedMessage);
-  console.log(`Max size: ${event.maxSize}`);
-});
-```
-
-**Example:**
-
-```typescript
-const messageQueue = new MessageQueue(evem, connectionManager);
-
-// Enable with 100 message limit and auto-flush
-messageQueue.enable(100, { autoFlush: true });
-
-// Handle flushed messages
-evem.subscribe('ws.send.queued', (data) => {
-  websocket.send(JSON.stringify(data));
-});
-
-// Publish messages - they'll be queued if disconnected
-await evem.publish('ws.send', { type: 'chat', text: 'Hello!' });
-await evem.publish('ws.send.message', { text: 'Wildcard support!' });
-
-console.log(`Queued: ${messageQueue.getQueueSize()} messages`);
-
-// Manual flush (not needed with autoFlush)
-await messageQueue.flush();
-
-// Clear queue without flushing
-messageQueue.clear();
-```
-
-**Important Implementation Details:**
-
-The MessageQueue uses **middleware pattern** for clean interception:
-
-- Registers TWO middleware handlers: `ws.send` (exact match) and `ws.send.*` (wildcard)
-- Required because EvEm wildcards don't match exact event names
-- Only queues when: enabled, not connected, and event doesn't include 'queued'
-- Uses `isEnqueuing` flag to prevent re-entrancy during queue operations
-
-### 3. RequestResponseManager
-
-Implements RPC-style request-response pattern with correlation IDs.
-
-**API:**
-
-```typescript
-class RequestResponseManager {
-  constructor(evem: EvEm);
-
-  // Send request and wait for response
-  async request(
-    method: string,
-    params?: any,
-    options?: RequestOptions
-  ): Promise<any>;
-
-  // Status
+declare class RequestResponseManager {
+  constructor(evem: EvEm);  // subscribes to ws.response and ws.response.error
+  request(method: string, params?: any, options?: { timeout?: number; id?: string }): Promise<any>;
   getPendingRequestCount(): number;
-
-  // Cleanup
-  cleanup(): void;
-}
-
-interface RequestOptions {
-  timeout?: number;    // Timeout in ms (default: 5000)
-  id?: string;         // Custom request ID (default: auto-generated UUID)
+  cleanup(): void;          // unsubscribes and rejects pending requests
 }
 ```
 
-**Events:**
+`request()` publishes `ws.send.request` with `{ id, method, params, timestamp }` and no `type` field. It resolves when `ws.response` arrives with that `id`, and rejects on `ws.response.error`, on timeout (`RequestTimeoutError`), or for a duplicate pending `id`.
 
-```typescript
-// Outgoing request (subscribe to this to send via WebSocket)
-evem.subscribe('ws.send.request', (request: RequestMessage) => {
-  websocket.send(JSON.stringify({
-    id: request.id,
-    method: request.method,
-    params: request.params
-  }));
-});
+### Wiring them up
 
-// Incoming successful response (publish this from WebSocket onmessage)
-await evem.publish('ws.response', {
-  id: 'request-id',
-  result: { /* response data */ },
-  timestamp: Date.now()
-});
-
-// Incoming error response (publish this from WebSocket onmessage)
-await evem.publish('ws.response.error', {
-  id: 'request-id',
-  error: {
-    code: 404,
-    message: 'Not found',
-    data: { /* additional error info */ }
-  },
-  timestamp: Date.now()
-});
-```
-
-**Example:**
-
-```typescript
-const requestResponse = new RequestResponseManager(evem);
-
-// Handle outgoing requests
-evem.subscribe('ws.send.request', (request) => {
-  websocket.send(JSON.stringify({
-    type: 'request',
-    id: request.id,
-    method: request.method,
-    params: request.params
-  }));
-});
-
-// Handle incoming responses
-websocket.onmessage = (event) => {
-  const message = JSON.parse(event.data);
-
-  if (message.type === 'response') {
-    if (message.error) {
-      evem.publish('ws.response.error', {
-        id: message.id,
-        error: message.error,
-        timestamp: Date.now()
-      });
-    } else {
-      evem.publish('ws.response', {
-        id: message.id,
-        result: message.result,
-        timestamp: Date.now()
-      });
-    }
-  }
-};
-
-// Make requests
-try {
-  const user = await requestResponse.request('getUser', { id: 123 });
-  console.log('User:', user);
-
-  const profile = await requestResponse.request('getProfile', { userId: 123 }, {
-    timeout: 10000 // 10 second timeout
-  });
-  console.log('Profile:', profile);
-
-} catch (error) {
-  if (error instanceof RequestTimeoutError) {
-    console.error(`Request ${error.requestId} timed out after ${error.timeout}ms`);
-  } else {
-    console.error('Request failed:', error.message);
-  }
-}
-```
-
-**Concurrent Requests:**
-
-```typescript
-// Multiple concurrent requests are handled correctly
-const [user, posts, comments] = await Promise.all([
-  requestResponse.request('getUser', { id: 123 }),
-  requestResponse.request('getPosts', { userId: 123 }),
-  requestResponse.request('getComments', { userId: 123 })
-]);
-```
-
-## Complete Example: WebSocket Chat Client
+This is roughly what `WebSocketHandler` does for `ws.send` and requests:
 
 ```typescript
 import { EvEm } from '@jcfigueiredo/evem';
-import { ConnectionManager, MessageQueue, RequestResponseManager } from '@jcfigueiredo/evem/websocket';
+import {
+  ConnectionManager,
+  MessageQueue,
+  RequestResponseManager,
+  type RequestMessage,
+} from '@jcfigueiredo/evem/websocket';
 
-class ChatClient {
-  private evem: EvEm;
-  private ws: WebSocket | null = null;
-  private connectionManager: ConnectionManager;
-  private messageQueue: MessageQueue;
-  private requestResponse: RequestResponseManager;
+const evem = new EvEm();
+const connection = new ConnectionManager(evem);
+const rpc = new RequestResponseManager(evem);
 
-  constructor(url: string) {
-    this.evem = new EvEm();
-    this.connectionManager = new ConnectionManager(this.evem);
-    this.messageQueue = new MessageQueue(this.evem, this.connectionManager);
-    this.requestResponse = new RequestResponseManager(this.evem);
-
-    // Enable message queue with auto-flush
-    this.messageQueue.enable(100, { autoFlush: true });
-
-    // Setup event handlers
-    this.setupEventHandlers();
-
-    // Connect
-    this.connect(url);
-  }
-
-  private setupEventHandlers(): void {
-    // Handle connection state changes
-    this.evem.subscribe('ws.connection.state', (event) => {
-      console.log(`Connection: ${event.from} -> ${event.to}`);
-
-      if (event.to === 'disconnected') {
-        // Attempt reconnection
-        setTimeout(() => this.reconnect(), 5000);
-      }
-    });
-
-    // Handle queued messages
-    this.evem.subscribe('ws.send.queued', (data) => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify(data));
-      }
-    });
-
-    // Handle outgoing requests
-    this.evem.subscribe('ws.send.request', (request) => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({
-          type: 'request',
-          id: request.id,
-          method: request.method,
-          params: request.params
-        }));
-      }
-    });
-
-    // Handle queue overflow
-    this.evem.subscribe('ws.queue.overflow', (event) => {
-      console.warn('Queue overflow! Dropped message:', event.droppedMessage);
-    });
-  }
-
-  private connect(url: string): void {
-    this.ws = new WebSocket(url);
-
-    this.ws.onopen = async () => {
-      await this.connectionManager.transitionTo('connected');
-    };
-
-    this.ws.onclose = async () => {
-      await this.connectionManager.transitionTo('disconnected');
-    };
-
-    this.ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-
-    this.ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-
-      // Handle responses
-      if (message.type === 'response') {
-        if (message.error) {
-          this.evem.publish('ws.response.error', {
-            id: message.id,
-            error: message.error,
-            timestamp: Date.now()
-          });
-        } else {
-          this.evem.publish('ws.response', {
-            id: message.id,
-            result: message.result,
-            timestamp: Date.now()
-          });
-        }
-      }
-
-      // Handle incoming messages
-      if (message.type === 'message') {
-        this.evem.publish('chat.message', message.data);
-      }
-    };
-  }
-
-  private async reconnect(): Promise<void> {
-    if (this.connectionManager.isConnected()) return;
-
-    await this.connectionManager.transitionTo('reconnecting');
-    // Reconnection logic...
-  }
-
-  // Public API
-  async sendMessage(text: string): Promise<void> {
-    await this.evem.publish('ws.send', {
-      type: 'message',
-      text,
-      timestamp: Date.now()
-    });
-  }
-
-  async getHistory(): Promise<any[]> {
-    return await this.requestResponse.request('getHistory', {
-      limit: 50
-    });
-  }
-
-  onMessage(callback: (message: any) => void): string {
-    return this.evem.subscribe('chat.message', callback);
-  }
-
-  disconnect(): void {
-    this.messageQueue.disable();
-    this.requestResponse.cleanup();
-    this.ws?.close();
-  }
-}
-
-// Usage
-const chat = new ChatClient('wss://chat.example.com');
-
-// Listen for messages
-chat.onMessage((message) => {
-  console.log(`${message.user}: ${message.text}`);
+// Mark requests so the server can recognise them. Registered before the queue's middleware,
+// so requests queued while offline are stored (and later sent) in this format too.
+evem.use({
+  pattern: 'ws.send.request',
+  handler: (_event: string, request: RequestMessage) => ({ ...request, type: 'request' }),
 });
 
-// Send messages (queued if disconnected)
-await chat.sendMessage('Hello, world!');
+const queue = new MessageQueue(evem, connection);
+queue.enable(100); // autoFlush: flushed through ws.send.queued on every move to 'connected'
 
-// Request-response pattern
-const history = await chat.getHistory();
-console.log('History:', history);
-```
+let socket: WebSocket | null = null;
+let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
-## Event Reference
-
-| Event | Direction | Data | Description |
-|-------|-----------|------|-------------|
-| `ws.connection.state` | Internal | `ConnectionStateChangeEvent` | Connection state changes |
-| `ws.send` | Outgoing | `any` | Messages to send (will be queued if disconnected) |
-| `ws.send.*` | Outgoing | `any` | Wildcard for send messages |
-| `ws.send.request` | Outgoing | `RequestMessage` | RPC requests to send |
-| `ws.send.queued` | Internal | `any` | Queued messages being flushed |
-| `ws.response` | Incoming | `ResponseMessage` | Successful RPC responses |
-| `ws.response.error` | Incoming | `ResponseMessage` | Error RPC responses |
-| `ws.queue.overflow` | Internal | `{ maxSize, droppedMessage }` | Queue overflow notification |
-| `ws.reconnect.failed` | Internal | `{ attempts }` | WebSocketHandler gave up reconnecting |
-
-## Real-World Integration Examples
-
-### Browser WebSocket Integration
-
-Complete example for browser-based applications:
-
-```typescript
-import { EvEm } from '@jcfigueiredo/evem';
-import { ConnectionManager, MessageQueue, RequestResponseManager } from '@jcfigueiredo/evem/websocket';
-
-class BrowserWebSocketClient {
-  private evem: EvEm;
-  private ws: WebSocket | null = null;
-  private connectionManager: ConnectionManager;
-  private messageQueue: MessageQueue;
-  private requestResponse: RequestResponseManager;
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 1000; // Start with 1 second
-
-  constructor(private url: string) {
-    this.evem = new EvEm();
-    this.connectionManager = new ConnectionManager(this.evem);
-    this.messageQueue = new MessageQueue(this.evem, this.connectionManager);
-    this.requestResponse = new RequestResponseManager(this.evem);
-
-    // Enable message queue with 100 message limit
-    this.messageQueue.enable(100, { autoFlush: true });
-
-    this.setupEventListeners();
-    this.connect();
+function sendOrQueue(message: unknown, fromQueue: boolean): void {
+  if (socket?.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify(message));
+  } else if (fromQueue || connection.isConnected()) {
+    queue.enqueue(message); // the socket closed before onclose updated the state
   }
+  // Otherwise we're offline and the queue's middleware has already queued it
+}
 
-  private setupEventListeners(): void {
-    // Handle connection state changes
-    this.evem.subscribe('ws.connection.state', (event) => {
-      console.log(`[WebSocket] ${event.from} → ${event.to}`);
+evem.subscribe('ws.send', (message) => sendOrQueue(message, false));
+evem.subscribe('ws.send.request', (request) => sendOrQueue(request, false));
+evem.subscribe('ws.send.queued', (message) => sendOrQueue(message, true));
 
-      // Update UI based on connection state
-      this.updateConnectionUI(event.to);
-
-      // Handle reconnection on disconnect
-      if (event.to === 'disconnected' && this.reconnectAttempts < this.maxReconnectAttempts) {
-        const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts); // Exponential backoff
-        console.log(`[WebSocket] Reconnecting in ${delay}ms... (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
-
-        setTimeout(() => {
-          this.reconnect();
-        }, delay);
-      }
-
-      // Reset reconnect attempts on successful connection
-      if (event.to === 'connected') {
-        this.reconnectAttempts = 0;
-      }
-    });
-
-    // Handle queued messages
-    this.evem.subscribe('ws.send.queued', (data) => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify(data));
-        console.log('[WebSocket] Sent queued message:', data);
-      }
-    });
-
-    // Handle outgoing requests
-    this.evem.subscribe('ws.send.request', (request) => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({
-          type: 'request',
-          ...request
-        }));
-        console.log('[WebSocket] Sent request:', request.method);
-      }
-    });
-
-    // Handle queue overflow
-    this.evem.subscribe('ws.queue.overflow', (event) => {
-      console.warn('[WebSocket] Queue overflow! Dropped message:', event.droppedMessage);
-      // Notify user that message was lost
-      this.showNotification('Some messages were lost due to poor connection', 'warning');
-    });
-  }
-
-  private connect(): void {
-    this.connectionManager.transitionTo('connecting');
-
-    try {
-      this.ws = new WebSocket(this.url);
-
-      this.ws.onopen = async () => {
-        console.log('[WebSocket] Connection established');
-        await this.connectionManager.transitionTo('connected');
-        this.showNotification('Connected to server', 'success');
-      };
-
-      this.ws.onclose = async (event) => {
-        console.log(`[WebSocket] Connection closed: ${event.code} ${event.reason}`);
-        await this.connectionManager.transitionTo('disconnected');
-
-        if (event.code !== 1000) { // Not a normal closure
-          this.showNotification('Connection lost', 'error');
-        }
-      };
-
-      this.ws.onerror = (error) => {
-        console.error('[WebSocket] Error:', error);
-        this.showNotification('Connection error', 'error');
-      };
-
-      this.ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          this.handleIncomingMessage(message);
-        } catch (error) {
-          console.error('[WebSocket] Failed to parse message:', error);
-        }
-      };
-
-    } catch (error) {
-      console.error('[WebSocket] Failed to create connection:', error);
-      this.connectionManager.transitionTo('disconnected');
-    }
-  }
-
-  private handleIncomingMessage(message: any): void {
-    // Handle RPC responses
+function connect(url: string): void {
+  socket = new WebSocket(url);
+  socket.onopen = () => {
+    void connection.transitionTo('connected');
+  };
+  socket.onclose = () => {
+    void connection.transitionTo('reconnecting');
+    reconnectTimer = setTimeout(() => connect(url), 1000);
+  };
+  socket.onmessage = (event: MessageEvent<string>) => {
+    const message = JSON.parse(event.data);
     if (message.type === 'response') {
-      if (message.error) {
-        this.evem.publish('ws.response.error', {
-          id: message.id,
-          error: message.error,
-          timestamp: Date.now()
-        });
-      } else {
-        this.evem.publish('ws.response', {
-          id: message.id,
-          result: message.result,
-          timestamp: Date.now()
-        });
-      }
-      return;
-    }
-
-    // Handle regular messages
-    if (message.type === 'message') {
-      this.evem.publish('chat.message', message.data);
-    }
-
-    // Handle notifications
-    if (message.type === 'notification') {
-      this.evem.publish('server.notification', message.data);
-    }
-  }
-
-  private async reconnect(): Promise<void> {
-    if (this.connectionManager.isConnected() || this.connectionManager.isConnecting()) {
-      return;
-    }
-
-    this.reconnectAttempts++;
-    await this.connectionManager.transitionTo('reconnecting');
-
-    // Close existing connection if any
-    if (this.ws) {
-      this.ws.onclose = null; // Prevent triggering reconnect loop
-      this.ws.close();
-      this.ws = null;
-    }
-
-    this.connect();
-  }
-
-  private updateConnectionUI(state: string): void {
-    const statusElement = document.getElementById('connection-status');
-    if (statusElement) {
-      statusElement.textContent = state;
-      statusElement.className = `status-${state}`;
-    }
-  }
-
-  private showNotification(message: string, type: 'success' | 'error' | 'warning'): void {
-    // Implement your notification system here
-    console.log(`[${type.toUpperCase()}] ${message}`);
-  }
-
-  // Public API
-  async sendMessage(content: string): Promise<void> {
-    await this.evem.publish('ws.send', {
-      type: 'message',
-      content,
-      timestamp: Date.now()
-    });
-  }
-
-  async getUserData(userId: string): Promise<any> {
-    try {
-      return await this.requestResponse.request('getUser', { userId }, {
-        timeout: 10000
-      });
-    } catch (error) {
-      console.error('Failed to get user data:', error);
-      throw error;
-    }
-  }
-
-  onMessage(callback: (message: any) => void): string {
-    return this.evem.subscribe('chat.message', callback);
-  }
-
-  onServerNotification(callback: (notification: any) => void): string {
-    return this.evem.subscribe('server.notification', callback);
-  }
-
-  getConnectionState(): string {
-    return this.connectionManager.getState();
-  }
-
-  isConnected(): boolean {
-    return this.connectionManager.isConnected();
-  }
-
-  getQueuedMessageCount(): number {
-    return this.messageQueue.getQueueSize();
-  }
-
-  disconnect(): void {
-    this.messageQueue.disable();
-    this.requestResponse.cleanup();
-
-    if (this.ws) {
-      this.ws.close(1000, 'Client disconnect');
-      this.ws = null;
-    }
-  }
-}
-
-// Usage in a browser application
-const client = new BrowserWebSocketClient('wss://api.example.com/ws');
-
-// Listen for messages
-client.onMessage((message) => {
-  const messagesDiv = document.getElementById('messages');
-  const messageEl = document.createElement('div');
-  messageEl.textContent = `${message.user}: ${message.content}`;
-  messagesDiv?.appendChild(messageEl);
-});
-
-// Send a message
-document.getElementById('send-button')?.addEventListener('click', async () => {
-  const input = document.getElementById('message-input') as HTMLInputElement;
-  await client.sendMessage(input.value);
-  input.value = '';
-});
-
-// Get user data
-async function loadUserProfile(userId: string) {
-  try {
-    const userData = await client.getUserData(userId);
-    console.log('User profile:', userData);
-  } catch (error) {
-    console.error('Failed to load user profile');
-  }
-}
-
-// Show connection status
-setInterval(() => {
-  const status = document.getElementById('status');
-  if (status) {
-    status.textContent = `Connected: ${client.isConnected()} | Queued: ${client.getQueuedMessageCount()}`;
-  }
-}, 1000);
-```
-
-### Node.js WebSocket Server Integration
-
-Example using the `ws` library on Node.js:
-
-```typescript
-import { WebSocketServer, WebSocket } from 'ws';
-import { EvEm } from '@jcfigueiredo/evem';
-import { ConnectionManager, MessageQueue, RequestResponseManager } from '@jcfigueiredo/evem/websocket';
-
-class NodeWebSocketClient {
-  private evem: EvEm;
-  private ws: WebSocket;
-  private connectionManager: ConnectionManager;
-  private messageQueue: MessageQueue;
-  private requestResponse: RequestResponseManager;
-
-  constructor(ws: WebSocket) {
-    this.ws = ws;
-    this.evem = new EvEm();
-    this.connectionManager = new ConnectionManager(this.evem);
-    this.messageQueue = new MessageQueue(this.evem, this.connectionManager);
-    this.requestResponse = new RequestResponseManager(this.evem);
-
-    // Enable queue
-    this.messageQueue.enable(100, { autoFlush: true });
-
-    this.setupHandlers();
-
-    // Connection is already open when passed to constructor
-    this.connectionManager.transitionTo('connected');
-  }
-
-  private setupHandlers(): void {
-    // Handle queued messages
-    this.evem.subscribe('ws.send.queued', (data) => {
-      if (this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify(data));
-      }
-    });
-
-    // Handle outgoing requests
-    this.evem.subscribe('ws.send.request', (request) => {
-      if (this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({
-          type: 'request',
-          ...request
-        }));
-      }
-    });
-
-    // WebSocket event handlers
-    this.ws.on('message', (data: Buffer) => {
-      try {
-        const message = JSON.parse(data.toString());
-        this.handleMessage(message);
-      } catch (error) {
-        console.error('Failed to parse message:', error);
-      }
-    });
-
-    this.ws.on('close', async () => {
-      await this.connectionManager.transitionTo('disconnected');
-      this.cleanup();
-    });
-
-    this.ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
-    });
-  }
-
-  private handleMessage(message: any): void {
-    // Handle RPC responses
-    if (message.type === 'response') {
-      if (message.error) {
-        this.evem.publish('ws.response.error', {
-          id: message.id,
-          error: message.error,
-          timestamp: Date.now()
-        });
-      } else {
-        this.evem.publish('ws.response', {
-          id: message.id,
-          result: message.result,
-          timestamp: Date.now()
-        });
-      }
-      return;
-    }
-
-    // Handle regular messages
-    if (message.type === 'message') {
-      this.evem.publish('client.message', message.data);
-    }
-  }
-
-  async sendMessage(data: any): Promise<void> {
-    await this.evem.publish('ws.send', {
-      type: 'message',
-      data,
-      timestamp: Date.now()
-    });
-  }
-
-  async request(method: string, params: any): Promise<any> {
-    return await this.requestResponse.request(method, params);
-  }
-
-  onMessage(callback: (data: any) => void): string {
-    return this.evem.subscribe('client.message', callback);
-  }
-
-  cleanup(): void {
-    this.messageQueue.disable();
-    this.requestResponse.cleanup();
-  }
-}
-
-// Server setup
-const wss = new WebSocketServer({ port: 8080 });
-
-wss.on('connection', (ws: WebSocket) => {
-  console.log('Client connected');
-
-  const client = new NodeWebSocketClient(ws);
-
-  // Handle incoming messages
-  client.onMessage((data) => {
-    console.log('Received message:', data);
-
-    // Broadcast to all clients
-    wss.clients.forEach((clientWs) => {
-      if (clientWs.readyState === WebSocket.OPEN) {
-        clientWs.send(JSON.stringify({
-          type: 'message',
-          data
-        }));
-      }
-    });
-  });
-
-  ws.on('close', () => {
-    console.log('Client disconnected');
-    client.cleanup();
-  });
-});
-
-console.log('WebSocket server running on ws://localhost:8080');
-```
-
-### React Integration Example
-
-Using the WebSocket adapter in a React application:
-
-```typescript
-import React, { useEffect, useState, useRef } from 'react';
-import { EvEm } from '@jcfigueiredo/evem';
-import { ConnectionManager, MessageQueue, RequestResponseManager } from '@jcfigueiredo/evem/websocket';
-
-interface Message {
-  id: string;
-  user: string;
-  content: string;
-  timestamp: number;
-}
-
-function useWebSocket(url: string) {
-  const [isConnected, setIsConnected] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [queuedCount, setQueuedCount] = useState(0);
-  const [connectionState, setConnectionState] = useState<string>('disconnected');
-
-  const evemRef = useRef<EvEm>();
-  const connectionManagerRef = useRef<ConnectionManager>();
-  const messageQueueRef = useRef<MessageQueue>();
-  const requestResponseRef = useRef<RequestResponseManager>();
-  const wsRef = useRef<WebSocket>();
-
-  useEffect(() => {
-    // Initialize EvEm and adapters
-    evemRef.current = new EvEm();
-    connectionManagerRef.current = new ConnectionManager(evemRef.current);
-    messageQueueRef.current = new MessageQueue(evemRef.current, connectionManagerRef.current);
-    requestResponseRef.current = new RequestResponseManager(evemRef.current);
-
-    // Enable message queue
-    messageQueueRef.current.enable(100, { autoFlush: true });
-
-    // Subscribe to connection state changes
-    evemRef.current.subscribe('ws.connection.state', (event: any) => {
-      setConnectionState(event.to);
-      setIsConnected(event.to === 'connected');
-    });
-
-    // Subscribe to messages
-    evemRef.current.subscribe('chat.message', (message: Message) => {
-      setMessages((prev) => [...prev, message]);
-    });
-
-    // Subscribe to queue size changes
-    const queueInterval = setInterval(() => {
-      if (messageQueueRef.current) {
-        setQueuedCount(messageQueueRef.current.getQueueSize());
-      }
-    }, 500);
-
-    // Handle queued messages
-    evemRef.current.subscribe('ws.send.queued', (data: any) => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify(data));
-      }
-    });
-
-    // Handle RPC requests
-    evemRef.current.subscribe('ws.send.request', (request: any) => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'request', ...request }));
-      }
-    });
-
-    // Connect WebSocket
-    wsRef.current = new WebSocket(url);
-
-    wsRef.current.onopen = () => {
-      connectionManagerRef.current?.transitionTo('connected');
-    };
-
-    wsRef.current.onclose = () => {
-      connectionManagerRef.current?.transitionTo('disconnected');
-    };
-
-    wsRef.current.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-
-        if (message.type === 'response') {
-          evemRef.current?.publish('ws.response', {
-            id: message.id,
-            result: message.result,
-            timestamp: Date.now()
-          });
-        } else if (message.type === 'message') {
-          evemRef.current?.publish('chat.message', message.data);
-        }
-      } catch (error) {
-        console.error('Failed to parse message:', error);
-      }
-    };
-
-    // Cleanup on unmount
-    return () => {
-      clearInterval(queueInterval);
-      messageQueueRef.current?.disable();
-      requestResponseRef.current?.cleanup();
-      wsRef.current?.close();
-    };
-  }, [url]);
-
-  const sendMessage = async (content: string) => {
-    await evemRef.current?.publish('ws.send', {
-      type: 'message',
-      content,
-      user: 'currentUser',
-      timestamp: Date.now()
-    });
-  };
-
-  const requestData = async (method: string, params: any) => {
-    return await requestResponseRef.current?.request(method, params);
-  };
-
-  return {
-    isConnected,
-    connectionState,
-    messages,
-    queuedCount,
-    sendMessage,
-    requestData
-  };
-}
-
-// Component using the hook
-function ChatApp() {
-  const { isConnected, connectionState, messages, queuedCount, sendMessage, requestData } =
-    useWebSocket('wss://chat.example.com');
-
-  const [inputValue, setInputValue] = useState('');
-
-  const handleSend = async () => {
-    if (inputValue.trim()) {
-      await sendMessage(inputValue);
-      setInputValue('');
+      void evem.publish(message.error ? 'ws.response.error' : 'ws.response', message);
+    } else if (message.event) {
+      void evem.publish(`server.${message.event}`, message.data);
     }
   };
-
-  const handleLoadHistory = async () => {
-    try {
-      const history = await requestData('getHistory', { limit: 50 });
-      console.log('History:', history);
-    } catch (error) {
-      console.error('Failed to load history:', error);
-    }
-  };
-
-  return (
-    <div className="chat-app">
-      <div className="status-bar">
-        <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
-          {connectionState}
-        </span>
-        {queuedCount > 0 && (
-          <span className="queue-indicator">
-            {queuedCount} messages queued
-          </span>
-        )}
-      </div>
-
-      <div className="messages">
-        {messages.map((msg) => (
-          <div key={msg.id} className="message">
-            <strong>{msg.user}:</strong> {msg.content}
-          </div>
-        ))}
-      </div>
-
-      <div className="input-area">
-        <input
-          type="text"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="Type a message..."
-          disabled={!isConnected && queuedCount >= 100}
-        />
-        <button onClick={handleSend}>Send</button>
-        <button onClick={handleLoadHistory}>Load History</button>
-      </div>
-    </div>
-  );
 }
 
-export default ChatApp;
-```
-
-### Real-World Use Cases
-
-#### 1. Collaborative Document Editor
-
-```typescript
-// Use all three components for a Google Docs-like application
-const evem = new EvEm();
-const connectionManager = new ConnectionManager(evem);
-const messageQueue = new MessageQueue(evem, connectionManager);
-const requestResponse = new RequestResponseManager(evem);
-
-messageQueue.enable(500, { autoFlush: true }); // Large queue for offline editing
-
-// Queue document edits while offline
-evem.subscribe('document.edit', (edit) => {
-  evem.publish('ws.send', {
-    type: 'edit',
-    documentId: currentDocId,
-    edit
-  });
-});
-
-// Request full document sync
-async function syncDocument() {
-  const document = await requestResponse.request('getDocument', {
-    documentId: currentDocId
-  });
-  applyDocument(document);
-}
-```
-
-#### 2. Real-Time Gaming
-
-```typescript
-// Use RequestResponseManager for game state, MessageQueue for player actions
-const evem = new EvEm();
-const connectionManager = new ConnectionManager(evem);
-const messageQueue = new MessageQueue(evem, connectionManager);
-const requestResponse = new RequestResponseManager(evem);
-
-messageQueue.enable(50, { autoFlush: false }); // Don't auto-flush old moves
-
-// Game actions are only valid in real-time
-evem.subscribe('game.move', (move) => {
-  if (connectionManager.isConnected()) {
-    evem.publish('ws.send', { type: 'move', move });
-  } else {
-    console.log('Cannot make move while disconnected');
+async function disconnect(): Promise<void> {
+  clearTimeout(reconnectTimer);
+  if (socket) {
+    socket.onclose = null; // a close we asked for must not schedule a reconnect
+    socket.close(1000);
+    socket = null;
   }
-});
-
-// Request game state on reconnection
-evem.subscribe('ws.connection.state', async (event) => {
-  if (event.to === 'connected') {
-    const gameState = await requestResponse.request('getGameState', {});
-    updateGameState(gameState);
-    messageQueue.clear(); // Clear old moves, they're no longer valid
-  }
-});
-```
-
-#### 3. IoT Device Monitoring
-
-```typescript
-// Use MessageQueue for sensor data, RequestResponseManager for device control
-const evem = new EvEm();
-const connectionManager = new ConnectionManager(evem);
-const messageQueue = new MessageQueue(evem, connectionManager);
-const requestResponse = new RequestResponseManager(evem);
-
-messageQueue.enable(1000, { autoFlush: true }); // Buffer lots of sensor readings
-
-// Queue sensor data while offline
-setInterval(() => {
-  const reading = readSensor();
-  evem.publish('ws.send', {
-    type: 'sensor-data',
-    deviceId: 'device-123',
-    reading
-  });
-}, 1000);
-
-// Control device with RPC
-async function setDeviceState(state: 'on' | 'off') {
-  try {
-    const result = await requestResponse.request('setDeviceState', {
-      deviceId: 'device-123',
-      state
-    }, { timeout: 5000 });
-    console.log('Device state changed:', result);
-  } catch (error) {
-    console.error('Failed to change device state:', error);
-  }
-}
-```
-
-#### 4. Live Dashboard with Metrics
-
-```typescript
-// Use ConnectionManager for status, RequestResponseManager for data queries
-const evem = new EvEm();
-const connectionManager = new ConnectionManager(evem);
-const requestResponse = new RequestResponseManager(evem);
-
-// Don't need MessageQueue - live data only, no offline support
-
-evem.subscribe('ws.connection.state', (event) => {
-  updateDashboardStatus(event.to);
-});
-
-// Fetch different metrics in parallel
-async function refreshDashboard() {
-  try {
-    const [metrics, alerts, logs] = await Promise.all([
-      requestResponse.request('getMetrics', { timeRange: '1h' }),
-      requestResponse.request('getAlerts', { severity: 'high' }),
-      requestResponse.request('getLogs', { limit: 100 })
-    ]);
-
-    updateMetricsDisplay(metrics);
-    updateAlertsDisplay(alerts);
-    updateLogsDisplay(logs);
-  } catch (error) {
-    console.error('Dashboard refresh failed:', error);
-  }
+  queue.disable();
+  rpc.cleanup(); // rejects pending requests
+  await connection.transitionTo('disconnected');
 }
 
-setInterval(refreshDashboard, 30000); // Refresh every 30 seconds
+connect('wss://api.example.com/ws');
+const user = await rpc.request('users.get', { id: 42 });
+console.log(user);
+await disconnect();
 ```
 
-## Type Definitions
+This wiring sends `ws.send` and requests only. Other `ws.send.*` names would be queued while offline but not sent while connected, because a subscriber doesn't see the event name. `WebSocketHandler` sends them from a middleware.
+
+## Types
+
+All of these are exported from `@jcfigueiredo/evem/websocket`:
 
 ```typescript
-type ConnectionState =
-  | 'disconnected'
-  | 'connecting'
-  | 'connected'
-  | 'reconnecting'
-  | 'disconnecting';
+type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'disconnecting';
 
 interface ConnectionStateChangeEvent {
   from: ConnectionState;
@@ -1478,73 +625,32 @@ interface RequestMessage {
 interface ResponseMessage {
   id: string;
   result?: any;
-  error?: {
-    code: number;
-    message: string;
-    data?: any;
-  };
+  error?: { code: number; message: string; data?: any };
   timestamp: number;
 }
 
-interface QueuedMessage {
-  event: string;
-  data: any;
-  timestamp: number;
+interface RequestOptions {
+  timeout?: number; // default 5000
+  id?: string;      // default: a random UUID
 }
 
-class RequestTimeoutError extends Error {
-  constructor(
-    public requestId: string,
-    public method: string,
-    public timeout: number
-  );
+declare class WebSocketError extends Error {
+  code: string;
+  originalError?: Error;
+}
+
+declare class RequestTimeoutError extends WebSocketError {
+  // code: 'REQUEST_TIMEOUT'
+  requestId: string;
+  method: string;
+  timeout: number;
 }
 ```
 
-## Testing
+There are also:
 
-The WebSocket adapter has comprehensive test coverage:
+- `IWebSocket`: the socket interface. It has `readyState`, the four state constants, an optional `url`, `send`, `close`, and the four `on*` handlers.
+- `WebSocketEvents`: the adapter's own event names mapped to their payload types. Server events (`server.*`) aren't included.
+- `WebSocketHandlerOptions`, `IncomingMessage`, `QueuedMessage`, `PendingRequest` and `MessageQueueOptions`.
 
-- **ConnectionManager**: 27 tests covering state machine, transitions, and EvEm integration
-- **MessageQueue**: 33 tests covering queueing, flushing, overflow, and lifecycle
-- **RequestResponseManager**: 18 tests covering request-response, timeouts, and concurrent requests
-
-Run WebSocket tests:
-
-```bash
-pnpm test:nowatch -- tests/websocket/
-```
-
-## Architecture Notes
-
-### Why Middleware Pattern?
-
-The MessageQueue uses middleware instead of subscriptions for several reasons:
-
-1. **Cleaner lifecycle**: Single cleanup point with `removeMiddleware()`
-2. **No double-triggering**: Subscriptions would fire twice for `ws.send` and `ws.send.*`
-3. **Side effects**: Middleware can queue synchronously while passing data through unchanged
-
-### Why Two Middleware Registrations?
-
-EvEm's wildcard matching doesn't match exact event names:
-- `ws.send.*` matches `ws.send.message` but NOT `ws.send`
-- `ws.send` matches only `ws.send` exactly
-
-Therefore, MessageQueue registers both to catch all variants.
-
-### Why Async State Transitions?
-
-EvEm's `publish()` method is async to support async middleware and handlers. ConnectionManager transitions must await the publish to ensure handlers complete before the next transition.
-
-## Future Enhancements
-
-Potential additions to the WebSocket adapter:
-
-- **WebSocketAdapter**: High-level class that composes all three components
-- **Reconnection Strategy**: Exponential backoff with jitter
-- **Circuit Breaker**: Prevent cascading failures
-- **Message Batching**: Batch multiple events for efficient transmission
-- **Event Persistence**: Save queue to localStorage/IndexedDB
-- **Metrics Collection**: Track message rates, latency, errors
-- **Compression**: LZ4/Brotli compression for large messages
+`ConnectionError`, `QueueOverflowError` and `WebSocketAdapterOptions` are exported too, but the adapter never throws or uses them.

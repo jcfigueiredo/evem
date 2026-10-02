@@ -1,665 +1,470 @@
-# Server-Side Event Subscriptions with WebSocket Adapter
+# Server Events
 
-This guide shows how to subscribe to server-side events through the WebSocket adapter using EvEm's powerful pattern matching.
+This guide covers messages sent from the server to the client. It explains how `WebSocketHandler` turns them into EvEm events, and how to subscribe to those events with wildcards, filters, priorities and transforms. Setup, options and the rest of the adapter are covered in the [WebSocket Adapter](websocket-adapter.md) guide.
 
-## Architecture Overview
+- [How messages are routed](#how-messages-are-routed)
+- [Subscribing](#subscribing)
+- [Filters, priorities, once and transforms](#filters-priorities-once-and-transforms)
+- [Example: chat client and server](#example-chat-client-and-server)
+- [Using with React](#using-with-react)
+- [Tips](#tips)
+
+## How messages are routed
 
 ```
-Server                    WebSocket                 EvEm                   Your Code
-  │                          │                       │                        │
-  ├─ send event ───────────► │                       │                        │
-  │  { event: "user.login",  │                       │                        │
-  │    data: {...} }         │                       │                        │
-  │                          ├─ publish ───────────► │                        │
-  │                          │  ('user.login', data) │                        │
-  │                          │                       ├─ route ──────────────► │
-  │                          │                       │  (matches 'user.*')    │
-  │                          │                       │                        ├─ handle event
+Server                                   WebSocketHandler                            Subscribers
+{"event":"user.login","data":{…}}  ──►   evem.publish('server.user.login', data)  ──►  'server.user.login'
+                                                                                       'server.user.*'
+                                                                                       'server.*'
 ```
 
-## Basic Example
+The handler parses each incoming message with `messageParser` (`JSON.parse` by default) and publishes it according to its fields:
+
+| Server sends | Published as | Subscribers receive |
+|--------------|--------------|---------------------|
+| `{"event":"user.login","data":{…}}` | `server.user.login` | `data` |
+| `{"event":"server.user.login","data":{…}}` | `server.user.login` (the prefix isn't added twice) | `data` |
+| `{"type":"user.login","data":{…}}` (legacy) | `server.user.login` (same rule as `event`) | `data` |
+| `{"type":"response","id":"…","result":…}` | `ws.response`: resolves `handler.request()` | — |
+| `{"type":"response","id":"…","error":{"code":404,"message":"…"}}` | `ws.response.error`: rejects `handler.request()` | — |
+| anything else, e.g. `{"ping":1}` | `ws.message` | the whole parsed message |
+| a message `messageParser` can't parse | `ws.parse.error` | `{ error, rawData }` |
+
+Some details of these rules:
+
+- `event` is checked before `type`. Use `event` for new servers; `type` is kept for older ones.
+- If `data` is missing, subscribers receive `{}`.
+- The prefix comes from the `serverEventPrefix` option (default `'server'`). It's added unless the name already starts with it.
+  - With `serverEventPrefix: 'api'`, `{"event":"user.login"}` is published as `api.user.login`.
+  - With `serverEventPrefix: ''`, events are published under their own names: `user.login`.
+- Response messages are only routed this way while `enableRequestResponse` is on (the default). Otherwise they go to `ws.message`.
+
+### Message format for servers
 
 ```typescript
-import { EvEm } from '@jcfigueiredo/evem';
-import { ConnectionManager } from '@jcfigueiredo/evem/websocket';
+// Server -> client
+type ServerMessage =
+  | { event: string; data?: unknown } // published as `${serverEventPrefix}.${event}` (prefix not doubled)
+  | { type: 'response'; id: string; result: unknown }
+  | { type: 'response'; id: string; error: { code: number; message: string; data?: unknown } };
 
-const evem = new EvEm();
-const connectionManager = new ConnectionManager(evem);
-
-// 1. Subscribe to server events using EvEm patterns
-evem.subscribe('server.user.login', (data) => {
-  console.log('User logged in:', data);
-});
-
-evem.subscribe('server.user.*', (data) => {
-  console.log('User event:', data);
-});
-
-evem.subscribe('server.notification.*', (data) => {
-  console.log('Notification:', data);
-});
-
-// 2. Setup WebSocket with server event routing
-const ws = new WebSocket('wss://api.example.com');
-
-ws.onmessage = (event) => {
-  const message = JSON.parse(event.data);
-
-  // Route server events to EvEm
-  if (message.event) {
-    evem.publish(message.event, message.data);
-  }
-};
-
-ws.onopen = () => {
-  connectionManager.transitionTo('connected');
-};
+// Client -> server, from handler.request()
+interface RequestFrame {
+  type: 'request';
+  id: string;
+  method: string;
+  params?: unknown;
+  timestamp: number;
+}
 ```
 
-### Server Message Format
+Everything else the client sends is the payload of a `ws.send` / `ws.send.*` event, exactly as published, so its shape is up to you. The examples below use `{ event, data }` in both directions.
 
-The server should send messages in this format:
+Some example server messages:
 
 ```json
-{
-  "event": "server.user.login",
-  "data": {
-    "userId": "123",
-    "username": "john_doe",
-    "timestamp": 1234567890
-  }
-}
+{"event":"user.login","data":{"userId":"123","username":"jane"}}
+{"event":"chat.message","data":{"roomId":"lobby","user":"jane","text":"Hello everyone!"}}
+{"event":"notification.info","data":{"title":"Maintenance","message":"Back in 5 minutes"}}
+{"type":"response","id":"4f1c…","result":[{"roomId":"lobby","user":"jane","text":"hi"}]}
 ```
 
-## Complete WebSocket Client with Server Events
+## Subscribing
 
 ```typescript
 import { EvEm } from '@jcfigueiredo/evem';
-import { ConnectionManager, MessageQueue, RequestResponseManager } from '@jcfigueiredo/evem/websocket';
+import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';
 
-class WebSocketClient {
-  private evem: EvEm;
-  private ws: WebSocket | null = null;
-  private connectionManager: ConnectionManager;
-  private messageQueue: MessageQueue;
-  private requestResponse: RequestResponseManager;
-
-  constructor(private url: string) {
-    this.evem = new EvEm();
-    this.connectionManager = new ConnectionManager(this.evem);
-    this.messageQueue = new MessageQueue(this.evem, this.connectionManager);
-    this.requestResponse = new RequestResponseManager(this.evem);
-
-    this.messageQueue.enable(100, { autoFlush: true });
-    this.setupHandlers();
-    this.connect();
-  }
-
-  private setupHandlers(): void {
-    // Handle outgoing queued messages
-    this.evem.subscribe('ws.send.queued', (data) => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify(data));
-      }
-    });
-
-    // Handle outgoing RPC requests
-    this.evem.subscribe('ws.send.request', (request) => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({
-          type: 'request',
-          ...request
-        }));
-      }
-    });
-  }
-
-  private connect(): void {
-    this.ws = new WebSocket(this.url);
-
-    this.ws.onopen = async () => {
-      await this.connectionManager.transitionTo('connected');
-    };
-
-    this.ws.onclose = async () => {
-      await this.connectionManager.transitionTo('disconnected');
-    };
-
-    this.ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        this.handleMessage(message);
-      } catch (error) {
-        console.error('Failed to parse message:', error);
-      }
-    };
-  }
-
-  private handleMessage(message: any): void {
-    // Handle RPC responses
-    if (message.type === 'response') {
-      if (message.error) {
-        this.evem.publish('ws.response.error', {
-          id: message.id,
-          error: message.error,
-          timestamp: Date.now()
-        });
-      } else {
-        this.evem.publish('ws.response', {
-          id: message.id,
-          result: message.result,
-          timestamp: Date.now()
-        });
-      }
-      return;
-    }
-
-    // Handle server-sent events
-    // This is the key part - route server events through EvEm!
-    if (message.event) {
-      this.evem.publish(message.event, message.data);
-      return;
-    }
-
-    // Legacy handling for messages without event field
-    if (message.type) {
-      this.evem.publish(`server.${message.type}`, message.data);
-    }
-  }
-
-  // Public API for subscribing to server events
-  onServerEvent(pattern: string, callback: (data: any) => void): string {
-    return this.evem.subscribe(pattern, callback);
-  }
-
-  // Convenience methods for common patterns
-  onUserEvent(callback: (data: any) => void): string {
-    return this.evem.subscribe('server.user.*', callback);
-  }
-
-  onNotification(callback: (data: any) => void): string {
-    return this.evem.subscribe('server.notification.*', callback);
-  }
-
-  onSystemEvent(callback: (data: any) => void): string {
-    return this.evem.subscribe('server.system.*', callback);
-  }
-
-  // Send message to server
-  async send(event: string, data: any): Promise<void> {
-    await this.evem.publish('ws.send', {
-      event,
-      data,
-      timestamp: Date.now()
-    });
-  }
-
-  // Make RPC request
-  async request(method: string, params: any): Promise<any> {
-    return await this.requestResponse.request(method, params);
-  }
-
-  off(subscriptionId: string): void {
-    this.evem.unsubscribeById(subscriptionId);
-  }
-
-  disconnect(): void {
-    this.messageQueue.disable();
-    this.requestResponse.cleanup();
-    this.ws?.close();
-  }
+interface UserEvent {
+  userId: string;
+  username: string;
 }
 
-// Usage
-const client = new WebSocketClient('wss://api.example.com');
+const evem = new EvEm();
+const handler = new WebSocketHandler('wss://api.example.com/ws', evem);
 
-// Subscribe to specific events
-client.onServerEvent('server.user.login', (data) => {
-  console.log('User logged in:', data.username);
-  updateUserUI(data);
+// One event
+evem.subscribe<UserEvent>('server.user.login', (user) => {
+  console.log(`${user.username} logged in`);
 });
 
-client.onServerEvent('server.user.logout', (data) => {
-  console.log('User logged out:', data.username);
-  clearUserUI();
+// Every user event: server.user.login, server.user.logout, server.user.profile.updated, ...
+evem.subscribe<UserEvent>('server.user.*', (user) => {
+  console.log('user event for', user.userId);
 });
 
-// Subscribe to wildcard patterns
-const subId = client.onUserEvent((data) => {
-  console.log('Any user event:', data);
-});
-
-// Subscribe to notifications
-client.onNotification((notification) => {
-  showToast(notification.message, notification.type);
-});
-
-// Subscribe to system events
-client.onSystemEvent((event) => {
-  console.log('System event:', event);
-});
-
-// Unsubscribe when needed
-client.off(subId);
-
-// Send events to server
-await client.send('client.action', { action: 'click', button: 'submit' });
-
-// Make RPC requests
-const userData = await client.request('getUser', { id: 123 });
-```
-
-## Advanced Patterns
-
-### 1. Namespace Organization
-
-Organize events by namespace:
-
-```typescript
-// Server sends:
-// - server.user.login
-// - server.user.logout
-// - server.user.updated
-// - server.chat.message
-// - server.chat.typing
-// - server.notification.info
-// - server.notification.error
-
-// Subscribe to all user events
-evem.subscribe('server.user.*', (data) => {
-  console.log('User event:', data);
-});
-
-// Subscribe to all chat events
-evem.subscribe('server.chat.*', (data) => {
-  console.log('Chat event:', data);
-});
-
-// Subscribe to all notifications
-evem.subscribe('server.notification.*', (data) => {
-  console.log('Notification:', data);
-});
-
-// Subscribe to ALL server events
+// Every server event
 evem.subscribe('server.*', (data) => {
-  console.log('Any server event:', data);
+  console.debug('server event', data);
 });
+
+// Anything that didn't match a route, and messages that couldn't be parsed
+evem.subscribe('ws.message', (message) => console.debug('unrouted message', message));
+evem.subscribe<{ error: unknown; rawData: unknown }>('ws.parse.error', ({ rawData }) => {
+  console.warn('could not parse', rawData);
+});
+
+// Later: removes the handler's own subscriptions, not these
+await handler.disconnect();
 ```
 
-### 2. Event Filtering
+Subscribers don't receive the event name, only the data. If one subscriber needs to tell events apart, include that information in `data`, or use separate subscriptions.
 
-Use EvEm's filter feature to filter server events:
+### Wildcard rules
 
-```typescript
-// Only handle high-priority notifications
-evem.subscribe('server.notification.*', (data) => {
-  console.log('High priority notification:', data);
-}, {
-  filter: (data) => data.priority === 'high'
-});
+| Pattern | Matches | Doesn't match |
+|---------|---------|---------------|
+| `server.user.*` | `server.user.login`, `server.user.profile.updated` | `server.user` |
+| `server.*.login` | `server.user.login`, `server.admin.login` | `server.user.sso.login` |
+| `server.*` | every `server.…` event | `server` |
+| `*` | every event | — |
 
-// Only handle messages from specific users
-evem.subscribe('server.chat.message', (data) => {
-  console.log('Message from admin:', data);
-}, {
-  filter: (data) => data.role === 'admin'
-});
+A trailing `*` matches one or more segments. A `*` anywhere else matches exactly one segment. **`x.*` never matches `x` itself.** If the server sends `chat.message`, a subscription to `server.chat.message.*` receives nothing; subscribe to `server.chat.message`.
 
-// Only handle events for current user
-evem.subscribe('server.user.*', (data) => {
-  console.log('My user event:', data);
-}, {
-  filter: (data) => data.userId === currentUserId
-});
-```
+## Filters, priorities, once and transforms
 
-### 3. Event Transformation
-
-Transform server events before handling:
+All of EvEm's subscription options work on server events:
 
 ```typescript
-// Transform server timestamps
-evem.subscribe('server.chat.message', (timestamp) => {
-  console.log('Message at:', new Date(timestamp));
-}, {
-  transform: (data) => data.timestamp
-});
+import { EvEm } from '@jcfigueiredo/evem';
 
-// Extract and transform notification data
-evem.subscribe('server.notification.*', (notification) => {
-  displayNotification(notification);
-}, {
-  transform: (data) => ({
-    title: data.title,
-    body: data.message,
-    type: data.severity || 'info'
-  })
-});
-```
-
-### 4. Priority-Based Handling
-
-Handle server events with priority:
-
-```typescript
-// High priority: Log events first
-evem.subscribe('server.user.login', (data) => {
-  console.log('Logging user login:', data);
-}, { priority: 'high' });
-
-// Normal priority: Update UI
-evem.subscribe('server.user.login', (data) => {
-  updateUserUI(data);
-}, { priority: 'normal' });
-
-// Low priority: Analytics
-evem.subscribe('server.user.login', (data) => {
-  trackAnalytics('user_login', data);
-}, { priority: 'low' });
-```
-
-### 5. Once-Only Events
-
-Handle server events only once:
-
-```typescript
-// Wait for server ready event
-evem.subscribe('server.system.ready', (data) => {
-  console.log('Server is ready:', data);
-  initializeApp();
-}, { once: true });
-
-// Wait for initial user data
-evem.subscribe('server.user.initial', (data) => {
-  console.log('Received initial user data:', data);
-  loadUserProfile(data);
-}, { once: true });
-```
-
-## React Integration
-
-```typescript
-import { useEffect, useState } from 'react';
-
-function useServerEvents(client: WebSocketClient) {
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [userEvents, setUserEvents] = useState<any[]>([]);
-
-  useEffect(() => {
-    // Subscribe to notifications
-    const notificationSub = client.onNotification((notification) => {
-      setNotifications((prev) => [...prev, notification]);
-    });
-
-    // Subscribe to user events
-    const userSub = client.onUserEvent((event) => {
-      setUserEvents((prev) => [...prev, event]);
-    });
-
-    // Cleanup subscriptions
-    return () => {
-      client.off(notificationSub);
-      client.off(userSub);
-    };
-  }, [client]);
-
-  return { notifications, userEvents };
+interface Notice {
+  title: string;
+  message: string;
+  priority?: 'low' | 'high';
 }
 
-// Usage in component
-function App() {
-  const client = useRef(new WebSocketClient('wss://api.example.com')).current;
-  const { notifications, userEvents } = useServerEvents(client);
+const evem = new EvEm();
+const currentUserId = '123';
+
+// Filter: only high-priority notices
+evem.subscribe<Notice>('server.notification.*', (notice) => {
+  console.log('Important:', notice.title);
+}, {
+  filter: (notice) => notice.priority === 'high',
+});
+
+// Filter on the payload, e.g. only events about the current user
+evem.subscribe<{ userId: string }>('server.user.*', (event) => {
+  console.log('about me:', event);
+}, {
+  filter: (event) => event.userId === currentUserId,
+});
+
+// Priority: 'high' runs before 'normal' (the default), which runs before 'low'.
+// Equal priorities run in the order they subscribed.
+evem.subscribe('server.user.login', (data) => console.log('audit', data), { priority: 'high' });
+evem.subscribe('server.user.login', (data) => console.log('update UI', data));
+evem.subscribe('server.user.login', (data) => console.log('analytics', data), { priority: 'low' });
+
+// Once: unsubscribes itself after the first matching event
+evem.subscribe('server.system.ready', () => {
+  console.log('server is ready');
+}, { once: true });
+```
+
+### Transforms
+
+A `transform` doesn't change what its own subscriber receives. It runs **after** its subscriber's callback, and its return value is passed on to the subscribers that run later in the same publish. Those are subscribers with a lower priority, or with the same priority that subscribed later, on any matching pattern.
+
+A transform doesn't run when its subscriber was skipped: rejected by a filter or schema, throttled or debounced, or a `once` subscriber that has already fired.
+
+```typescript
+import { EvEm } from '@jcfigueiredo/evem';
+
+interface ChatMessage {
+  roomId: string;
+  user: string;
+  text: string;
+}
+
+const evem = new EvEm();
+const auditLog: ChatMessage[] = [];
+
+// Runs first and records the original message; later subscribers get the redacted copy
+evem.subscribe<ChatMessage>('server.chat.message', (message) => {
+  auditLog.push(message);
+}, {
+  priority: 'high',
+  transform: (message) => ({ ...message, text: message.text.replace(/\d{12,19}/g, '[redacted]') }),
+});
+
+// Normal priority: receives the redacted message
+evem.subscribe<ChatMessage>('server.chat.message', (message) => {
+  console.log(`${message.user}: ${message.text}`);
+});
+```
+
+To change what **every** subscriber of an event receives, use middleware instead. Middleware runs before any subscriber:
+
+```typescript
+import { EvEm } from '@jcfigueiredo/evem';
+
+interface RawNotice {
+  title: string;
+  message: string;
+  severity?: 'info' | 'warning' | 'error';
+}
+
+const evem = new EvEm();
+
+// Every server.notification.* subscriber receives { title, body, level }
+evem.use({
+  pattern: 'server.notification.*',
+  handler: (_event, data) => {
+    const raw = data as RawNotice;
+    return { title: raw.title, body: raw.message, level: raw.severity ?? 'info' };
+  },
+});
+```
+
+Middleware results work like this:
+
+- `null` cancels the event.
+- A new object with exactly two properties, `event` and `data`, reroutes the event to that name.
+- Any other result replaces the data.
+
+## Example: chat client and server
+
+The server below uses the [`ws`](https://www.npmjs.com/package/ws) package. It sends `{ event, data }` messages and answers `handler.request()` calls with `{ type: 'response' }` messages:
+
+```typescript
+// server.ts (Node.js)
+import { WebSocket, WebSocketServer } from 'ws';
+
+interface ChatMessage {
+  roomId: string;
+  user: string;
+  text: string;
+}
+
+// What the client sends: ws.send payloads ({ event, data }) and handler.request() calls
+interface ClientFrame {
+  type?: 'request';
+  id?: string;
+  method?: string;
+  params?: { roomId?: string; limit?: number };
+  event?: string;
+  data?: { roomId: string; text: string };
+}
+
+const history: ChatMessage[] = [];
+const wss = new WebSocketServer({ port: 8080 });
+
+// The client publishes this as `server.${event}`
+function broadcast(event: string, data: unknown): void {
+  const frame = JSON.stringify({ event, data });
+  for (const client of wss.clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(frame);
+    }
+  }
+}
+
+wss.on('connection', (socket) => {
+  const user = `guest-${Math.floor(Math.random() * 1000)}`;
+  socket.send(JSON.stringify({ event: 'system.ready', data: { user } }));
+  broadcast('user.joined', { user });
+
+  socket.on('message', (raw) => {
+    let frame: ClientFrame;
+    try {
+      frame = JSON.parse(raw.toString());
+    } catch {
+      return; // not JSON
+    }
+
+    // handler.request('chat.history', { roomId, limit })
+    if (frame.type === 'request') {
+      if (frame.method === 'chat.history') {
+        const { roomId, limit = 50 } = frame.params ?? {};
+        const result = history.filter((m) => m.roomId === roomId).slice(-limit);
+        socket.send(JSON.stringify({ type: 'response', id: frame.id, result }));
+      } else {
+        const error = { code: 404, message: `Unknown method: ${frame.method}` };
+        socket.send(JSON.stringify({ type: 'response', id: frame.id, error }));
+      }
+      return;
+    }
+
+    // evem.publish('ws.send', { event: 'chat.send', data: { roomId, text } })
+    if (frame.event === 'chat.send' && frame.data) {
+      const message: ChatMessage = { roomId: frame.data.roomId, user, text: frame.data.text };
+      history.push(message);
+      broadcast('chat.message', message);
+    }
+  });
+
+  socket.on('close', () => broadcast('user.left', { user }));
+});
+```
+
+The client below works in browsers and in Node.js 22+. For Node.js 20, see [Node.js](websocket-adapter.md#nodejs).
+
+```typescript
+// client.ts
+import { EvEm } from '@jcfigueiredo/evem';
+import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';
+
+interface ChatMessage {
+  roomId: string;
+  user: string;
+  text: string;
+}
+
+const evem = new EvEm();
+const handler = new WebSocketHandler('ws://localhost:8080', evem, { reconnect: true });
+
+// The server sends 'chat.message' for every room, so filter by room.
+// (Subscribing to `server.chat.message.${roomId}` would never fire: the server doesn't put the
+// room in the event name, and 'server.chat.message.*' doesn't match 'server.chat.message'.)
+function onRoomMessage(roomId: string, callback: (message: ChatMessage) => void): string {
+  return evem.subscribe<ChatMessage>('server.chat.message', callback, {
+    filter: (message) => message.roomId === roomId,
+  });
+}
+
+function sendMessage(roomId: string, text: string): Promise<boolean> {
+  return evem.publish('ws.send', { event: 'chat.send', data: { roomId, text } });
+}
+
+evem.subscribe<{ user: string }>('server.system.ready', ({ user }) => {
+  console.log(`connected as ${user}`);
+}, { once: true });
+
+evem.subscribe<{ user: string }>('server.user.*', ({ user }) => {
+  console.log(`presence: ${user}`); // user.joined and user.left
+});
+
+const lobby = onRoomMessage('lobby', (message) => {
+  console.log(`[lobby] ${message.user}: ${message.text}`);
+});
+
+const earlier = await handler.request<ChatMessage[]>('chat.history', { roomId: 'lobby', limit: 20 });
+console.log(`${earlier.length} earlier messages`);
+
+await sendMessage('lobby', 'Hello everyone!');
+
+// Later
+evem.unsubscribeById(lobby);
+await handler.disconnect();
+```
+
+## Using with React
+
+Create the handler once, in an effect at the top of the app, and disconnect it when that component unmounts. Components subscribe to the shared emitter in their own effects and unsubscribe in the cleanup.
+
+```tsx
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { EvEm } from '@jcfigueiredo/evem';
+import { WebSocketHandler, type ConnectionStateChangeEvent } from '@jcfigueiredo/evem/websocket';
+
+// One emitter for the app, and one WebSocketHandler for it
+export const evem = new EvEm();
+const HandlerContext = createContext<WebSocketHandler | null>(null);
+
+export function WebSocketProvider({ url, children }: { url: string; children: ReactNode }) {
+  const [handler, setHandler] = useState<WebSocketHandler | null>(null);
 
   useEffect(() => {
-    // Subscribe to specific events
-    const loginSub = client.onServerEvent('server.user.login', (data) => {
-      console.log('User logged in:', data);
-    });
-
+    const created = new WebSocketHandler(url, evem, { reconnect: true });
+    setHandler(created);
     return () => {
-      client.off(loginSub);
-      client.disconnect();
+      void created.disconnect();
     };
-  }, []);
+  }, [url]);
+
+  return <HandlerContext.Provider value={handler}>{children}</HandlerContext.Provider>;
+}
+
+/** The handler, for request(); null until the provider's effect has run */
+export function useWebSocketHandler(): WebSocketHandler | null {
+  return useContext(HandlerContext);
+}
+
+/** Subscribe to an EvEm event (e.g. 'server.chat.message') while the component is mounted */
+export function useEvent<T>(pattern: string, onEvent: (data: T) => void): void {
+  const latest = useRef(onEvent);
+  useEffect(() => {
+    latest.current = onEvent;
+  });
+
+  useEffect(() => {
+    const id = evem.subscribe<T>(pattern, (data) => latest.current(data));
+    return () => evem.unsubscribeById(id);
+  }, [pattern]);
+}
+
+interface ChatMessage {
+  roomId: string;
+  user: string;
+  text: string;
+}
+
+function Chat({ roomId }: { roomId: string }) {
+  const handler = useWebSocketHandler();
+  const [state, setState] = useState('disconnected');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [text, setText] = useState('');
+
+  useEvent<ConnectionStateChangeEvent>('ws.connection.state', ({ to }) => setState(to));
+  useEvent<ChatMessage>('server.chat.message', (message) => {
+    if (message.roomId === roomId) {
+      setMessages((previous) => [...previous, message]);
+    }
+  });
+
+  useEffect(() => {
+    if (!handler) return;
+    let current = true;
+    handler
+      .request<ChatMessage[]>('chat.history', { roomId, limit: 50 })
+      .then((history) => {
+        if (current) setMessages((live) => [...history, ...live]);
+      })
+      .catch((error: unknown) => console.error('Could not load history', error));
+    return () => {
+      current = false;
+    };
+  }, [handler, roomId]);
+
+  const send = () => {
+    void evem.publish('ws.send', { event: 'chat.send', data: { roomId, text } });
+    setText('');
+  };
 
   return (
     <div>
-      <h2>Notifications</h2>
-      {notifications.map((n, i) => (
-        <div key={i}>{n.message}</div>
-      ))}
-
-      <h2>User Events</h2>
-      {userEvents.map((e, i) => (
-        <div key={i}>{JSON.stringify(e)}</div>
-      ))}
+      <p>Connection: {state}</p>
+      <ul>
+        {messages.map((message, index) => (
+          <li key={index}>
+            <strong>{message.user}:</strong> {message.text}
+          </li>
+        ))}
+      </ul>
+      <input value={text} onChange={(event) => setText(event.target.value)} />
+      <button onClick={send}>Send</button>
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <WebSocketProvider url="ws://localhost:8080">
+      <Chat roomId="lobby" />
+    </WebSocketProvider>
   );
 }
 ```
 
-## Server Message Format Conventions
+In development, React's Strict Mode runs effects twice. The provider then creates a handler, disconnects it, and creates another one. This is expected, and the cleanup above handles it.
 
-### Recommended Format
+## Tips
 
-```typescript
-interface ServerMessage {
-  event: string;      // Event name (e.g., "server.user.login")
-  data: any;          // Event payload
-  timestamp?: number; // Optional server timestamp
-  id?: string;        // Optional message ID
-}
-```
-
-### Examples
-
-```json
-// User login event
-{
-  "event": "server.user.login",
-  "data": {
-    "userId": "123",
-    "username": "john_doe",
-    "email": "john@example.com"
-  },
-  "timestamp": 1234567890
-}
-
-// Chat message event
-{
-  "event": "server.chat.message",
-  "data": {
-    "messageId": "msg-456",
-    "roomId": "room-789",
-    "userId": "123",
-    "username": "john_doe",
-    "text": "Hello everyone!",
-    "timestamp": 1234567890
-  }
-}
-
-// Notification event
-{
-  "event": "server.notification.info",
-  "data": {
-    "title": "System Update",
-    "message": "The system will be updated in 5 minutes",
-    "priority": "high"
-  }
-}
-
-// User typing indicator
-{
-  "event": "server.chat.typing",
-  "data": {
-    "userId": "456",
-    "roomId": "room-789",
-    "isTyping": true
-  }
-}
-```
-
-## Complete Real-World Example: Chat Application
-
-```typescript
-import { EvEm } from '@jcfigueiredo/evem';
-import { ConnectionManager, MessageQueue } from '@jcfigueiredo/evem/websocket';
-
-class ChatClient {
-  private evem: EvEm;
-  private ws: WebSocket;
-  private connectionManager: ConnectionManager;
-  private messageQueue: MessageQueue;
-
-  constructor(url: string) {
-    this.evem = new EvEm();
-    this.connectionManager = new ConnectionManager(this.evem);
-    this.messageQueue = new MessageQueue(this.evem, this.connectionManager);
-
-    this.messageQueue.enable(100, { autoFlush: true });
-    this.setupHandlers();
-    this.connect(url);
-  }
-
-  private setupHandlers(): void {
-    // Handle outgoing messages
-    this.evem.subscribe('ws.send.queued', (data) => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify(data));
-      }
-    });
-  }
-
-  private connect(url: string): void {
-    this.ws = new WebSocket(url);
-
-    this.ws.onopen = async () => {
-      await this.connectionManager.transitionTo('connected');
-    };
-
-    this.ws.onclose = async () => {
-      await this.connectionManager.transitionTo('disconnected');
-    };
-
-    this.ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-
-      // Route all server events through EvEm
-      if (message.event) {
-        this.evem.publish(message.event, message.data);
-      }
-    };
-  }
-
-  // Subscribe to chat messages in a specific room
-  onRoomMessage(roomId: string, callback: (data: any) => void): string {
-    return this.evem.subscribe(`server.chat.message.${roomId}`, callback);
-  }
-
-  // Subscribe to all chat messages
-  onAnyMessage(callback: (data: any) => void): string {
-    return this.evem.subscribe('server.chat.message.*', callback);
-  }
-
-  // Subscribe to typing indicators
-  onTyping(callback: (data: any) => void): string {
-    return this.evem.subscribe('server.chat.typing.*', callback);
-  }
-
-  // Subscribe to user presence
-  onUserPresence(callback: (data: any) => void): string {
-    return this.evem.subscribe('server.user.presence.*', callback);
-  }
-
-  // Subscribe to notifications
-  onNotification(callback: (data: any) => void): string {
-    return this.evem.subscribe('server.notification.*', callback);
-  }
-
-  // Send a message
-  async sendMessage(roomId: string, text: string): Promise<void> {
-    await this.evem.publish('ws.send', {
-      event: 'client.chat.send',
-      data: { roomId, text }
-    });
-  }
-
-  // Send typing indicator
-  async sendTyping(roomId: string, isTyping: boolean): Promise<void> {
-    await this.evem.publish('ws.send', {
-      event: 'client.chat.typing',
-      data: { roomId, isTyping }
-    });
-  }
-
-  off(subscriptionId: string): void {
-    this.evem.unsubscribeById(subscriptionId);
-  }
-
-  disconnect(): void {
-    this.messageQueue.disable();
-    this.ws?.close();
-  }
-}
-
-// Usage
-const chat = new ChatClient('wss://chat.example.com');
-
-// Subscribe to messages in specific room
-const roomSub = chat.onRoomMessage('room-123', (data) => {
-  console.log(`${data.username}: ${data.text}`);
-  appendMessageToUI(data);
-});
-
-// Subscribe to all messages (for notifications)
-chat.onAnyMessage((data) => {
-  updateUnreadCount(data.roomId);
-});
-
-// Subscribe to typing indicators
-chat.onTyping((data) => {
-  if (data.isTyping) {
-    showTypingIndicator(data.userId);
-  } else {
-    hideTypingIndicator(data.userId);
-  }
-});
-
-// Subscribe to user presence
-chat.onUserPresence((data) => {
-  updateUserStatus(data.userId, data.status);
-});
-
-// Subscribe to notifications
-chat.onNotification((notification) => {
-  showToast(notification.message);
-});
-
-// Send messages
-await chat.sendMessage('room-123', 'Hello everyone!');
-
-// Send typing indicator
-await chat.sendTyping('room-123', true);
-```
-
-## Key Benefits
-
-1. **Automatic Routing**: Server events are automatically routed to subscribers
-2. **Pattern Matching**: Use wildcards to subscribe to multiple events
-3. **Filtering**: Filter events based on data properties
-4. **Transformation**: Transform event data before handling
-5. **Priority**: Control execution order with priorities
-6. **Once**: Handle events only once with `once` option
-7. **Type Safety**: Strong typing with TypeScript
-8. **Decoupling**: Clean separation between WebSocket and application logic
-
-## Best Practices
-
-1. **Namespace your events**: Use clear namespaces like `server.user.*`, `server.chat.*`
-2. **Consistent format**: Use the same message format across all server events
-3. **Include metadata**: Add timestamps, IDs, etc. to messages
-4. **Handle errors**: Always handle parse errors in `onmessage`
-5. **Cleanup subscriptions**: Unsubscribe when components unmount
-6. **Use filters**: Filter at the subscription level for better performance
-7. **Document events**: Keep a registry of all server event types
+- **Namespace server events** (`user.*`, `chat.*`, `notification.*`) so wildcards stay useful.
+- **Put routing data in the payload** (a room id, a user id), and filter on it. Patterns only match event names.
+- **Type your payloads** with `subscribe<T>()`. If the server's data can't be trusted, validate it with the `schema` option.
+- **Unsubscribe** (`evem.unsubscribeById(id)`) when a view goes away. `handler.disconnect()` removes only the handler's own subscriptions, not yours.
+- **Expect overlapping async subscribers.** Incoming messages are published as they arrive. A slow `async` subscriber can still be handling one message when the next one arrives.
+- **Watch `ws.parse.error` and `ws.message`** during development. They show messages that didn't match any route.
