@@ -25,7 +25,7 @@ From an up-to-date `main` with no uncommitted changes, `pnpm release <version>`:
 1. checks that the tag `v<version>` doesn't exist yet, that the version isn't lower than the one in `package.json`, and that `CHANGELOG.md` has a non-empty unreleased section for it;
 2. shows the plan and the release notes, and asks for confirmation (`--yes` skips it);
 3. dates the changelog section (`## 0.3.1 (2026-10-02)`) and sets `version` in `package.json`;
-4. runs `pnpm check` (type check, tests and package check);
+4. runs `pnpm check` (format check, type check, tests and package check);
 5. commits `Release v<version>` and pushes it to `main`;
 6. creates the GitHub release `v<version>` on that commit, with the changelog section as its notes.
 

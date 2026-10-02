@@ -1,0 +1,6 @@
+# Commits that git blame skips: formatting-only changes.
+# GitHub reads this file automatically; locally, run once:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Format src/, tests/ and scripts/ with Prettier
+f7dbcbcebdbb06c5593d63d9557e718162019eda
