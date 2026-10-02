@@ -1,6 +1,6 @@
 # SSE Adapter Design
 
-> **Status: approved, phase 1 in progress.** This document describes the Server-Sent Events (SSE) adapter for EvEm. The decisions marked **(decision)** were agreed as recommended; see [Decisions](#decisions). Once implemented, user documentation lives in [sse-adapter.md](sse-adapter.md).
+> **Status: phase 1 implemented in 0.3.0.** This document describes the Server-Sent Events (SSE) adapter for EvEm. The decisions marked **(decision)** were agreed as recommended; see [Decisions](#decisions). The user documentation is in [sse-adapter.md](sse-adapter.md).
 
 ## Summary
 

@@ -1,13 +1,13 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.3.0 (unreleased)
 
-First release published to npm, as `@jcfigueiredo/evem`.
+First release published to npm, as `@jcfigueiredo/evem`. Version 0.2.0 was never published; its changes are included here. Behavior changes are relative to 0.1.0, the previous version in this repository.
 
 ### Packaging
 
 - Published as an ES module with TypeScript declarations, built from `src/` into `dist/`.
-- Two entry points: `@jcfigueiredo/evem` (core) and `@jcfigueiredo/evem/websocket` (WebSocket adapter).
+- Four entry points: `@jcfigueiredo/evem` (core), `@jcfigueiredo/evem/websocket` (WebSocket adapter), `@jcfigueiredo/evem/sse` (Server-Sent Events client) and `@jcfigueiredo/evem/sse/server` (helpers for SSE servers, without the client).
 - No runtime dependencies: `uuid` was replaced by the built-in Web Crypto API (`crypto.randomUUID()`, falling back to `crypto.getRandomValues()` on plain-HTTP pages, where browsers don't provide `randomUUID`). Requires Node.js 20+ or a modern browser.
 - `EventRecord` and `MemoryLeakOptions` are now exported.
 
@@ -30,9 +30,20 @@ First release published to npm, as `@jcfigueiredo/evem`.
 - **`ws.send.request` payloads** include `type: 'request'` when a `WebSocketHandler` is attached, so requests queued while offline are sent in request format.
 - **`ws.send.*` events** (e.g. `ws.send.chat`) are sent by `WebSocketHandler` while connected, like `ws.send`; before, they were only sent after being queued offline. If you forwarded them to the socket yourself, remove that code.
 - **`RequestResponseManager.request()`** rejects immediately if a request with the same custom id is still pending.
+- **Incoming WebSocket messages whose `event` or `type` isn't a non-empty string** (e.g. `{"event": 42}`) go to `ws.message`. Before, a non-string `event` was published as `ws.parse.error`, and a non-string `type` as `server.<value>`.
 
 ### Added
 
+- **Server-Sent Events adapter** (`@jcfigueiredo/evem/sse`, see `docs/sse-adapter.md`):
+  - `SseHandler` connects to an SSE endpoint and publishes server events as `server.<name>`, routed by the same code as `WebSocketHandler` (named events, `{ event, data }` envelopes and the legacy `{ type, data }`). It also publishes `sse.connection.state`, `sse.message`, `sse.error`, `sse.parse.error`, `sse.reconnect.failed`, and `sse.event` with `rawEvents`.
+  - Reconnection by default, with exponential backoff and jitter, the server's `retry:`, `Retry-After`, and per-status defaults (stop on `204` and most `4xx`, retry on `408`, `429`, `5xx` and network errors) that `shouldReconnect` can override. Resuming with `Last-Event-ID`, an optional heartbeat timeout, and `sequential` handling with backpressure.
+  - Headers (an object, or a function called before every attempt), `method` and `body`, so streams can use token auth and POST.
+  - Transports: `FetchSseTransport` (the default; browsers and Node.js 20+), `EventSourceSseTransport` (the native `EventSource`), or your own `SseTransport`.
+  - `SseParser`, a spec-compliant `text/event-stream` parser with no I/O, and `SseEvents`, which maps the adapter's events to their payload types.
+- **SSE server helpers** (`@jcfigueiredo/evem/sse/server`): `formatSseMessage` (JSON data by default, `raw` and `envelope` options, and validation that rules out forged or corrupt events), `formatSseComment` for heartbeats, and `SSE_HEADERS`.
+- **Python reference helper**: `examples/python/evem_sse.py`, a standard-library-only module to copy into Python servers, which writes the same output as `formatSseMessage`. `docs/sse-python.md` has standard-library, FastAPI and Flask examples. When `python3` is installed, the tests check the helper against `SseParser` and connect `SseHandler` to a Python server.
+- **SSE demo page**: `demo/examples/sse-demo.html`.
+- `ConnectionManager` takes a `stateEvent` option (default `'ws.connection.state'`), so both adapters can use it. It's also exported from `@jcfigueiredo/evem/sse`; imports from `@jcfigueiredo/evem/websocket` are unchanged.
 - `WebSocketHandler.request(method, params?, options?)` for request-response calls through the handler.
 - `WebSocketHandler.flush()` to send queued messages on demand (needed with `autoFlush: false`).
 - `WebSocketHandler` reconnection: the `reconnect`, `reconnectDelay` and `maxReconnectAttempts` options now work (they were accepted but ignored), with a `ws.reconnect.failed` event after the last attempt and a `WebSocketConstructor` option.

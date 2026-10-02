@@ -31,6 +31,8 @@ Use **`WebSocketHandler`**. It covers the whole connection:
 
 Server-to-client routing is covered in more depth in [Server Events](websocket-server-events.md), which also includes a matching Node.js server and a React example.
 
+The [Server-Sent Events adapter](sse-adapter.md) routes incoming messages with the same rules, so a server's `{ "event": …, "data": … }` messages become the same `server.*` events over either connection.
+
 ## Installation
 
 ```bash

@@ -1,6 +1,6 @@
 # EvEm - Simple Event Emitter Library 📢
 
-EvEm is a lightweight and flexible event emitter library for TypeScript, providing a simple yet powerful pub/sub system. It handles both synchronous and asynchronous callbacks, and adds wildcards, priorities, middleware, filters, throttling, debouncing, schema validation and event history on top. An optional WebSocket adapter connects it to a server.
+EvEm is a lightweight and flexible event emitter library for TypeScript, providing a simple yet powerful pub/sub system. It handles both synchronous and asynchronous callbacks, and adds wildcards, priorities, middleware, filters, throttling, debouncing, schema validation and event history on top. Optional adapters connect it to a server over WebSocket or Server-Sent Events.
 
 ## Features
 
@@ -30,6 +30,7 @@ EvEm is a lightweight and flexible event emitter library for TypeScript, providi
 - **🔍 Debugging Support**: Inspect subscriptions and middleware with `info()`.
 - **🛠️ Error Handling**: Empty event names throw (`subscribe`, `unsubscribe`) or reject (`publish`). Errors in callbacks are handled by the error policy.
 - **🔌 WebSocket Adapter**: An optional entry point that connects EvEm to a WebSocket server, with offline queueing, reconnection and request-response calls.
+- **📡 Server-Sent Events Adapter**: An optional entry point that receives a server's event stream as EvEm events, with auth headers, reconnection with backoff and resuming with `Last-Event-ID`, plus helpers that write the stream format on JavaScript and Python servers.
 
 ## Getting on Board
 
@@ -45,11 +46,13 @@ npm install @jcfigueiredo/evem
 yarn add @jcfigueiredo/evem
 ```
 
-The core lives in the main entry point and the optional WebSocket adapter in its own:
+The core lives in the main entry point, and each optional adapter in its own:
 
 ```typescript
 import { EvEm } from '@jcfigueiredo/evem';
 import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';
+import { SseHandler } from '@jcfigueiredo/evem/sse';
+import { formatSseMessage, SSE_HEADERS } from '@jcfigueiredo/evem/sse/server'; // for servers
 ```
 
 ## Quick Start
@@ -1460,6 +1463,52 @@ const handler = new WebSocketHandler('wss://api.example.com', evem, {
 
 The building blocks (`ConnectionManager`, `MessageQueue` and `RequestResponseManager`) are exported too, for wiring a socket yourself. See the [WebSocket Adapter documentation](docs/websocket-adapter.md) for message formats, the full event reference and more examples.
 
+## Server-Sent Events Adapter (Optional Extension)
+
+The `@jcfigueiredo/evem/sse` entry point receives a server's event stream ([Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)) into an EvEm instance. `SseHandler` publishes server events under the same `server.*` names as the WebSocket adapter. It connects with `fetch` by default, so it can send auth headers and works in Node.js 20+. It reconnects with exponential backoff, and resumes with `Last-Event-ID` so the server can replay what was missed.
+
+```typescript
+import { EvEm } from '@jcfigueiredo/evem';
+import { SseHandler } from '@jcfigueiredo/evem/sse';
+
+const evem = new EvEm();
+const sse = new SseHandler('/api/events', evem, {
+  // Called before every connection attempt, so reconnects send the current token
+  headers: () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` }),
+});
+
+// `event: order.updated` + `data: {"id":7}`, or an unnamed {"event":"order.updated","data":{...}},
+// is published as 'server.order.updated'
+evem.subscribe<{ id: number }>('server.order.updated', (order) => {
+  console.log('Order updated:', order.id);
+});
+
+evem.subscribe<{ to: string }>('sse.connection.state', ({ to }) => {
+  console.log('Stream:', to); // connecting, connected, reconnecting, disconnecting, disconnected
+});
+
+// Abort the stream and cancel any pending reconnect
+await sse.disconnect();
+```
+
+**What it publishes:** `sse.connection.state` with `{ from, to, timestamp }`; server events as `server.<name>`; other unnamed messages as `sse.message`; data that isn't valid JSON as `sse.parse.error`; connection problems as `sse.error` with `{ error, reason, status?, contentType? }`; and `sse.reconnect.failed` if you set `maxReconnectAttempts` and it's reached. By default the handler stops on `204`, on a response that isn't an event stream, and on `4xx` statuses other than `408` and `429`. Otherwise it reconnects after about 3 seconds (or the server's `retry:` delay), doubling the delay after each failed attempt up to 30 seconds.
+
+**Servers:** `@jcfigueiredo/evem/sse/server` writes the wire format safely (no forged events from user content) and has the right response headers:
+
+```typescript
+import { createServer } from 'node:http';
+import { formatSseComment, formatSseMessage, SSE_HEADERS } from '@jcfigueiredo/evem/sse/server';
+
+createServer((request, response) => {
+  response.writeHead(200, SSE_HEADERS);
+  response.write(formatSseMessage({ event: 'order.updated', id: 42, data: { id: 7, status: 'shipped' } }));
+  const heartbeat = setInterval(() => response.write(formatSseComment('ping')), 15_000);
+  response.on('close', () => clearInterval(heartbeat));
+}).listen(8080);
+```
+
+For Python servers (FastAPI, Flask or the standard library), see [SSE servers in Python](docs/sse-python.md), with a copy-in helper that writes the same format. The [SSE Adapter documentation](docs/sse-adapter.md) covers the options, the two transports (`fetch`, or the browser's native `EventSource`), reconnection, resuming, heartbeats, backpressure and testing.
+
 ## API at Your Fingertips
 
 - `new EvEm(maxRecursionDepth = 3)`: Create an emitter; `maxRecursionDepth` limits how deeply an event can re-publish itself from its own handlers
@@ -1508,6 +1557,19 @@ The package also exports the `Priority` and `ErrorPolicy` enums and the types `C
 - `request<T = any>(method: string, params?: any, options?: { timeout?: number; id?: string }): Promise<T>`
 - `isConnected(): boolean`, `getConnectionState(): string`, `getQueueSize(): number`
 - `disconnect(): Promise<void>`
+
+`SseHandler` (from `@jcfigueiredo/evem/sse`):
+
+- `new SseHandler(url: string, evem: EvEm, options?: SseHandlerOptions)`: connects right away unless `autoConnect: false`
+- `connect(): void`: start connecting (with `autoConnect: false`, or after `disconnect()` or a stop)
+- `disconnect(): Promise<void>`
+- `isConnected(): boolean`, `getConnectionState(): ConnectionState`, `getLastEventId(): string | undefined`
+
+Server helpers (from `@jcfigueiredo/evem/sse/server`):
+
+- `formatSseMessage(message: { event?, data?, id?, retry? }, options?: { raw?: boolean; envelope?: boolean }): string`
+- `formatSseComment(text?: string): string`
+- `SSE_HEADERS`: the response headers for an event stream
 
 ## Join the Party - Contribute!
 
