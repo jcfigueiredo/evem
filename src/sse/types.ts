@@ -66,6 +66,12 @@ export interface SseTransport {
 /** Request headers, or a function called before every connection attempt (e.g. to refresh a token) */
 export type SseHeaders = Record<string, string> | (() => Record<string, string> | Promise<Record<string, string>>);
 
+/**
+ * The part of `fetch` the fetch transport calls: the global `fetch` and its replacements fit it.
+ * (Not `typeof fetch`, which some DOM and Node.js type combinations overload incompatibly.)
+ */
+export type SseFetch = (url: string, init: RequestInit) => Promise<Response>;
+
 /** Request body, or a function called before every connection attempt */
 export type SseBody = BodyInit | (() => BodyInit | Promise<BodyInit>);
 

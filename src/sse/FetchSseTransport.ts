@@ -1,9 +1,9 @@
 import { SseParser, type SseParsedEvent } from './SseParser.js';
-import type { SseBody, SseCloseInfo, SseConnectRequest, SseHeaders, SseTransport, SseTransportListener } from './types.js';
+import type { SseBody, SseCloseInfo, SseConnectRequest, SseFetch, SseHeaders, SseTransport, SseTransportListener } from './types.js';
 
 export interface FetchSseTransportOptions {
   /** fetch implementation (default: the global fetch) */
-  fetch?: typeof fetch;
+  fetch?: SseFetch;
   /** Extra request headers, or a function called before every connection attempt */
   headers?: SseHeaders;
   /** HTTP method (default 'GET'); some streaming APIs open the stream with a POST */
@@ -106,7 +106,7 @@ export class FetchSseTransport implements SseTransport {
 
     // Called as a plain function: browsers throw "Illegal invocation" when fetch is called as a
     // method of another object
-    const fetchImplementation = this.options.fetch ?? ((input, init) => globalThis.fetch(input, init));
+    const fetchImplementation: SseFetch = this.options.fetch ?? ((url, init) => globalThis.fetch(url, init));
     return fetchImplementation(request.url, {
       method,
       headers,

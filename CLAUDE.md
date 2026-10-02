@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Watch mode tests**: `pnpm test`
 - **TypeScript check**: `pnpm typecheck` (same as `pnpm tsc --noEmit`)
 - **Build**: `pnpm build` (compiles `src/` to `dist/` as ES modules with `.d.ts` files, via `tsconfig.build.json`)
-- **Package check**: `pnpm test:package` (builds, packs, installs the tarball into a temp project, imports every entry point from Node and type-checks a strict TypeScript consumer)
+- **Package check**: `pnpm test:package` (builds, packs, installs the tarball into a temp project, imports every entry point from Node and type-checks a strict TypeScript consumer, with and without Node.js types)
 
 ## Packaging and Releases
 - Published to npm as `@jcfigueiredo/evem`: ESM only, no runtime dependencies, Node.js 20+
@@ -145,7 +145,7 @@ A receive-only Server-Sent Events client in `src/sse/`, published as `@jcfigueir
 - `sse.error` - `{ error, reason, status?, contentType? }` for connections that failed or ended badly
 - `sse.reconnect.failed` - `{ attempts }` when `maxReconnectAttempts` is reached
 
-**Type definitions** (`types.ts`): the transport contract (`SseTransport`, `SseTransportListener`, `SseConnectRequest`, `SseCloseInfo`), `SseHeaders`, `SseBody`, and `SseEvents`, which maps each event the adapter publishes to its payload type; keep it in sync when adding events.
+**Type definitions** (`types.ts`): the transport contract (`SseTransport`, `SseTransportListener`, `SseConnectRequest`, `SseCloseInfo`), `SseHeaders`, `SseBody`, `SseFetch` (the `fetch` option's type; not `typeof fetch`, which DOM + `@types/node` 18 overload incompatibly, so hand-written fetches wouldn't type-check), and `SseEvents`, which maps each event the adapter publishes to its payload type; keep it in sync when adding events.
 
 ## Code Style Guidelines
 - **Imports**: Use named imports; sort imports alphabetically

@@ -802,7 +802,7 @@ parser.end(); // discards an unterminated last event, as the spec requires
 
 - **Classes:** `SseHandler`, `FetchSseTransport`, `EventSourceSseTransport`, `SseParser`, and `ConnectionManager`: the state holder shared with the WebSocket adapter, which `SseHandler` creates with `stateEvent: 'sse.connection.state'`.
 - **Functions:** `defaultShouldReconnect`, the default reconnection policy.
-- **Options:** `SseHandlerOptions`, `FetchSseTransportOptions`, `EventSourceSseTransportOptions`, `ConnectionManagerOptions`, `SseHeaders`, `SseBody`.
+- **Options:** `SseHandlerOptions`, `FetchSseTransportOptions`, `EventSourceSseTransportOptions`, `ConnectionManagerOptions`, `SseHeaders`, `SseBody`, `SseFetch` (the type of the `fetch` option: `(url: string, init: RequestInit) => Promise<Response>`, which the global `fetch` fits).
 - **Events and state:** `SseEvents`, `ConnectionState`, `ConnectionStateChangeEvent`.
 - **Transports:** `SseTransport`, `SseTransportListener`, `SseConnectRequest`, `SseCloseInfo`, `SseReconnectInfo`, `EventSourceLike`, `EventSourceConstructorLike`.
 - **Parser:** `SseParsedEvent`, `SseParserCallbacks`.

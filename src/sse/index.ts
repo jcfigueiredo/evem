@@ -17,6 +17,7 @@ export type {
   SseCloseInfo,
   SseConnectRequest,
   SseEvents,
+  SseFetch,
   SseHeaders,
   SseTransport,
   SseTransportListener

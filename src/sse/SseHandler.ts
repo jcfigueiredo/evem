@@ -5,7 +5,7 @@ import type { ConnectionState } from '../shared/types.js';
 import { EventSourceSseTransport, type EventSourceConstructorLike } from './EventSourceSseTransport.js';
 import { FetchSseTransport } from './FetchSseTransport.js';
 import type { SseParsedEvent } from './SseParser.js';
-import type { SseBody, SseCloseInfo, SseHeaders, SseTransport, SseTransportListener } from './types.js';
+import type { SseBody, SseCloseInfo, SseFetch, SseHeaders, SseTransport, SseTransportListener } from './types.js';
 
 /**
  * What shouldReconnect receives: why the connection ended, and how many reconnection attempts
@@ -32,7 +32,7 @@ export interface SseHandlerOptions {
   /** Send cookies cross-origin @default false */
   withCredentials?: boolean;
   /** fetch implementation (fetch only) @default the global fetch */
-  fetch?: typeof fetch;
+  fetch?: SseFetch;
   /** EventSource implementation, e.g. a polyfill in Node.js (EventSource only) */
   EventSourceConstructor?: EventSourceConstructorLike;
   /** Named event types to listen for; unnamed events always arrive (EventSource only) */

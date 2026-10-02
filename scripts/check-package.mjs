@@ -1,5 +1,5 @@
 // Checks the package as users get it: packs the tarball, installs it into a throwaway project,
-// imports both entry points from Node (ESM and require), and type-checks a TypeScript consumer.
+// imports every entry point from Node (ESM and require), and type-checks a TypeScript consumer.
 // Run with `pnpm test:package` (which builds first). Exits non-zero on the first failure.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -99,8 +99,10 @@ try {
     run(process.execPath, ["-e", script], consumer);
   });
 
-  for (const moduleResolution of ["nodenext", "bundler"]) {
-    check(`a strict TypeScript consumer type-checks (moduleResolution: ${moduleResolution})`, () => {
+  // With Node.js types too: @types/node declares its own fetch, which must still fit the fetch option
+  const nodeTypeRoots = [join(repoRoot, "node_modules", "@types")];
+  for (const [moduleResolution, nodeTypes] of [["nodenext", false], ["bundler", false], ["nodenext", true]]) {
+    check(`a strict TypeScript consumer type-checks (moduleResolution: ${moduleResolution}${nodeTypes ? ", with Node.js types" : ""})`, () => {
       writeFileSync(join(consumer, "index.ts"), `
         import { EvEm, ErrorPolicy, type EventRecord, type MemoryLeakOptions } from "${pkg.name}";
         import { WebSocketHandler, type WebSocketHandlerOptions } from "${pkg.name}/websocket";
@@ -116,7 +118,12 @@ try {
         const message: SseMessage = { event: "order.updated", id: 1, data: { id: 7 } };
         const wire: string = formatSseMessage(message);
         const failure: SseEvents["sse.reconnect.failed"] = { attempts: 3 };
-        export { history, leakOptions, options, sse, wire, failure, ErrorPolicy, WebSocketHandler };
+        const fetches: SseHandlerOptions[] = [
+          { fetch: globalThis.fetch },
+          { fetch: async (input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init) },
+          { fetch: async (url: string) => new Response(url) },
+        ];
+        export { history, leakOptions, options, sse, wire, failure, fetches, ErrorPolicy, WebSocketHandler };
       `);
       writeFileSync(join(consumer, "tsconfig.json"), JSON.stringify({
         compilerOptions: {
@@ -127,7 +134,7 @@ try {
           module: moduleResolution === "nodenext" ? "nodenext" : "esnext",
           moduleResolution,
           lib: ["es2022", "dom"],
-          types: []
+          ...(nodeTypes ? { types: ["node"], typeRoots: nodeTypeRoots } : { types: [] })
         },
         files: ["index.ts"]
       }));
