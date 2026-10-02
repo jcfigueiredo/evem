@@ -52,7 +52,7 @@ export enum Priority {
   LOW = -100,
   /** Default priority level (0) */
   NORMAL = 0,
-  /** High priority handlers execute before normal and high priority handlers (100) */
+  /** High priority handlers execute before normal and low priority handlers (100) */
   HIGH = 100
 }
 
@@ -96,14 +96,16 @@ type SubscriptionOptions<T = unknown, R = any> = {
   replayLastEvent?: boolean; // Replay the most recent event on subscription
   replayHistory?: boolean; // Replay all historical events for this event pattern on subscription
   schema?: SchemaValidator<T> | AdvancedSchemaValidator<T>; // Schema validation for event data
-  schemaErrorPolicy?: ErrorPolicy; // How to handle schema validation errors (default: ErrorPolicy.CANCEL_ON_ERROR)
+  schemaErrorPolicy?: ErrorPolicy; // How to handle schema validation errors for this subscriber (default: ErrorPolicy.CANCEL_ON_ERROR, which skips only this subscriber)
 };
 
 /**
  * Result from a middleware function
  * - Return null to cancel the event
  * - Return the modified data to continue with the modified data
- * - Return an object with event and data to change the event name and data
+ * - Return a new object with exactly two properties, `event` (a string) and `data`, to change the
+ *   event name and data. Returning the data unchanged, or a copy with extra properties, never
+ *   reroutes, even if the payload itself has `event` and `data` fields.
  */
 export type MiddlewareResult<T = any> = null | T | { event: string; data: T };
 
@@ -127,9 +129,6 @@ export interface MiddlewareConfig<T = any> {
 }
 
 /**
- * Information about an event subscription or middleware
- */
-/**
  * Represents a record of a published event
  */
 export interface EventRecord<T = any> {
@@ -141,6 +140,9 @@ export interface EventRecord<T = any> {
   timestamp: number;
 }
 
+/**
+ * Information about an event subscription or middleware
+ */
 export interface EventInfo {
   /** The event name or pattern */
   event: string;
@@ -640,7 +642,7 @@ class EvEm implements IEventEmitter {
               
             case ErrorPolicy.CANCEL_ON_ERROR:
             default:
-              // Log the error and cancel event propagation (don't call the callback)
+              // Log the error and skip this subscriber (other subscribers still run)
               console.error(message, errors ? errors : '');
               return undefined;
           }

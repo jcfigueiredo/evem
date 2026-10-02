@@ -12,7 +12,7 @@ import type {
  * WebSocketHandler - Automatically wires WebSocket events to EvEm
  *
  * This component eliminates manual boilerplate by automatically:
- * - Wiring WebSocket lifecycle events (onopen, onclose, onerror) to ConnectionManager
+ * - Wiring WebSocket lifecycle events (onopen, onclose) to ConnectionManager and onerror to 'ws.error'
  * - Wiring outgoing EvEm events to WebSocket.send()
  * - Parsing and routing incoming WebSocket messages to EvEm events
  * - Managing MessageQueue and RequestResponseManager integration
@@ -237,9 +237,10 @@ export class WebSocketHandler {
    */
   private autoWireOutgoingMessages(): void {
     // Wire regular messages sent via ws.send
-    // Note: MessageQueue middleware passes through when connected, so we need to handle both:
-    // - ws.send: Messages that pass through middleware when connected
-    // - ws.send.queued: Messages flushed from queue after reconnection
+    // The MessageQueue middleware always passes messages through (it queues them as a side
+    // effect while disconnected), so we handle both:
+    // - ws.send: Messages published by the app
+    // - ws.send.queued: Messages flushed from the queue once connected
     const sendSub = this.evem.subscribe('ws.send', (data: any) => {
       this.sendOrQueue(data, false, 'Failed to send message:');
     });

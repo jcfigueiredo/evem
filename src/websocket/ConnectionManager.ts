@@ -30,7 +30,7 @@ export class ConnectionManager {
     try {
       await this.evem.publish('ws.connection.state', event);
     } catch (error) {
-      // The error will be handled by EvEm's error handling
+      // Errors from state handlers are deliberately ignored here
       // State transition completes successfully
     }
   }
