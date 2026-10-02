@@ -281,3 +281,36 @@ describe('Event Transformation', () => {
     });
   });
 });
+describe('Transforms - async timeouts', () => {
+  let evem: EvEm;
+
+  beforeEach(() => {
+    evem = new EvEm();
+  });
+
+  const slowTransform = (data: any) => new Promise(resolve => setTimeout(() => resolve({ ...data, slow: true }), 50));
+
+  it('should keep the previous data when an async transform times out', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let received: any = 'not called';
+    evem.subscribe('order.placed', () => {}, { priority: 10, transform: slowTransform });
+    evem.subscribe('order.placed', (data: any) => { received = data; }, { priority: 0 });
+
+    await evem.publish('order.placed', { id: 1 }, 10);
+
+    expect(received).toEqual({ id: 1 });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Error in transform function for "order.placed":',
+      expect.objectContaining({ message: expect.stringContaining('timed out') })
+    );
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('should reject with a timeout error under the THROW policy', async () => {
+    evem.subscribe('order.placed', () => {}, { transform: slowTransform });
+
+    await expect(
+      evem.publish('order.placed', { id: 1 }, { timeout: 10, errorPolicy: ErrorPolicy.THROW })
+    ).rejects.toThrow('timed out');
+  });
+});

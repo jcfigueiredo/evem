@@ -11,6 +11,9 @@ export interface CancelableEvent {
 }
 
 type EventCallback<T = unknown> = (args: T) => void | Promise<void>;
+
+/** Result of handlePromiseWithTimeout when the timeout wins the race */
+const TIMED_OUT = Symbol('timedOut');
 type FilterPredicate<T = unknown> = (args: T) => boolean | Promise<boolean>;
 type PriorityLevel = 'high' | 'normal' | 'low';
 
@@ -174,6 +177,8 @@ interface CallbackInfo<T = unknown, R = any> {
   /** The callback as passed to subscribe, used by unsubscribe(event, callback) */
   originalCallback: EventCallback<T>;
   priority: number;
+  /** Subscription order, used to break ties between equal priorities */
+  sequence: number;
   transform?: TransformFunction<T, R>;
 }
 
@@ -195,6 +200,7 @@ class EvEm implements IEventEmitter {
   private debounceTimers = new Map<string, NodeJS.Timeout>();
   private throttleTimers = new Map<string, { timer: NodeJS.Timeout, expiresAt: number }>();
   private middleware: Array<{ pattern?: string; handler: MiddlewareFunction }> = [];
+  private subscriptionSequence = 0; // Orders subscriptions with equal priority by subscription time
   private maxRecursionDepth: number;
   
   // Event history related properties
@@ -218,7 +224,8 @@ class EvEm implements IEventEmitter {
    */
   enableHistory(maxEvents: number = 50): void {
     this.historyEnabled = true;
-    this.historyMaxSize = maxEvents;
+    this.historyMaxSize = Math.max(0, maxEvents);
+    this.trimHistory();
   }
   
   /**
@@ -295,10 +302,16 @@ class EvEm implements IEventEmitter {
     };
     
     this.eventHistory.push(record);
-    
-    // Trim history if it exceeds the maximum size
-    if (this.eventHistory.length > this.historyMaxSize) {
-      this.eventHistory = this.eventHistory.slice(-this.historyMaxSize);
+    this.trimHistory();
+  }
+  
+  /**
+   * Drop the oldest events so the history doesn't exceed its maximum size
+   */
+  private trimHistory(): void {
+    const excess = this.eventHistory.length - this.historyMaxSize;
+    if (excess > 0) {
+      this.eventHistory.splice(0, excess);
     }
   }
   
@@ -652,21 +665,26 @@ class EvEm implements IEventEmitter {
         
         // Only errors thrown by the validator itself are schema errors; errors thrown by the
         // callback must reach the publish error policy, so the callback runs outside this try
+        // The validator itself threw (or rejected), handle according to error policy
+        const handleValidatorError = (error: unknown) => handleSchemaValidationError(
+          `Error during schema validation for event '${event}': ${error}`,
+          schemaErrorPolicy,
+          error instanceof Error ? [{ message: error.message }] : null
+        );
+        
         let validationResult: ReturnType<typeof schemaValidator>;
         try {
           validationResult = schemaValidator(args);
         } catch (error) {
-          // Schema validator threw an error, handle according to error policy
-          return handleSchemaValidationError(
-            `Error during schema validation for event '${event}': ${error}`,
-            schemaErrorPolicy,
-            error instanceof Error ? [{ message: error.message }] : null
-          );
+          return handleValidatorError(error);
         }
         
         // Handle both synchronous and asynchronous validators
         if (validationResult instanceof Promise) {
-          return validationResult.then(self.bindToActivePublishChain(handleValidationResult));
+          return validationResult.then(
+            self.bindToActivePublishChain(handleValidationResult),
+            self.bindToActivePublishChain(handleValidatorError)
+          );
         }
         return handleValidationResult(validationResult);
       };
@@ -704,6 +722,7 @@ class EvEm implements IEventEmitter {
       callback: finalCallback as EventCallback,
       originalCallback: callback as EventCallback,
       priority,
+      sequence: this.subscriptionSequence++,
       transform
     });
     this.events.set(event, callbacks);
@@ -790,6 +809,9 @@ class EvEm implements IEventEmitter {
    */
   private removeSubscription(event: string, callbacks: Map<string, CallbackInfo>, id: string): void {
     callbacks.delete(id);
+    if (callbacks.size === 0) {
+      this.events.delete(event);
+    }
     
     // Clear memory leak warning if subscription count falls below threshold
     if (this.memoryLeakDetectionEnabled && 
@@ -873,6 +895,43 @@ class EvEm implements IEventEmitter {
   }
 
   /**
+   * Give the data of a cancelable event a cancel() method and a read-only `canceled` flag.
+   * Plain objects are copied (as before). Arrays are copied too and stay arrays. Other objects
+   * (Date, Map, class instances) can't be copied faithfully, so they're wrapped in a Proxy that
+   * keeps their type and methods. Primitives can't carry a method and are returned unchanged.
+   */
+  private addCancelSupport(data: unknown, cancel: () => void, isCanceled: () => boolean): unknown {
+    if (data === null || typeof data !== 'object') {
+      return data;
+    }
+    
+    const prototype = Object.getPrototypeOf(data);
+    if (Array.isArray(data) || prototype === Object.prototype || prototype === null) {
+      const copy: any = Array.isArray(data) ? [...data] : { ...data };
+      if (Array.isArray(data)) {
+        Object.defineProperty(copy, 'cancel', { value: cancel, configurable: true, writable: true });
+      } else {
+        copy.cancel = cancel;
+      }
+      Object.defineProperty(copy, 'canceled', { get: isCanceled, configurable: true });
+      return copy;
+    }
+    
+    return new Proxy(data, {
+      get(target, property) {
+        if (property === 'cancel') return cancel;
+        if (property === 'canceled') return isCanceled();
+        const value = Reflect.get(target, property, target);
+        // Bind methods to the real object: built-ins like Date and Map need their internal slots
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+      has(target, property) {
+        return property === 'cancel' || property === 'canceled' || Reflect.has(target, property);
+      }
+    });
+  }
+
+  /**
    * Checks if a middleware result is a reroute: an object with exactly `event` (a string) and `data`
    */
   private isMiddlewareReroute(result: unknown): result is { event: string, data: any } {
@@ -911,9 +970,14 @@ class EvEm implements IEventEmitter {
     // Track nesting for recursion detection (throws if this event is nested too deeply)
     const publishChain = this.enterPublishChain(event);
 
-    // Create event data (with or without cancel function)
-    let eventData: any = args ?? ({} as T);
+    // Create event data (with or without cancel function); only a missing payload defaults to {}
+    let eventData: any = args === undefined ? ({} as T) : args;
     let isCanceled = false;
+    const makeCancelable = (data: any) => this.addCancelSupport(
+      data,
+      () => { isCanceled = true; },
+      () => isCanceled
+    );
     
     // Apply middleware to the event
     if (this.middleware.length > 0) {
@@ -929,23 +993,17 @@ class EvEm implements IEventEmitter {
       eventData = middlewareResult.data;
     }
     
+    // Record this event in history (before processing any callbacks), with the data subscribers
+    // receive after middleware, but before the cancel method is added, so that replayed events
+    // don't have cancel methods
+    this.recordEvent(event, eventData);
+    
     // Add cancel functionality if the event is cancelable
     if (cancelable) {
-      // Add the cancel method to the event data
-      eventData = {
-        ...eventData,
-        cancel: function() {
-          isCanceled = true;
-        }
-      };
+      eventData = makeCancelable(eventData);
     }
-    
-    // Record this event in history (before processing any callbacks)
-    // We record the original data (without cancel method) to avoid circular references in history
-    // and ensure that replayed events don't have cancel methods unless explicitly requested
-    this.recordEvent(event, args ?? ({} as T));
 
-    const matchingCallbacks: { callback: EventCallback, priority: number, transform?: TransformFunction }[] = [];
+    const matchingCallbacks: { callback: EventCallback, priority: number, sequence: number, transform?: TransformFunction }[] = [];
 
     // First, collect all matching callbacks with their priorities and transform functions
     for (const [registeredEvent, callbacks] of this.events) {
@@ -954,14 +1012,15 @@ class EvEm implements IEventEmitter {
           matchingCallbacks.push({
             callback: cbInfo.callback,
             priority: cbInfo.priority,
+            sequence: cbInfo.sequence,
             transform: cbInfo.transform
           });
         }
       }
     }
 
-    // Sort callbacks by priority (highest first)
-    matchingCallbacks.sort((a, b) => b.priority - a.priority);
+    // Sort callbacks by priority (highest first), then in the order they subscribed
+    matchingCallbacks.sort((a, b) => b.priority - a.priority || a.sequence - b.sequence);
 
     // Helper function to handle callback errors based on the error policy
     const handleCallbackError = (error: any) => {
@@ -1040,9 +1099,14 @@ class EvEm implements IEventEmitter {
             const transformResult = this.runInPublishChain(publishChain, () => transform(currentEventData));
             if (transformResult instanceof Promise) {
               // For async transformations, wait for them to complete
-              currentEventData = await this.handlePromiseWithTimeout(transformResult, timeout);
+              const asyncResult = await this.handlePromiseWithTimeout(transformResult, timeout);
+              if (asyncResult === TIMED_OUT) {
+                // Handled by the error policy below, so the next subscriber keeps the current data
+                throw new Error(`Transform timed out after ${timeout}ms`);
+              }
+              currentEventData = cancelable ? makeCancelable(asyncResult) : asyncResult;
             } else {
-              currentEventData = transformResult;
+              currentEventData = cancelable ? makeCancelable(transformResult) : transformResult;
             }
           } catch (transformError) {
             // Handle transform error based on the error policy
@@ -1078,11 +1142,11 @@ class EvEm implements IEventEmitter {
     return !isCanceled;
   }
 
-  private async handlePromiseWithTimeout<T>(promise: Promise<T>, timeout: number): Promise<T | undefined> {
-    let timeoutHandle: ReturnType<typeof setTimeout>;
+  private async handlePromiseWithTimeout<T>(promise: Promise<T>, timeout: number): Promise<T | typeof TIMED_OUT> {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
-    const timeoutPromise = new Promise<undefined>(resolve => {
-      timeoutHandle = setTimeout(() => resolve(undefined), timeout);
+    const timeoutPromise = new Promise<typeof TIMED_OUT>(resolve => {
+      timeoutHandle = setTimeout(() => resolve(TIMED_OUT), timeout);
     });
 
     try {

@@ -80,3 +80,25 @@ describe('EvEm - Publishing Tests', () => {
     expect(callbackNumber).toHaveBeenCalledWith(123);
   });
 });
+
+describe('EvEm - Publishing payload values', () => {
+  test('should deliver null as null', async () => {
+    const evem = new EvEm();
+    const callback = vi.fn();
+    evem.subscribe('value.changed', callback);
+
+    await evem.publish('value.changed', null);
+
+    expect(callback).toHaveBeenCalledWith(null);
+  });
+
+  test('should still deliver an empty object when no data is given', async () => {
+    const evem = new EvEm();
+    const callback = vi.fn();
+    evem.subscribe('value.changed', callback);
+
+    await evem.publish('value.changed');
+
+    expect(callback).toHaveBeenCalledWith({});
+  });
+});

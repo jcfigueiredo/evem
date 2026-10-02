@@ -211,3 +211,34 @@ describe("EvEm - Event History replay errors", () => {
     consoleErrorSpy.mockRestore();
   });
 });
+
+describe("EvEm - Event History contents and limits", () => {
+  test("should record the data as delivered, after middleware", async () => {
+    const emitter = new EvEm();
+    emitter.enableHistory();
+    emitter.use((_event, data: any) => ({ ...data, enriched: true }));
+
+    await emitter.publish("user.login", { id: 1 });
+
+    expect(emitter.getEventHistory()[0]?.data).toEqual({ id: 1, enriched: true });
+  });
+
+  test("should record nothing when enabled with a maximum of 0", async () => {
+    const emitter = new EvEm();
+    emitter.enableHistory(0);
+
+    for (let i = 0; i < 3; i++) await emitter.publish("tick", i);
+
+    expect(emitter.getEventHistory()).toEqual([]);
+  });
+
+  test("should trim existing history when re-enabled with a smaller maximum", async () => {
+    const emitter = new EvEm();
+    emitter.enableHistory();
+    for (let i = 1; i <= 5; i++) await emitter.publish("tick", i);
+
+    emitter.enableHistory(2);
+
+    expect(emitter.getEventHistory().map(record => record.data)).toEqual([4, 5]);
+  });
+});

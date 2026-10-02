@@ -170,3 +170,76 @@ describe('Cancelable Events Tests', () => {
     expect(result).toBe(false);
   });
 });
+describe('Cancelable events - preserving the payload', () => {
+  let emitter: EvEm;
+
+  beforeEach(() => {
+    emitter = new EvEm();
+  });
+
+  test('an array payload stays an array and can still be canceled', async () => {
+    let received: any;
+    emitter.subscribe('batch.items', (items: any) => {
+      received = items;
+      items.cancel();
+    });
+
+    const result = await emitter.publish('batch.items', [1, 2, 3], { cancelable: true });
+
+    expect(Array.isArray(received)).toBe(true);
+    expect([...received]).toEqual([1, 2, 3]);
+    expect(result).toBe(false);
+  });
+
+  test('a class instance keeps its type and methods and can still be canceled', async () => {
+    let received: any;
+    emitter.subscribe('clock.tick', (date: any) => {
+      received = { isDate: date instanceof Date, time: date.getTime() };
+      date.cancel();
+    });
+
+    const result = await emitter.publish('clock.tick', new Date(1000), { cancelable: true });
+
+    expect(received).toEqual({ isDate: true, time: 1000 });
+    expect(result).toBe(false);
+  });
+
+  test('a primitive payload is delivered unchanged', async () => {
+    const handler = vi.fn();
+    emitter.subscribe('chat.text', handler);
+
+    await emitter.publish('chat.text', 'hello', { cancelable: true });
+
+    expect(handler).toHaveBeenCalledWith('hello');
+  });
+
+  test('handlers can read the canceled flag', async () => {
+    const flags: boolean[] = [];
+    emitter.subscribe('form.submit', (event: any) => {
+      flags.push(event.canceled);
+      event.cancel();
+      flags.push(event.canceled);
+    });
+
+    await emitter.publish('form.submit', { id: 1 }, { cancelable: true });
+
+    expect(flags).toEqual([false, true]);
+  });
+
+  test('cancel() still works after an earlier subscriber transformed the data', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const lastHandler = vi.fn();
+    emitter.subscribe('order.placed', () => {}, {
+      priority: 10,
+      transform: (order: any) => ({ total: order.total * 2 })
+    });
+    emitter.subscribe('order.placed', (order: any) => order.cancel(), { priority: 5 });
+    emitter.subscribe('order.placed', lastHandler, { priority: 0 });
+
+    const result = await emitter.publish('order.placed', { total: 1 }, { cancelable: true });
+
+    expect(result).toBe(false);
+    expect(lastHandler).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+});

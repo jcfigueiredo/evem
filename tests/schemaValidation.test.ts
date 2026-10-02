@@ -474,3 +474,44 @@ describe('Schema validation - errors thrown by the handler itself', () => {
     ).rejects.toMatchObject({ validationErrors: errors });
   });
 });
+
+describe('Schema validation - async validators that reject', () => {
+  it('should apply schemaErrorPolicy when an async validator rejects', async () => {
+    const evem = new EvEm();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const handler = vi.fn();
+    evem.subscribe('user.created', handler, {
+      schema: async () => {
+        throw new Error('validator service down');
+      },
+      schemaErrorPolicy: ErrorPolicy.SILENT
+    });
+
+    await expect(evem.publish('user.created', { id: 1 })).resolves.toBe(true);
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('should call the handler when an async validator rejects under LOG_AND_CONTINUE', async () => {
+    const evem = new EvEm();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const handler = vi.fn();
+    evem.subscribe('user.created', handler, {
+      schema: async () => {
+        throw new Error('validator service down');
+      },
+      schemaErrorPolicy: ErrorPolicy.LOG_AND_CONTINUE
+    });
+
+    await evem.publish('user.created', { id: 1 });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Error during schema validation for event 'user.created'"),
+      expect.anything()
+    );
+    consoleErrorSpy.mockRestore();
+  });
+});

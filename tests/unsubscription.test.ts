@@ -161,3 +161,21 @@ describe("EvEm - unsubscribe(event, callback) with subscription options", () => 
     expect(callback).not.toHaveBeenCalled();
   });
 });
+
+describe("EvEm - unsubscribing releases event entries", () => {
+  test("should drop the entry for an event once its last subscription is removed", () => {
+    const evem = new EvEm();
+    // Inspect internal state: there's no public API that exposes empty entries
+    const events = (evem as unknown as { events: Map<string, unknown> }).events;
+    const callback = vi.fn();
+
+    for (let i = 0; i < 100; i++) {
+      const id = evem.subscribe(`request.${i}`, callback);
+      evem.unsubscribeById(id);
+    }
+    evem.subscribe("order.placed", callback);
+    evem.unsubscribe("order.placed", callback);
+
+    expect(events.size).toBe(0);
+  });
+});

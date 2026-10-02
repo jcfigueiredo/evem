@@ -268,3 +268,17 @@ describe('Event Priority Tests', () => {
     expect(lowValues).toContain('enum-low');
   });
 });
+describe('Priority - equal priorities', () => {
+  test('subscribers with equal priority run in subscription order across patterns', async () => {
+    const emitter = new EvEm();
+    const order: string[] = [];
+    emitter.subscribe('user.login', () => { order.push('A'); });
+    emitter.subscribe('*', () => { order.push('B'); });
+    emitter.subscribe('user.*', () => { order.push('C'); });
+    emitter.subscribe('user.login', () => { order.push('D'); });
+
+    await emitter.publish('user.login', {});
+
+    expect(order).toEqual(['A', 'B', 'C', 'D']);
+  });
+});
