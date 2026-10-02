@@ -119,17 +119,23 @@ export class FetchSseTransport implements SseTransport {
   private async read(body: ReadableStream<Uint8Array>, request: SseConnectRequest, listener: SseTransportListener): Promise<void> {
     const reader = body.getReader();
     const decoder = new TextDecoder();
-    const pending: SseParsedEvent[] = [];
+    // Events and id-only changes, delivered in stream order once each chunk is parsed
+    const pending: Array<{ event: SseParsedEvent } | { lastEventId: string }> = [];
     const parser = new SseParser(
       {
-        onEvent: event => pending.push(event),
+        onEvent: event => pending.push({ event }),
+        onLastEventId: lastEventId => pending.push({ lastEventId }),
         onRetry: milliseconds => listener.retry(milliseconds),
       },
       request.lastEventId ?? ''
     );
     const deliver = async () => {
-      for (let event = pending.shift(); event; event = pending.shift()) {
-        await listener.event(event);
+      for (let item = pending.shift(); item; item = pending.shift()) {
+        if ('event' in item) {
+          await listener.event(item.event);
+        } else {
+          listener.lastEventId?.(item.lastEventId);
+        }
       }
     };
 

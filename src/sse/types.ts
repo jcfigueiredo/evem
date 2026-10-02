@@ -25,6 +25,8 @@ export interface SseTransportListener {
   retry(milliseconds: number): void;
   /** Bytes arrived, comments included (for heartbeat timeouts) */
   activity(): void;
+  /** The last event id changed through a message without data (no event is dispatched for it) */
+  lastEventId?(id: string): void;
   /** The transport is reconnecting by itself (the native EventSource does this) */
   reconnecting?(): void;
 }

@@ -108,3 +108,14 @@ describe('SseParser - line endings and chunking', () => {
     expect(parse(['data: ﻿a\n\n']).events).toEqual([message('﻿a')]);
   });
 });
+
+describe('SseParser - id-only messages', () => {
+  it('reports a changed last event id from a message without data', () => {
+    const ids: string[] = [];
+    const parser = new SseParser({ onEvent: () => {}, onLastEventId: id => ids.push(id) }, '1');
+    parser.feed('id: 1\n\nid: 7\n\nid: 7\n\ndata: x\nid: 8\n\nid\n\n');
+
+    // '1' is unchanged from the initial id; the event carries '8' itself; the empty id clears it
+    expect(ids).toEqual(['7', '']);
+  });
+});

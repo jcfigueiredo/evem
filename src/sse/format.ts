@@ -57,7 +57,7 @@ function assertSingleLine(field: string, value: string): void {
  *
  * @throws {TypeError} If `event` or `id` contains a line break, `id` contains NULL, or `envelope` is
  *   set without an `event`
- * @throws {RangeError} If `retry` isn't a non-negative integer
+ * @throws {RangeError} If `retry` isn't a non-negative safe integer
  */
 export function formatSseMessage(message: SseMessage, options: FormatSseMessageOptions = {}): string {
   const { event, data, id, retry } = message;
@@ -84,7 +84,8 @@ export function formatSseMessage(message: SseMessage, options: FormatSseMessageO
   }
 
   if (retry !== undefined) {
-    if (!Number.isInteger(retry) || retry < 0) {
+    // Safe integers only: larger numbers are written in exponent notation (1e+21), which clients ignore
+    if (!Number.isSafeInteger(retry) || retry < 0) {
       throw new RangeError(`SSE retry must be a non-negative integer, got ${retry}`);
     }
     lines.push(`retry: ${retry}`);

@@ -74,21 +74,37 @@ export interface SseHandlerOptions {
   onError?: (error: Error) => void;
 }
 
+/** The longest delay setTimeout supports (2^31 - 1 ms, about 24.8 days) */
+const MAX_TIMEOUT = 2_147_483_647;
+
 const FETCH_ONLY_OPTIONS = ['headers', 'method', 'body', 'fetch', 'heartbeatTimeout'] as const;
 const EVENTSOURCE_ONLY_OPTIONS = ['EventSourceConstructor', 'eventTypes', 'lastEventIdParam'] as const;
+const BUILT_IN_TRANSPORT_OPTIONS = ['headers', 'method', 'body', 'fetch', 'withCredentials', ...EVENTSOURCE_ONLY_OPTIONS] as const;
 
 /**
- * Build the transport, rejecting options the chosen transport can't honour (instead of ignoring them)
+ * Build the transport. Options the chosen transport can't honour, and configurations that could
+ * never connect, throw here instead of being ignored or retried forever.
  */
-function createTransport(options: SseHandlerOptions): SseTransport {
+function createTransport(url: string, options: SseHandlerOptions): SseTransport {
   const { transport = 'fetch' } = options;
   const given = (names: readonly (keyof SseHandlerOptions)[]) =>
     names.filter(name => options[name] !== undefined && !(name === 'heartbeatTimeout' && options[name] === 0));
+
+  if (typeof transport === 'object') {
+    const ignored = given(BUILT_IN_TRANSPORT_OPTIONS);
+    if (ignored.length > 0) {
+      throw new TypeError(`${ignored.join(', ')} would be ignored with a custom transport; configure the transport instead.`);
+    }
+    return transport;
+  }
 
   if (transport === 'eventsource') {
     const unsupported = given(FETCH_ONLY_OPTIONS);
     if (unsupported.length > 0) {
       throw new TypeError(`The EventSource transport doesn't support: ${unsupported.join(', ')}. Use the fetch transport.`);
+    }
+    if (!options.EventSourceConstructor && typeof (globalThis as { EventSource?: unknown }).EventSource !== 'function') {
+      throw new TypeError('There is no global EventSource (e.g. in Node.js): pass EventSourceConstructor or use the fetch transport.');
     }
     return new EventSourceSseTransport({
       EventSourceConstructor: options.EventSourceConstructor,
@@ -102,19 +118,31 @@ function createTransport(options: SseHandlerOptions): SseTransport {
   if (unsupported.length > 0) {
     throw new TypeError(`${unsupported.join(', ')} only apply to the EventSource transport.`);
   }
-  if (transport === 'fetch') {
-    return new FetchSseTransport({
-      fetch: options.fetch,
-      headers: options.headers,
-      method: options.method,
-      body: options.body,
-      withCredentials: options.withCredentials,
-    });
+  if (!options.fetch && typeof globalThis.fetch !== 'function') {
+    throw new TypeError('There is no global fetch: pass the fetch option.');
   }
-  return transport;
+  // Outside browsers there's no page to resolve a relative URL against
+  const base = (globalThis as { location?: { href?: string } }).location?.href;
+  try {
+    new URL(url, base);
+  } catch {
+    throw new TypeError(`SseHandler needs an absolute URL outside browsers, got "${url}".`);
+  }
+  return new FetchSseTransport({
+    fetch: options.fetch,
+    headers: options.headers,
+    method: options.method,
+    body: options.body,
+    withCredentials: options.withCredentials,
+  });
 }
 
-function defaultShouldReconnect(info: SseCloseInfo): boolean {
+/**
+ * The default reconnection policy: reconnect when the stream ends, on network errors, heartbeat
+ * timeouts, a failed EventSource and HTTP 408, 429 and 5xx; stop on HTTP 204, other statuses and a
+ * wrong content type. Exported so a custom shouldReconnect can override one case and defer the rest.
+ */
+export function defaultShouldReconnect(info: SseCloseInfo): boolean {
   switch (info.reason) {
     case 'ended':
     case 'network-error':
@@ -201,7 +229,7 @@ export class SseHandler {
     private readonly evem: EvEm,
     private readonly options: SseHandlerOptions = {}
   ) {
-    this.transport = createTransport(options);
+    this.transport = createTransport(url, options);
     this.connectionManager = new ConnectionManager(evem, { stateEvent: 'sse.connection.state' });
     this.reconnect = options.reconnect ?? true;
     this.reconnectDelay = options.reconnectDelay ?? 3000;
@@ -227,7 +255,7 @@ export class SseHandler {
     }
     this.active = true;
     this.attempts = 0;
-    void this.openConnection(++this.generation);
+    this.startConnection(++this.generation);
   }
 
   /**
@@ -261,12 +289,20 @@ export class SseHandler {
     return this.lastEventId;
   }
 
+  private startConnection(generation: number): void {
+    this.openConnection(generation).catch(error => {
+      console.error('SseHandler connection loop failed:', error);
+    });
+  }
+
   private async openConnection(generation: number): Promise<void> {
     await this.connectionManager.transitionTo('connecting');
     if (generation !== this.generation) {
       return;
     }
 
+    // Started before the request, so a server that never answers is timed out too
+    this.resetHeartbeat(generation);
     const info = await this.transport.connect(
       { url: this.url, lastEventId: this.lastEventId },
       this.createListener(generation)
@@ -290,6 +326,9 @@ export class SseHandler {
       event: event => (isCurrent() ? this.handleEvent(event) : undefined),
       retry: milliseconds => {
         if (isCurrent()) this.serverRetry = milliseconds;
+      },
+      lastEventId: id => {
+        if (isCurrent()) this.lastEventId = id || undefined;
       },
       activity: () => {
         if (isCurrent()) this.resetHeartbeat(generation);
@@ -320,11 +359,10 @@ export class SseHandler {
         ? { status: end.status }
         : end.reason === 'bad-content-type' ? { contentType: end.contentType } : {};
       void this.publishSafely('sse.error', { error, reason: end.reason, ...details });
-      this.options.onError?.(error);
+      this.callOnError(error);
     }
 
-    const shouldReconnect = this.options.shouldReconnect ?? defaultShouldReconnect;
-    if (!this.reconnect || !shouldReconnect({ ...end, attempts: this.attempts })) {
+    if (!this.reconnect || !this.shouldReconnect({ ...end, attempts: this.attempts })) {
       await this.stop();
       return;
     }
@@ -340,10 +378,32 @@ export class SseHandler {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined;
       if (generation === this.generation) {
-        void this.openConnection(generation);
+        this.startConnection(generation);
       }
     }, this.delayFor(end));
     await this.connectionManager.transitionTo('reconnecting');
+  }
+
+  /** shouldReconnect, falling back to the default policy if it throws */
+  private shouldReconnect(info: SseReconnectInfo): boolean {
+    if (!this.options.shouldReconnect) {
+      return defaultShouldReconnect(info);
+    }
+    try {
+      return this.options.shouldReconnect(info);
+    } catch (error) {
+      console.error('SseHandler shouldReconnect threw; using the default policy:', error);
+      return defaultShouldReconnect(info);
+    }
+  }
+
+  /** onError, which must not break the connection loop if it throws */
+  private callOnError(error: Error): void {
+    try {
+      this.options.onError?.(error);
+    } catch (thrown) {
+      console.error('SseHandler onError threw:', thrown);
+    }
   }
 
   private async stop(): Promise<void> {
@@ -353,19 +413,21 @@ export class SseHandler {
 
   /**
    * Delay before the next attempt: the server's retry (or reconnectDelay), doubled per failed attempt
-   * up to maxReconnectDelay with ±20% jitter, and at least as long as a Retry-After header asked
+   * up to maxReconnectDelay, then ±20% jitter (also at the cap, so clients that lost the connection
+   * together don't retry together), and at least as long as a Retry-After header asked
    */
   private delayFor(end: SseCloseInfo): number {
     const base = this.serverRetry ?? this.reconnectDelay;
     let delay = base;
     if (this.backoff) {
-      const exponential = base * 2 ** (this.attempts - 1);
-      delay = Math.min(this.maxReconnectDelay, exponential * (0.8 + Math.random() * 0.4));
+      const exponential = Math.min(this.maxReconnectDelay, base * 2 ** (this.attempts - 1));
+      delay = exponential * (0.8 + Math.random() * 0.4);
     }
     if (end.reason === 'http-error' && end.retryAfter !== undefined) {
       delay = Math.max(delay, end.retryAfter);
     }
-    return Math.round(delay);
+    // setTimeout runs longer delays at once
+    return Math.min(MAX_TIMEOUT, Math.round(delay));
   }
 
   private resetHeartbeat(generation: number): void {
@@ -377,7 +439,7 @@ export class SseHandler {
       if (generation !== this.generation) return;
       this.heartbeatExpired = true;
       this.transport.abort();
-    }, this.heartbeatTimeout);
+    }, Math.min(MAX_TIMEOUT, this.heartbeatTimeout));
   }
 
   private clearTimers(): void {
@@ -410,7 +472,7 @@ export class SseHandler {
     } catch (caught) {
       const error = caught instanceof Error ? caught : new Error(String(caught));
       publishes.push(['sse.parse.error', { error, rawData: event.data, eventType: event.type, lastEventId: event.lastEventId }]);
-      this.options.onError?.(error);
+      this.callOnError(error);
     }
 
     if (this.options.sequential) {

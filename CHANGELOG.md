@@ -36,7 +36,7 @@ First release published to npm, as `@jcfigueiredo/evem`. Version 0.2.0 was never
 
 - **Server-Sent Events adapter** (`@jcfigueiredo/evem/sse`, see `docs/sse-adapter.md`):
   - `SseHandler` connects to an SSE endpoint and publishes server events as `server.<name>`, routed by the same code as `WebSocketHandler` (named events, `{ event, data }` envelopes and the legacy `{ type, data }`). It also publishes `sse.connection.state`, `sse.message`, `sse.error`, `sse.parse.error`, `sse.reconnect.failed`, and `sse.event` with `rawEvents`.
-  - Reconnection by default, with exponential backoff and jitter, the server's `retry:`, `Retry-After`, and per-status defaults (stop on `204` and most `4xx`, retry on `408`, `429`, `5xx` and network errors) that `shouldReconnect` can override. Resuming with `Last-Event-ID`, an optional heartbeat timeout, and `sequential` handling with backpressure.
+  - Reconnection by default, with exponential backoff and jitter, the server's `retry:`, `Retry-After`, and per-status defaults (stop on `204` and most `4xx`, retry on `408`, `429`, `5xx` and network errors) that `shouldReconnect` can override, deferring the rest to the exported `defaultShouldReconnect`. Resuming with `Last-Event-ID`, an optional heartbeat timeout, and `sequential` handling with backpressure.
   - Headers (an object, or a function called before every attempt), `method` and `body`, so streams can use token auth and POST.
   - Transports: `FetchSseTransport` (the default; browsers and Node.js 20+), `EventSourceSseTransport` (the native `EventSource`), or your own `SseTransport`.
   - `SseParser`, a spec-compliant `text/event-stream` parser with no I/O, and `SseEvents`, which maps the adapter's events to their payload types.

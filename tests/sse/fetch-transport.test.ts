@@ -157,3 +157,24 @@ describe('FetchSseTransport', () => {
     expect(order).toEqual(['start 1', 'end 1', 'start 2']);
   });
 });
+
+describe('FetchSseTransport - id-only messages', () => {
+  it('reports id-only messages in order with the events around them', async () => {
+    const { fetch, calls } = createFakeFetch();
+    const order: string[] = [];
+    const listener: SseTransportListener = {
+      open() {},
+      retry() {},
+      activity() {},
+      event: event => { order.push(`event ${event.data} (${event.lastEventId})`); },
+      lastEventId: id => { order.push(`id ${id}`); },
+    };
+    const closed = new FetchSseTransport({ fetch }).connect({ url: 'x' }, listener);
+    await flush();
+    calls[0]!.stream.push('id: 5\ndata: a\n\nid: 6\n\nid: 7\ndata: b\n\n');
+    calls[0]!.stream.close();
+    await closed;
+
+    expect(order).toEqual(['event a (5)', 'id 6', 'event b (7)']);
+  });
+});

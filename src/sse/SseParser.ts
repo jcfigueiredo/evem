@@ -16,6 +16,11 @@ export interface SseParserCallbacks {
   onRetry?(milliseconds: number): void;
   /** A comment line (`: text`), without the leading colon; servers use them as heartbeats */
   onComment?(text: string): void;
+  /**
+   * The last event id changed through a message without data, which isn't dispatched as an event
+   * (events carry their own `lastEventId`)
+   */
+  onLastEventId?(id: string): void;
 }
 
 /**
@@ -28,6 +33,8 @@ export class SseParser {
   private data = '';
   private eventType = '';
   private lastEventIdBuffer: string;
+  /** The last event id as of the previous dispatch, to report id-only changes once */
+  private dispatchedLastEventId: string;
   private started = false;
   /** The previous chunk ended with CR, so an LF at the start of the next one ends the same line */
   private skipLeadingLineFeed = false;
@@ -39,6 +46,7 @@ export class SseParser {
    */
   constructor(private readonly callbacks: SseParserCallbacks, initialLastEventId = '') {
     this.lastEventIdBuffer = initialLastEventId;
+    this.dispatchedLastEventId = initialLastEventId;
   }
 
   /**
@@ -141,8 +149,13 @@ export class SseParser {
 
   private dispatch(): void {
     const lastEventId = this.lastEventIdBuffer;
+    const lastEventIdChanged = lastEventId !== this.dispatchedLastEventId;
+    this.dispatchedLastEventId = lastEventId;
     if (this.data === '') {
       this.eventType = '';
+      if (lastEventIdChanged) {
+        this.callbacks.onLastEventId?.(lastEventId);
+      }
       return;
     }
 

@@ -1,7 +1,7 @@
 /* c8 ignore next */
 // Entry point for the SSE client (`@jcfigueiredo/evem/sse`). Server-side formatting helpers live in
 // `@jcfigueiredo/evem/sse/server`.
-export { SseHandler, type SseHandlerOptions, type SseReconnectInfo } from "./SseHandler.js";
+export { defaultShouldReconnect, SseHandler, type SseHandlerOptions, type SseReconnectInfo } from "./SseHandler.js";
 export { FetchSseTransport, type FetchSseTransportOptions } from "./FetchSseTransport.js";
 export {
   EventSourceSseTransport,

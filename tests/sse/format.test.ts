@@ -60,6 +60,8 @@ describe('formatSseMessage', () => {
     expect(() => formatSseMessage({ id: 'x\0', data: 1 })).toThrow(TypeError);
     expect(() => formatSseMessage({ retry: -1 })).toThrow(RangeError);
     expect(() => formatSseMessage({ retry: 1.5 })).toThrow(RangeError);
+    // 1e21 would be written as 'retry: 1e+21', which clients ignore
+    expect(() => formatSseMessage({ retry: 1e21 })).toThrow(RangeError);
     expect(() => formatSseMessage({ data: 1 }, { envelope: true })).toThrow(TypeError);
   });
 

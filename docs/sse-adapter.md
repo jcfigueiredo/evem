@@ -162,16 +162,16 @@ The `eventTypes`, `EventSourceConstructor` and `lastEventIdParam` options apply 
 | `backoff` | `true` | Double the delay after each failed attempt, with ±20% jitter. With `false`, the delay is fixed and has no jitter. |
 | `maxReconnectAttempts` | `Infinity` | Reconnection attempts without a successful connection before giving up and publishing `sse.reconnect.failed`. |
 | `shouldReconnect` | [the defaults](#how-a-connection-ends) | `(info: SseReconnectInfo) => boolean`. Replaces the default decision of whether to reconnect. |
-| `heartbeatTimeout` | `0` (off) | Once the stream is open, reconnect if no bytes (comments included) arrive for this many ms. Not available with the EventSource transport. |
+| `heartbeatTimeout` | `0` (off) | Reconnect if the server takes longer than this many ms to respond, or if no bytes (comments included) arrive for this long once the stream is open. Not available with the EventSource transport. |
 | `serverEventPrefix` | `'server'` | Prefix for server events (`order.updated` → `server.order.updated`). With `''`, events are published under their own names. |
 | `parseData` | `'json'` | How to read each event's data: `'json'`, `'text'`, or `(data, eventType) => unknown`. Failures are published as `sse.parse.error`. |
 | `unwrapEnvelope` | `true` | Publish unnamed `{ event, data }` messages as `<prefix>.<event>`. With `false`, all unnamed messages go to `sse.message`. |
 | `rawEvents` | `false` | Also publish every event as `sse.event`, with its type, raw data and id. |
 | `sequential` | `false` | Wait for each event's subscribers before handling the next event (see [Ordering](#ordering-and-backpressure)). |
 | `autoConnect` | `true` | Connect in the constructor. With `false`, call `connect()`. |
-| `onError` | none | Called with each `Error` that's also published as `sse.error` or `sse.parse.error`. It must not throw. |
+| `onError` | none | Called with each `Error` that's also published as `sse.error` or `sse.parse.error`. If it throws, the error is logged and the handler carries on. |
 
-With your own transport, `headers`, `method`, `body`, `fetch` and `withCredentials` are ignored, because the transport makes the request.
+With your own transport, the transport makes the request, so passing `headers`, `method`, `body`, `fetch`, `withCredentials` or an EventSource option throws a `TypeError` when the handler is created. So does a configuration that could never connect: a relative URL outside a browser with the fetch transport, or the EventSource transport without an `EventSource` implementation.
 
 ## Methods
 
@@ -298,32 +298,25 @@ Every `sse.error` is also passed to `onError`. With `reconnect: false`, every en
 The delay before attempt *n* (counting from 1 since the last successful connection) is:
 
 - **Base:** the last `retry:` value the server sent, or else `reconnectDelay` (3000 ms).
-- **Backoff** (default): base × 2<sup>n−1</sup>, times a random factor between 0.8 and 1.2, and at most `maxReconnectDelay` (30 s). With the defaults that's about 3, 6, 12 and 24 seconds, then 30 seconds for every later attempt. The cap is applied after the jitter, so capped delays are exactly `maxReconnectDelay`. The jitter spreads clients out when they all lose the connection at once.
+- **Backoff** (default): base × 2<sup>n−1</sup>, times a random factor between 0.8 and 1.2, and at most `maxReconnectDelay` (30 s). With the defaults that's about 3, 6, 12 and 24 seconds, then 24–36 seconds for every later attempt: the jitter is applied after the cap, so that clients which all lost the connection at once keep spreading out instead of retrying together.
 - **`backoff: false`:** always the base delay, with no jitter.
 - **`Retry-After`:** for an HTTP error (fetch transport), the delay is at least what the header asks for, in seconds or as an HTTP date.
+- **Limit:** delays longer than `setTimeout` supports (2<sup>31</sup>−1 ms, about 24.8 days) are shortened to that.
 
 The attempt count goes back to zero whenever a connection opens, so a server that closes each stream normally is reconnected after about the base delay every time. `maxReconnectAttempts` (default `Infinity`, as with `EventSource`) counts consecutive attempts that didn't open a stream. When it's reached, the state goes to `disconnected` and `sse.reconnect.failed` is published with `{ attempts }`. With `maxReconnectAttempts: 5`, the handler gives up when the fifth reconnection attempt in a row fails.
 
 ### Deciding when to reconnect
 
-`shouldReconnect(info)` replaces the defaults in the table above. It receives the `SseCloseInfo` (`reason`, plus `status` and `retryAfter`, `contentType` or `error` where they apply) and `attempts`, the number of reconnection attempts made since the last successful connection. It isn't called with `reconnect: false`, and `maxReconnectAttempts` still applies when it returns `true`.
+`shouldReconnect(info)` replaces the defaults in the table above. It receives the `SseCloseInfo` (`reason`, plus `status` and `retryAfter`, `contentType` or `error` where they apply) and `attempts`, the number of reconnection attempts made since the last successful connection. It isn't called with `reconnect: false`, and `maxReconnectAttempts` still applies when it returns `true`. The default policy is exported as `defaultShouldReconnect`, so you can change one case and leave the rest to it. If `shouldReconnect` throws, the error is logged and the default policy decides.
 
 Because `headers` can be an async function called before every attempt, a `401` can trigger a token refresh:
 
 ```typescript
 import { EvEm } from '@jcfigueiredo/evem';
-import { SseHandler, type SseReconnectInfo } from '@jcfigueiredo/evem/sse';
+import { defaultShouldReconnect, SseHandler } from '@jcfigueiredo/evem/sse';
 
 declare function getToken(): string;
 declare function refreshToken(): Promise<void>;
-
-// shouldReconnect replaces the whole default policy, so restate it for the other cases
-function defaultPolicy(info: SseReconnectInfo): boolean {
-  if (info.reason === 'http-error') {
-    return info.status === 408 || info.status === 429 || info.status >= 500;
-  }
-  return info.reason !== 'no-content' && info.reason !== 'bad-content-type';
-}
 
 let tokenExpired = false;
 
@@ -341,14 +334,14 @@ const sse = new SseHandler('/api/events', evem, {
       tokenExpired = true;
       return info.attempts < 2; // stop if fresh tokens are refused too
     }
-    return defaultPolicy(info);
+    return defaultShouldReconnect(info);
   },
 });
 ```
 
 ### Heartbeat timeout
 
-Proxies and load balancers sometimes stop forwarding a stream without closing it. The client then waits forever. `heartbeatTimeout` catches this: once the stream is open, if no bytes arrive for that many milliseconds, the handler aborts the connection, publishes `sse.error` with `reason: 'heartbeat-timeout'`, and reconnects (by default).
+Proxies and load balancers sometimes stop forwarding a stream without closing it, and servers sometimes accept a request but never answer it. The client then waits forever. `heartbeatTimeout` catches both: if the response or, once the stream is open, the next bytes don't arrive within that many milliseconds, the handler aborts the connection, publishes `sse.error` with `reason: 'heartbeat-timeout'`, and reconnects (by default).
 
 It needs a server that sends something regularly, even when there are no events. Comments are made for this: `formatSseComment('ping')` writes `: ping`, which clients ignore. Set the timeout to two or three times the server's interval:
 
@@ -361,7 +354,7 @@ const evem = new EvEm();
 const sse = new SseHandler('/api/events', evem, { heartbeatTimeout: 45_000 });
 ```
 
-The timer starts when the response arrives and restarts with every chunk received; it doesn't limit how long the server takes to respond. It's off by default and isn't available with the EventSource transport. A custom transport supports it if it calls `activity()`.
+The timer starts with the request and restarts when the response arrives and with every chunk received. It's off by default and isn't available with the EventSource transport. A custom transport supports it if it calls `activity()`.
 
 ## Resuming with Last-Event-ID
 
@@ -370,7 +363,7 @@ When the server gives events an `id:`, the handler remembers the id of the last 
 - **fetch transport:** as the `Last-Event-ID` request header, with every request once there's an id (the first request too, if you pass the `lastEventId` option).
 - **EventSource transport:** the browser sends the header on its own retries; an `EventSource` the handler creates gets it as a query parameter (`?lastEventId=42`, see [EventSource](#eventsource-transport-eventsource)).
 
-As in the SSE specification, an id carries over to later events that don't have one, and an empty `id:` line clears it. The handler records ids from the events it receives: an `id:` line in a message without `data`, which is never dispatched, is only picked up with the next event.
+As in the SSE specification, an id carries over to later events that don't have one, and an empty `id:` line clears it. A message with an `id:` but no `data` isn't dispatched as an event, but the handler still records its id (fetch transport; `EventSource` doesn't report it).
 
 To resume after a page reload, save `getLastEventId()` and pass it back as `lastEventId`:
 
@@ -447,10 +440,10 @@ process.on('SIGINT', async () => {
 });
 ```
 
-- **Use an absolute URL.** Node.js has no page to resolve `/api/events` against, so every attempt with a relative URL fails as a network error (and is retried).
+- **Use an absolute URL.** Node.js has no page to resolve `/api/events` against, so a relative URL throws a `TypeError` when the handler is created.
 - **Idle streams:** Node's built-in `fetch` gives up on a response whose body has been silent for 5 minutes. The handler then reconnects (`sse.error` with `reason: 'network-error'`). A server heartbeat more often than that avoids it.
 - **A custom `fetch`** (the `fetch` option) lets you use a proxy agent, other timeouts or instrumentation.
-- **EventSource transport:** Node.js 20 has no `EventSource`, and Node.js 22 has one only behind `--experimental-eventsource`. Pass a polyfill such as the [`eventsource`](https://www.npmjs.com/package/eventsource) package as `EventSourceConstructor`, or simply use the default transport. Without an implementation, every attempt fails with a network error.
+- **EventSource transport:** Node.js 20 has no `EventSource`, and Node.js 22 has one only behind `--experimental-eventsource`. Pass a polyfill such as the [`eventsource`](https://www.npmjs.com/package/eventsource) package as `EventSourceConstructor`, or simply use the default transport. Without an implementation, creating the handler throws a `TypeError`.
 
 ## Writing servers
 
@@ -506,7 +499,7 @@ formatSseComment('ping'); // ': ping\n\n'
 **Validation:** these throw instead of writing a broken stream:
 
 - `TypeError`: `event` or `id` contains a line break, `id` contains a NUL character, or `envelope: true` without an `event`.
-- `RangeError`: `retry` isn't a non-negative integer.
+- `RangeError`: `retry` isn't a non-negative integer (up to `Number.MAX_SAFE_INTEGER`; larger numbers would be written in exponent notation, which clients ignore).
 
 **`formatSseComment(text?)`** writes a comment (`: text`, one line per line of text, `:` alone for no text). Clients ignore comments; they're for heartbeats, which keep proxies from closing idle connections and the client's `heartbeatTimeout` from firing.
 
@@ -694,7 +687,7 @@ it('routes server events and resumes from the last event id', async () => {
 The transport contract:
 
 - **`connect(request, listener)`** opens one connection to `request.url`, sending `request.lastEventId` if it's set. It never reconnects by itself; the handler decides.
-- **The listener:** call `open()` once the server accepted the stream, `event({ type, data, lastEventId })` for each event, `retry(ms)` for a `retry:` field, and `activity()` whenever bytes arrive (for `heartbeatTimeout`). `event()` returns a promise with `sequential: true`; await it before reading more if your transport can pause. `reconnecting()` is optional, for transports that reconnect on their own, as `EventSource` does.
+- **The listener:** call `open()` once the server accepted the stream, `event({ type, data, lastEventId })` for each event, `retry(ms)` for a `retry:` field, `lastEventId(id)` (optional) when a message without data changes the last event id, and `activity()` whenever bytes arrive (for `heartbeatTimeout`). `event()` returns a promise with `sequential: true`; await it before reading more if your transport can pause. `reconnecting()` is optional, for transports that reconnect on their own, as `EventSource` does.
 - **The result:** resolve `connect()` with an [`SseCloseInfo`](#types) saying why the connection ended. `abort()` ends the current connection, and its `connect()` then resolves with `{ reason: 'aborted' }`.
 
 Use fake timers (`vi.useFakeTimers()` and `await vi.advanceTimersByTimeAsync(ms)`) to test reconnection delays without waiting. Backoff adds jitter, so either pass `backoff: false` or stub `Math.random`.
@@ -806,6 +799,7 @@ parser.end(); // discards an unterminated last event, as the spec requires
 `@jcfigueiredo/evem/sse` exports:
 
 - **Classes:** `SseHandler`, `FetchSseTransport`, `EventSourceSseTransport`, `SseParser`, and `ConnectionManager`: the state holder shared with the WebSocket adapter, which `SseHandler` creates with `stateEvent: 'sse.connection.state'`.
+- **Functions:** `defaultShouldReconnect`, the default reconnection policy.
 - **Options:** `SseHandlerOptions`, `FetchSseTransportOptions`, `EventSourceSseTransportOptions`, `ConnectionManagerOptions`, `SseHeaders`, `SseBody`.
 - **Events and state:** `SseEvents`, `ConnectionState`, `ConnectionStateChangeEvent`.
 - **Transports:** `SseTransport`, `SseTransportListener`, `SseConnectRequest`, `SseCloseInfo`, `SseReconnectInfo`, `EventSourceLike`, `EventSourceConstructorLike`.
