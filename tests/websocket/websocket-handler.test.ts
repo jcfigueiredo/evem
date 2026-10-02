@@ -1274,3 +1274,103 @@ describe('WebSocketHandler - server event prefix', () => {
     expect(await routedName({ event: 'app.user.login', data: 1 }, 'app')).toBe('app.user.login');
   });
 });
+
+describe('WebSocketHandler - edge cases found while documenting', () => {
+  let evem: EvEm;
+  let mockWs: MockWebSocket;
+  let handler: WebSocketHandler;
+  const tick = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
+  const sentMessages = () => mockWs.sentMessages.map(message => JSON.parse(message));
+
+  beforeEach(() => {
+    evem = new EvEm();
+    mockWs = new MockWebSocket('wss://test.example.com');
+  });
+
+  afterEach(async () => {
+    await handler?.disconnect();
+  });
+
+  it('should not send a message twice when the socket opens while it is still being published', async () => {
+    handler = new WebSocketHandler(mockWs, evem);
+    mockWs.simulateClose();
+    await tick();
+    let release!: () => void;
+    evem.subscribe('ws.send', () => new Promise<void>(resolve => { release = resolve; }), { priority: 10 });
+
+    const publishing = evem.publish('ws.send', { n: 1 }); // queued while offline
+    await tick();
+    mockWs.simulateOpen(); // flushes the queue
+    await tick();
+    release();
+    await publishing;
+
+    expect(sentMessages()).toEqual([{ n: 1 }]);
+  });
+
+  it('should send a payload object again when it is re-published after being flushed', async () => {
+    handler = new WebSocketHandler(mockWs, evem);
+    mockWs.simulateClose();
+    await tick();
+    const message = { n: 1 };
+
+    await evem.publish('ws.send', message);
+    mockWs.simulateOpen();
+    await tick();
+    await evem.publish('ws.send', message);
+
+    expect(sentMessages()).toEqual([{ n: 1 }, { n: 1 }]);
+  });
+
+  it('should send queued messages on flush() when autoFlush is off', async () => {
+    handler = new WebSocketHandler(mockWs, evem, { autoFlush: false });
+    mockWs.simulateClose();
+    await tick();
+    await evem.publish('ws.send', { n: 1 });
+    mockWs.simulateOpen();
+    await tick();
+    expect(sentMessages()).toEqual([]);
+
+    await handler.flush();
+
+    expect(sentMessages()).toEqual([{ n: 1 }]);
+    expect(handler.getQueueSize()).toBe(0);
+  });
+
+  it('should send ws.send.request like any ws.send.* event when request-response is disabled', async () => {
+    handler = new WebSocketHandler(mockWs, evem, { enableRequestResponse: false });
+    mockWs.simulateOpen();
+
+    await evem.publish('ws.send.request', { id: 'r1', method: 'ping' });
+
+    expect(sentMessages()).toEqual([{ id: 'r1', method: 'ping' }]);
+  });
+
+  it('should leave nothing registered when the socket cannot be created', () => {
+    class FailingSocket {
+      constructor() {
+        throw new Error('no WebSocket here');
+      }
+    }
+
+    expect(() => new WebSocketHandler('wss://test.example.com', evem, {
+      WebSocketConstructor: FailingSocket as any
+    })).toThrow('no WebSocket here');
+    expect(evem.info()).toEqual([]);
+  });
+
+  it('should route an incoming JSON null to ws.message, not ws.parse.error', async () => {
+    handler = new WebSocketHandler(mockWs, evem);
+    mockWs.simulateOpen();
+    const messages: unknown[] = [];
+    const parseErrors = vi.fn();
+    evem.subscribe('ws.message', (message: unknown) => { messages.push(message); });
+    evem.subscribe('ws.parse.error', parseErrors);
+
+    mockWs.simulateMessage('null');
+    await tick();
+
+    expect(messages).toEqual([null]);
+    expect(parseErrors).not.toHaveBeenCalled();
+  });
+});

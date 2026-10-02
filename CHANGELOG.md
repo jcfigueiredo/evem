@@ -34,6 +34,7 @@ First release published to npm, as `@jcfigueiredo/evem`.
 ### Added
 
 - `WebSocketHandler.request(method, params?, options?)` for request-response calls through the handler.
+- `WebSocketHandler.flush()` to send queued messages on demand (needed with `autoFlush: false`).
 - `WebSocketHandler` reconnection: the `reconnect`, `reconnectDelay` and `maxReconnectAttempts` options now work (they were accepted but ignored), with a `ws.reconnect.failed` event after the last attempt and a `WebSocketConstructor` option.
 - `MessageQueue.enqueue()` to queue a message explicitly.
 - `event.canceled` on cancelable events.
@@ -43,6 +44,7 @@ First release published to npm, as `@jcfigueiredo/evem`.
 - `unsubscribe(event, callback)` now removes subscriptions created with options (filter, once, throttle, debounce, schema) and cancels their pending timers.
 - Removing an event's last subscription frees its entry, so dynamic event names no longer accumulate.
 - `WebSocketEvents` lists the events the adapter actually publishes (`ws.error`, `ws.message`, `ws.parse.error`, `ws.queue.overflow`, `ws.send.queued`, …) with their payloads; it listed events that were never published.
+- `WebSocketHandler`: a message queued while offline is no longer sent twice when the connection opens while its publish is still running; with `enableRequestResponse: false`, `ws.send.request` is sent like other `ws.send.*` events (it was only sent after being queued); a constructor that can't create its socket no longer leaves middleware and subscriptions behind; an incoming message that is valid JSON but not an object (e.g. `null`) goes to `ws.message` instead of `ws.parse.error`.
 - A legacy `{ type: 'server.x' }` message is routed to `server.x`, like `{ event: 'server.x' }`, instead of `server.server.x`.
 - `WebSocketHandler`: an already-open socket starts `connected`; messages the socket can't take (closing, or dropped mid-flush) go back into the queue; `disconnect()` removes all of its subscriptions; an empty `serverEventPrefix` no longer routes to `.name`.
 - `MessageQueue.disable()` and `RequestResponseManager.cleanup()` now remove their subscriptions and middleware.

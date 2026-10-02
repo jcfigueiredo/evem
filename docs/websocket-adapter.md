@@ -91,8 +91,8 @@ Use **one `WebSocketHandler` per `EvEm` instance**. Two handlers on the same emi
 |--------|---------|-------------|
 | `enableQueue` | `true` | Queue messages while not connected. With `false`, messages published while offline are dropped. |
 | `queueSize` | `100` | Maximum number of queued messages. When the queue is full, the oldest message is dropped and `ws.queue.overflow` is published. |
-| `autoFlush` | `true` | Send queued messages whenever the state becomes `connected`, including the first connection. With `false`, queued messages are never sent, because the handler has no public `flush()`. They're discarded by `disconnect()`. |
-| `enableRequestResponse` | `true` | Enables `request()`, the request format for `ws.send.request`, and routing of `{"type":"response"}` messages. |
+| `autoFlush` | `true` | Send queued messages whenever the state becomes `connected`, including the first connection. With `false`, call `handler.flush()` to send them. They're discarded by `disconnect()`. |
+| `enableRequestResponse` | `true` | Enables `request()`, the request format for `ws.send.request`, and routing of `{"type":"response"}` messages. With `false`, `ws.send.request` is sent like any other `ws.send.*` event. |
 | `serverEventPrefix` | `'server'` | Prefix for incoming server events (`chat.message` → `server.chat.message`). With `''`, events are published under their own names. |
 | `reconnect` | `false` | Reconnect after an unexpected close. Never happens after `disconnect()`. |
 | `reconnectDelay` | `1000` | Milliseconds to wait before each reconnection attempt. The delay is fixed; there is no backoff. |
@@ -107,6 +107,7 @@ Use **one `WebSocketHandler` per `EvEm` instance**. Two handlers on the same emi
 | Method | Description |
 |--------|-------------|
 | `request<T>(method, params?, { timeout?, id? }?)` | Sends a request and resolves with the response's `result`. See [Request-response](#request-response). |
+| `flush(): Promise<void>` | Sends the queued messages now, in order (needed with `autoFlush: false`). Messages the socket can't take go back into the queue. |
 | `disconnect(): Promise<void>` | Cancels any pending reconnection and rejects pending requests. Discards queued messages, closes the socket with code 1000, removes all of the handler's subscriptions and middleware, and moves the state through `disconnecting` to `disconnected` (unless it's already `disconnected`). The handler can't be reused afterwards; create a new one to connect again. |
 | `isConnected(): boolean` | `true` while the state is `connected`. |
 | `getConnectionState(): string` | The current state: `'disconnected'`, `'connected'`, `'reconnecting'` or `'disconnecting'`. |
@@ -155,7 +156,7 @@ Subscriber errors are handled by EvEm's default error policy: they're logged, an
 | `{"type":"chat.message","data":{…}}` (legacy) | `server.chat.message` (same rule as `event`) | `data` |
 | `{"type":"response","id":"…","result":…}` | `ws.response` | resolves the matching `request()` |
 | `{"type":"response","id":"…","error":{"code":…,"message":"…"}}` | `ws.response.error` | rejects the matching `request()` |
-| anything else, e.g. `{"ping":1}` | `ws.message` | the whole parsed message |
+| anything else, e.g. `{"ping":1}`, or JSON that isn't an object (`null`, `42`) | `ws.message` | the whole parsed message |
 | invalid JSON | `ws.parse.error` | `{ error, rawData }` |
 
 `event` takes precedence over `type`. If `data` is missing, subscribers receive `{}`. With `enableRequestResponse: false`, response messages go to `ws.message`. See [Server Events](websocket-server-events.md) for subscribing to these.
@@ -211,6 +212,7 @@ While the state isn't `connected`, `ws.send`, `ws.send.*` and request messages g
 - **Closed socket:** a message the socket can't take, because it's no longer open, is put back in the queue. This happens when the socket closed before `onclose` updated the state, or when the connection dropped in the middle of a flush.
 - **Send errors:** if `messageFormatter` or `socket.send()` throws, the error is logged with `console.error` and that message is dropped.
 - **No queue:** with `enableQueue: false`, messages published while offline are dropped silently.
+- **Sent once:** a message queued while offline is sent only by the flush, even if the connection opens while that message's publish is still running (e.g. behind a slow async subscriber).
 - **Disconnect:** `disconnect()` discards anything still queued.
 
 Don't queue messages that are only meaningful in real time (cursor positions, live controls). Either disable the queue, or check `handler.isConnected()` before publishing them.

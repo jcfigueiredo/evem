@@ -25,6 +25,8 @@ export class MessageQueue {
   private middlewareHandler?: (event: string, data: any) => any;
   private stateSubscriptionId?: string;
   private isEnqueuing = false;
+  /** Payload objects whose most recent publish the middleware queued (see wasQueued) */
+  private queuedPayloads = new WeakSet<object>();
 
   constructor(
     private evem: EvEm,
@@ -45,16 +47,27 @@ export class MessageQueue {
 
     // Create a handler function for queueing and store it for later removal
     this.middlewareHandler = (event: string, data: any) => {
-      // Only queue if enabled, not already enqueuing, not connected, and not a queued event
-      if (
-        this.enabled &&
-        !this.isEnqueuing &&
-        !this.connectionManager.isConnected() &&
-        !event.includes('queued')
-      ) {
+      // Flushed messages pass through untouched
+      if (event.includes('queued')) {
+        return data;
+      }
+
+      // Only queue if enabled, not already enqueuing and not connected
+      const shouldQueue = this.enabled && !this.isEnqueuing && !this.connectionManager.isConnected();
+      if (shouldQueue) {
         // Queue the message synchronously as a side effect
         this.enqueueSynchronous(data);
       }
+
+      // Remember the decision, so senders later in this publish don't send a queued message too
+      if (typeof data === 'object' && data !== null) {
+        if (shouldQueue) {
+          this.queuedPayloads.add(data);
+        } else {
+          this.queuedPayloads.delete(data);
+        }
+      }
+
       // Always return data unchanged to pass through to other handlers
       return data;
     };
@@ -139,6 +152,16 @@ export class MessageQueue {
    */
   enqueue(data: any): void {
     this.enqueueSynchronous(data);
+  }
+
+  /**
+   * Whether the middleware queued this payload the last time it was published
+   * Senders that run later in the same publish (e.g. a ws.send subscriber, after the connection
+   * opened in the meantime) use it to avoid sending a message the queue will also flush.
+   * Always false for primitive payloads, which can't be tracked.
+   */
+  wasQueued(data: unknown): boolean {
+    return typeof data === 'object' && data !== null && this.queuedPayloads.has(data);
   }
 
   /**

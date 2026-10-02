@@ -59,12 +59,14 @@ export class WebSocketHandler {
    * Sends ws.send.* events other than requests (e.g. ws.send.chat), like ws.send itself.
    * Subscribers don't receive the event name, so this has to be a middleware. It's registered after
    * the MessageQueue middleware, which has already queued the message if we're disconnected.
-   * Requests and flushed messages (ws.send.queued) have their own subscribers.
+   * Requests (when request-response is enabled) and flushed messages (ws.send.queued) have their
+   * own subscribers.
    */
   private readonly subEventSendMiddleware: MiddlewareConfig = {
     pattern: 'ws.send.*',
     handler: (event: string, data: any) => {
-      if (event !== 'ws.send.request' && !event.includes('queued')) {
+      const hasRequestSubscriber = event === 'ws.send.request' && this.options.enableRequestResponse;
+      if (!hasRequestSubscriber && !event.includes('queued')) {
         this.sendOrQueue(data, false, 'Failed to send message:');
       }
       return data;
@@ -101,6 +103,16 @@ export class WebSocketHandler {
       messageFormatter: options.messageFormatter ?? ((data: any) => JSON.stringify(data)),
     };
 
+    // Create or use provided WebSocket. First, so that if the socket can't be created,
+    // nothing has been registered on the emitter yet
+    if (typeof urlOrSocket === 'string') {
+      this.url = urlOrSocket;
+      this.ws = this.createWebSocket(urlOrSocket);
+    } else {
+      this.url = urlOrSocket.url;
+      this.ws = urlOrSocket;
+    }
+
     // Initialize ConnectionManager
     this.connectionManager = new ConnectionManager(evem);
 
@@ -120,15 +132,6 @@ export class WebSocketHandler {
     // Initialize RequestResponseManager if enabled
     if (this.options.enableRequestResponse) {
       this.requestResponse = new RequestResponseManager(evem);
-    }
-
-    // Create or use provided WebSocket
-    if (typeof urlOrSocket === 'string') {
-      this.url = urlOrSocket;
-      this.ws = this.createWebSocket(urlOrSocket);
-    } else {
-      this.url = urlOrSocket.url;
-      this.ws = urlOrSocket;
     }
 
     // Auto-wire all events
@@ -275,7 +278,8 @@ export class WebSocketHandler {
     // Wire request messages if request-response is enabled
     if (this.options.enableRequestResponse) {
       const requestSub = this.evem.subscribe('ws.send.request', (request: any) => {
-        this.sendOrQueue({ type: 'request', ...request }, false, 'Failed to send request:');
+        // Already in wire format (requestFormatMiddleware)
+        this.sendOrQueue(request, false, 'Failed to send request:');
       });
       this.subscriptionIds.push(requestSub);
     }
@@ -290,6 +294,12 @@ export class WebSocketHandler {
    * @param errorLabel - Prefix for the error logged when sending fails
    */
   private sendOrQueue(data: any, fromQueue: boolean, errorLabel: string): void {
+    // The queue middleware queued this message when it was published (we were offline); the
+    // connection may have opened since, but the queue sends it, so don't send it twice
+    if (!fromQueue && this.messageQueue?.wasQueued(data)) {
+      return;
+    }
+
     if (this.ws.readyState === this.ws.OPEN) {
       try {
         const formatted = this.options.messageFormatter(data);
@@ -324,7 +334,13 @@ export class WebSocketHandler {
    */
   private handleIncomingMessage(rawData: string): void {
     try {
-      const message: IncomingMessage = this.options.messageParser(rawData);
+      const message: IncomingMessage | null = this.options.messageParser(rawData);
+
+      // A valid message that isn't an object (e.g. null or a number) can't be routed
+      if (message === null || typeof message !== 'object') {
+        this.evem.publish('ws.message', message);
+        return;
+      }
 
       // Route RPC responses
       if (message.type === 'response' && this.options.enableRequestResponse) {
@@ -391,6 +407,14 @@ export class WebSocketHandler {
    */
   getQueueSize(): number {
     return this.messageQueue?.getQueueSize() ?? 0;
+  }
+
+  /**
+   * Send the messages queued while offline now (the only way to send them with autoFlush: false)
+   * Messages the socket can't take go back into the queue. Does nothing if the queue is disabled.
+   */
+  async flush(): Promise<void> {
+    await this.messageQueue?.flush();
   }
 
   /**
