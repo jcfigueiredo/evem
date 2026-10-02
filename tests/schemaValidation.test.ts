@@ -280,40 +280,47 @@ describe('Event Schema Validation', () => {
     });
 
     it('should respect THROW error policy for schema validation', async () => {
-      // For this test, we need to mock the publish method to verify it handles errors properly
-      // This is a different approach than the previous tests, but it allows us to verify the error handling
-      
-      // Create a spy for the publish method
-      const publishSpy = vi.spyOn(evem, 'publish');
-      
-      // Make the spy reject with an error when called with 'throw.validation'
-      publishSpy.mockImplementationOnce(async (eventName) => {
-        if (eventName === 'throw.validation') {
-          throw new Error('Schema validation failed for event');
-        }
-        return true;
-      });
-      
       const handler = vi.fn();
+      const laterHandler = vi.fn();
 
       evem.subscribe('throw.validation', handler, {
-        schema: () => false, // This won't actually be called due to our mock
-        schemaErrorPolicy: ErrorPolicy.THROW
+        schema: () => false,
+        schemaErrorPolicy: ErrorPolicy.THROW,
+        priority: 10
       });
+      evem.subscribe('throw.validation', laterHandler);
 
-      // Publish should throw an error
+      // schemaErrorPolicy THROW rejects publish on its own, whatever the publish errorPolicy
       await expect(
         evem.publish('throw.validation', { data: 'test' })
-      ).rejects.toThrow('Schema validation failed for event');
+      ).rejects.toThrow("Schema validation failed for event 'throw.validation'");
 
-      // Handler should not be called due to schema validation failure
+      // Handler should not be called due to schema validation failure, and propagation stops
       expect(handler).not.toHaveBeenCalled();
+      expect(laterHandler).not.toHaveBeenCalled();
       
       // No errors should be logged with THROW policy (they're thrown instead)
       expect(console.error).not.toHaveBeenCalled();
-      
-      // Restore the spy
-      publishSpy.mockRestore();
+    });
+
+    it('should not treat a handler error that mentions schema validation as a schema error', async () => {
+      evem.subscribe('user.created', () => {
+        throw new Error('Schema validation failed in my own code');
+      });
+
+      await expect(evem.publish('user.created', { id: 1 })).resolves.toBe(true);
+      expect(console.error).toHaveBeenCalled();
+    });
+
+    it('should reject for an async validator under THROW policy', async () => {
+      evem.subscribe('user.created', vi.fn(), {
+        schema: async () => ({ valid: false, errors: [{ message: 'id must be positive' }] }),
+        schemaErrorPolicy: ErrorPolicy.THROW
+      });
+
+      await expect(evem.publish('user.created', { id: -1 })).rejects.toMatchObject({
+        validationErrors: [{ message: 'id must be positive' }]
+      });
     });
   });
 

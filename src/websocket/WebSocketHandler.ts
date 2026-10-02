@@ -6,6 +6,7 @@ import type {
   IWebSocket,
   WebSocketHandlerOptions,
   IncomingMessage,
+  RequestOptions,
 } from './types.js';
 
 /**
@@ -52,6 +53,22 @@ export class WebSocketHandler {
   private readonly requestFormatMiddleware: MiddlewareConfig = {
     pattern: 'ws.send.request',
     handler: (_event: string, request: any) => ({ type: 'request', ...request }),
+  };
+
+  /**
+   * Sends ws.send.* events other than requests (e.g. ws.send.chat), like ws.send itself.
+   * Subscribers don't receive the event name, so this has to be a middleware. It's registered after
+   * the MessageQueue middleware, which has already queued the message if we're disconnected.
+   * Requests and flushed messages (ws.send.queued) have their own subscribers.
+   */
+  private readonly subEventSendMiddleware: MiddlewareConfig = {
+    pattern: 'ws.send.*',
+    handler: (event: string, data: any) => {
+      if (event !== 'ws.send.request' && !event.includes('queued')) {
+        this.sendOrQueue(data, false, 'Failed to send message:');
+      }
+      return data;
+    },
   };
 
   /**
@@ -236,6 +253,9 @@ export class WebSocketHandler {
    * Auto-wire outgoing EvEm events to WebSocket.send()
    */
   private autoWireOutgoingMessages(): void {
+    // Other ws.send.* events (see subEventSendMiddleware)
+    this.evem.use(this.subEventSendMiddleware);
+
     // Wire regular messages sent via ws.send
     // The MessageQueue middleware always passes messages through (it queues them as a side
     // effect while disconnected), so we handle both:
@@ -376,6 +396,26 @@ export class WebSocketHandler {
   }
 
   /**
+   * Send a request to the server and wait for its response (request-response pattern)
+   * The request is queued while disconnected, like other messages.
+   *
+   * @param method - Method name sent to the server
+   * @param params - Optional request parameters
+   * @param options - Timeout (default 5000ms) and optional custom request id
+   * @returns The response's `result`; rejects with the server's error, a RequestTimeoutError,
+   *   or an Error if request-response is disabled or the handler is disconnected
+   */
+  request<T = any>(method: string, params?: any, options?: RequestOptions): Promise<T> {
+    if (!this.requestResponse) {
+      return Promise.reject(new Error('Request-response is disabled (enableRequestResponse: false)'));
+    }
+    if (this.isDisconnecting) {
+      return Promise.reject(new Error('WebSocketHandler is disconnected'));
+    }
+    return this.requestResponse.request(method, params, options);
+  }
+
+  /**
    * Disconnect and clean up all resources
    * The connection state leaves 'connected' immediately; the returned promise resolves
    * once the 'disconnecting' and 'disconnected' state changes have been handled
@@ -403,6 +443,7 @@ export class WebSocketHandler {
     }
     this.subscriptionIds = [];
     this.evem.removeMiddleware(this.requestFormatMiddleware);
+    this.evem.removeMiddleware(this.subEventSendMiddleware);
 
     // Clean up MessageQueue
     if (this.messageQueue) {

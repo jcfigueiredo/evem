@@ -12,6 +12,21 @@ type EventCallback<T = unknown> = (args: T) => void | Promise<void>;
 
 /** Result of handlePromiseWithTimeout when the timeout wins the race */
 const TIMED_OUT = Symbol('timedOut');
+
+/**
+ * Returned by subscription wrappers (once, filters, schema, throttle/debounce) when they don't call
+ * the subscriber for an event, so publish knows not to apply that subscriber's transform
+ */
+const SKIPPED = Symbol('skipped');
+
+/** Callback as stored for a subscription: the user's callback wrapped by its options */
+type WrappedCallback<T = unknown> = (args: T) => unknown;
+
+/** Marks errors from schemaErrorPolicy THROW, which always reject publish */
+const SCHEMA_THROW = Symbol('schemaThrow');
+
+const isSchemaThrow = (error: unknown): boolean =>
+  typeof error === 'object' && error !== null && (error as Record<symbol, unknown>)[SCHEMA_THROW] === true;
 type FilterPredicate<T = unknown> = (args: T) => boolean | Promise<boolean>;
 type PriorityLevel = 'high' | 'normal' | 'low';
 
@@ -173,7 +188,7 @@ interface IEventEmitter {
 
 interface CallbackInfo<T = unknown, R = any> {
   /** The callback wrapped with the subscription's options (once, filters, throttle, ...) */
-  callback: EventCallback<T>;
+  callback: WrappedCallback<T>;
   /** The callback as passed to subscribe, used by unsubscribe(event, callback) */
   originalCallback: EventCallback<T>;
   priority: number;
@@ -397,7 +412,7 @@ class EvEm implements IEventEmitter {
    * Invoke a callback outside of a publish (debounced calls, history replay). There is no caller
    * to report errors to, so sync errors and async rejections are logged instead of escaping.
    */
-  private invokeDetached<T>(callback: EventCallback<T>, args: T, errorMessage: string): void {
+  private invokeDetached<T>(callback: WrappedCallback<T>, args: T, errorMessage: string): void {
     try {
       const result = callback(args);
       if (result instanceof Promise) {
@@ -426,7 +441,7 @@ class EvEm implements IEventEmitter {
     const subscriptionId = crypto.randomUUID();
     
     // Reference to the original callback
-    let finalCallback: EventCallback<T> = callback;
+    let finalCallback: WrappedCallback<T> = callback;
     
     // Build the callback chain from the inside out. Events flow through it in this order:
     // schema validation → filters → throttle/debounce → once → original callback
@@ -441,7 +456,7 @@ class EvEm implements IEventEmitter {
       
       finalCallback = function onceWrapper(args: T) {
         if (hasFired) {
-          return;
+          return SKIPPED;
         }
         hasFired = true;
         // Unsubscribe before calling, so the subscription is removed even if the callback throws or never settles
@@ -472,7 +487,7 @@ class EvEm implements IEventEmitter {
           
           // If throttle window hasn't expired, ignore this event
           if (now < throttleData.expiresAt) {
-            return;
+            return SKIPPED;
           }
           
           // Throttle window has expired, clean up the old timer
@@ -512,7 +527,7 @@ class EvEm implements IEventEmitter {
         }, debounceTime);
         
         this.debounceTimers.set(timerId, timer);
-        return;
+        return SKIPPED;
       };
     }
     // Handle both throttle and debounce
@@ -553,7 +568,7 @@ class EvEm implements IEventEmitter {
         }, debounceTime);
         
         this.debounceTimers.set(timerId, timer);
-        return;
+        return SKIPPED;
       };
     }
     
@@ -595,15 +610,15 @@ class EvEm implements IEventEmitter {
             if (passes) {
               return originalCallback(args);
             }
-            // Otherwise return undefined (without calling the callback)
-            return undefined;
+            // Otherwise skip the callback
+            return SKIPPED;
           }));
         } else if (filterResult) {
           // If all filters passed synchronously, call the original callback
           return originalCallback(args);
         }
         // Otherwise don't call the callback
-        return undefined;
+        return SKIPPED;
       };
     }
     
@@ -625,7 +640,7 @@ class EvEm implements IEventEmitter {
           switch (policy) {
             case ErrorPolicy.SILENT:
               // Silently ignore the error, don't call the callback
-              return undefined;
+              return SKIPPED;
               
             case ErrorPolicy.LOG_AND_CONTINUE:
               // Log the error and continue with the callback
@@ -636,13 +651,14 @@ class EvEm implements IEventEmitter {
               // Throw an error
               const error = new Error(message);
               (error as any).validationErrors = errors;
+              Object.defineProperty(error, SCHEMA_THROW, { value: true });
               throw error;
               
             case ErrorPolicy.CANCEL_ON_ERROR:
             default:
               // Log the error and skip this subscriber (other subscribers still run)
               console.error(message, errors ? errors : '');
-              return undefined;
+              return SKIPPED;
           }
         };
         
@@ -719,7 +735,7 @@ class EvEm implements IEventEmitter {
     // Register the final wrapped callback with its priority and transform function
     const callbacks = this.events.get(event) ?? new Map();
     callbacks.set(subscriptionId, {
-      callback: finalCallback as EventCallback,
+      callback: finalCallback as WrappedCallback,
       originalCallback: callback as EventCallback,
       priority,
       sequence: this.subscriptionSequence++,
@@ -1003,7 +1019,7 @@ class EvEm implements IEventEmitter {
       eventData = makeCancelable(eventData);
     }
 
-    const matchingCallbacks: { callback: EventCallback, priority: number, sequence: number, transform?: TransformFunction }[] = [];
+    const matchingCallbacks: { callback: WrappedCallback, priority: number, sequence: number, transform?: TransformFunction }[] = [];
 
     // First, collect all matching callbacks with their priorities and transform functions
     for (const [registeredEvent, callbacks] of this.events) {
@@ -1024,11 +1040,9 @@ class EvEm implements IEventEmitter {
 
     // Helper function to handle callback errors based on the error policy
     const handleCallbackError = (error: any) => {
-      // Special handling for schema validation errors with THROW policy
-      if (error && error.message && error.message.includes('Schema validation failed')) {
-        if (errorPolicy === ErrorPolicy.THROW) {
-          throw error;
-        }
+      // schemaErrorPolicy THROW always rejects publish, whatever the publish error policy
+      if (isSchemaThrow(error)) {
+        throw error;
       }
       
       // Handle other errors based on the error policy
@@ -1066,25 +1080,13 @@ class EvEm implements IEventEmitter {
       
       try {
         // Call the current callback with the current event data
-        const callbackPromise = this.runInPublishChain(publishChain, () => callback(currentEventData));
-        if (callbackPromise instanceof Promise) {
-          try {
-            // For async callbacks, wait for them to complete before proceeding to the next one
-            await this.handlePromiseWithTimeout(callbackPromise, timeout);
-          } catch (error) {
-            // Special handling for schema validation errors with THROW policy
-            if (error instanceof Error && error.message.includes('Schema validation failed')) {
-              if (errorPolicy === ErrorPolicy.THROW) {
-                throw error;
-              }
-              
-              // For other error policies, handle as usual
-              handleCallbackError(error);
-              continue; // Skip to the next callback
-            }
-            
-            // Re-throw other errors to be handled by the outer catch
-            throw error;
+        let outcome = this.runInPublishChain(publishChain, () => callback(currentEventData));
+        if (outcome instanceof Promise) {
+          // For async callbacks, wait for them to complete before proceeding to the next one.
+          // A timeout is handled by the error policy below; the callback itself keeps running.
+          outcome = await this.handlePromiseWithTimeout(outcome, timeout);
+          if (outcome === TIMED_OUT) {
+            throw new Error(`Event handler timed out after ${timeout}ms`);
           }
         }
         
@@ -1093,8 +1095,9 @@ class EvEm implements IEventEmitter {
           break;
         }
         
-        // Apply transformations if this callback has a transform function
-        if (transform) {
+        // Apply this subscriber's transform, unless its once, filter, schema or throttle/debounce
+        // step skipped the callback for this event
+        if (transform && outcome !== SKIPPED) {
           try {
             const transformResult = this.runInPublishChain(publishChain, () => transform(currentEventData));
             if (transformResult instanceof Promise) {

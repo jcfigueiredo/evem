@@ -314,3 +314,52 @@ describe('Transforms - async timeouts', () => {
     ).rejects.toThrow('timed out');
   });
 });
+
+describe('Transforms - only for subscribers that handled the event', () => {
+  let evem: EvEm;
+  const double: TransformFunction = (data: any) => ({ value: data.value * 2 });
+
+  beforeEach(() => {
+    evem = new EvEm();
+  });
+
+  const lastValueAfter = async (options: Record<string, unknown>, publishes: number[] = [1]) => {
+    let received: any;
+    evem.subscribe('reading', () => {}, { priority: 10, transform: double, ...options });
+    evem.subscribe('reading', (data: any) => { received = data.value; }, { priority: 0 });
+    for (const value of publishes) {
+      await evem.publish('reading', { value });
+    }
+    return received;
+  };
+
+  it('should apply the transform when the subscriber handled the event', async () => {
+    expect(await lastValueAfter({ filter: () => true })).toBe(2);
+  });
+
+  it('should skip the transform when the subscriber\'s filter rejected the event', async () => {
+    expect(await lastValueAfter({ filter: () => false })).toBe(1);
+  });
+
+  it('should skip the transform when the subscriber\'s async filter rejected the event', async () => {
+    expect(await lastValueAfter({ filter: async () => false })).toBe(1);
+  });
+
+  it('should skip the transform when the subscriber\'s schema rejected the event', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await lastValueAfter({ schema: () => false })).toBe(1);
+    vi.restoreAllMocks();
+  });
+
+  it('should skip the transform while the subscriber is throttled', async () => {
+    expect(await lastValueAfter({ throttleTime: 1000 }, [1, 5])).toBe(5);
+  });
+
+  it('should skip the transform for a debounced subscriber', async () => {
+    expect(await lastValueAfter({ debounceTime: 1000 })).toBe(1);
+  });
+
+  it('should skip the transform once a once-subscriber has fired', async () => {
+    expect(await lastValueAfter({ once: true }, [1, 5])).toBe(5);
+  });
+});

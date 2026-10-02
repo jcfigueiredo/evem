@@ -1135,3 +1135,102 @@ describe('WebSocketHandler - reconnect', () => {
     expect(states).toEqual(['connected', 'disconnected']);
   });
 });
+
+describe('WebSocketHandler - request() and ws.send.* events', () => {
+  let evem: EvEm;
+  let mockWs: MockWebSocket;
+  let handler: WebSocketHandler;
+  const tick = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
+  const sentMessages = () => mockWs.sentMessages.map(message => JSON.parse(message));
+
+  beforeEach(() => {
+    evem = new EvEm();
+    mockWs = new MockWebSocket('wss://test.example.com');
+  });
+
+  afterEach(async () => {
+    await handler?.disconnect();
+  });
+
+  describe('request()', () => {
+    it('should send a request and resolve with the server result', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateOpen();
+
+      const pending = handler.request('getUser', { id: 7 });
+      await tick();
+      const [sent] = sentMessages();
+      expect(sent).toMatchObject({ type: 'request', method: 'getUser', params: { id: 7 } });
+      mockWs.simulateMessage(JSON.stringify({ type: 'response', id: sent.id, result: { name: 'Ada' } }));
+
+      await expect(pending).resolves.toEqual({ name: 'Ada' });
+    });
+
+    it('should reject with the server error', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateOpen();
+
+      const pending = handler.request('deleteUser', { id: 7 }, { id: 'req-9' });
+      await tick();
+      mockWs.simulateMessage(JSON.stringify({
+        type: 'response',
+        id: 'req-9',
+        error: { code: 403, message: 'Forbidden' }
+      }));
+
+      await expect(pending).rejects.toMatchObject({ message: 'Forbidden', code: 403 });
+    });
+
+    it('should reject when request-response is disabled', async () => {
+      handler = new WebSocketHandler(mockWs, evem, { enableRequestResponse: false });
+
+      await expect(handler.request('ping')).rejects.toThrow('enableRequestResponse');
+    });
+  });
+
+  describe('ws.send.* events', () => {
+    it('should send other ws.send.* events while connected', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateOpen();
+
+      await evem.publish('ws.send.chat', { text: 'hi' });
+
+      expect(sentMessages()).toEqual([{ text: 'hi' }]);
+    });
+
+    it('should send ws.send.* events queued while offline exactly once', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateClose();
+      await tick();
+
+      await evem.publish('ws.send.chat', { text: 'hi' });
+      mockWs.simulateOpen();
+      await tick();
+
+      expect(sentMessages()).toEqual([{ text: 'hi' }]);
+    });
+
+    it('should still send ws.send and ws.send.request exactly once', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateOpen();
+
+      await evem.publish('ws.send', { text: 'plain' });
+      await evem.publish('ws.send.request', { id: 'r1', method: 'ping', timestamp: 1 });
+
+      expect(sentMessages()).toEqual([
+        { text: 'plain' },
+        { type: 'request', id: 'r1', method: 'ping', timestamp: 1 }
+      ]);
+    });
+
+    it('should remove all of its middleware on disconnect()', async () => {
+      handler = new WebSocketHandler(mockWs, evem);
+      mockWs.simulateOpen();
+      expect(evem.info().some(info => info.isMiddleware)).toBe(true);
+
+      await handler.disconnect();
+
+      expect(evem.info().filter(info => info.isMiddleware)).toEqual([]);
+    });
+  });
+});

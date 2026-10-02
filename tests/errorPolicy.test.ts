@@ -250,3 +250,60 @@ describe('Error Policy', () => {
     });
   });
 });
+describe('Error policies - callback timeouts', () => {
+  let evem: EvEm;
+  const slowHandler = () => new Promise<void>(resolve => setTimeout(resolve, 50));
+
+  beforeEach(() => {
+    evem = new EvEm();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should log a timed-out callback under LOG_AND_CONTINUE and keep going', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const nextHandler = vi.fn();
+    evem.subscribe('report.generate', slowHandler, { priority: 10 });
+    evem.subscribe('report.generate', nextHandler);
+
+    await expect(evem.publish('report.generate', {}, 10)).resolves.toBe(true);
+
+    expect(nextHandler).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Error in event handler for "report.generate":',
+      expect.objectContaining({ message: 'Event handler timed out after 10ms' })
+    );
+  });
+
+  it('should reject a publish whose callback times out under THROW', async () => {
+    evem.subscribe('report.generate', slowHandler);
+
+    await expect(
+      evem.publish('report.generate', {}, { timeout: 10, errorPolicy: ErrorPolicy.THROW })
+    ).rejects.toThrow('Event handler timed out after 10ms');
+  });
+
+  it('should cancel the event when a callback times out under CANCEL_ON_ERROR', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const nextHandler = vi.fn();
+    evem.subscribe('report.generate', slowHandler, { priority: 10 });
+    evem.subscribe('report.generate', nextHandler);
+
+    await expect(
+      evem.publish('report.generate', {}, { timeout: 10, errorPolicy: ErrorPolicy.CANCEL_ON_ERROR })
+    ).resolves.toBe(false);
+    expect(nextHandler).not.toHaveBeenCalled();
+  });
+
+  it('should ignore a timed-out callback under SILENT', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    evem.subscribe('report.generate', slowHandler);
+
+    await expect(
+      evem.publish('report.generate', {}, { timeout: 10, errorPolicy: ErrorPolicy.SILENT })
+    ).resolves.toBe(true);
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+});
