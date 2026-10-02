@@ -169,7 +169,10 @@ interface IEventEmitter {
 }
 
 interface CallbackInfo<T = unknown, R = any> {
+  /** The callback wrapped with the subscription's options (once, filters, throttle, ...) */
   callback: EventCallback<T>;
+  /** The callback as passed to subscribe, used by unsubscribe(event, callback) */
+  originalCallback: EventCallback<T>;
   priority: number;
   transform?: TransformFunction<T, R>;
 }
@@ -378,6 +381,21 @@ class EvEm implements IEventEmitter {
   }
 
   /**
+   * Invoke a callback outside of a publish (debounced calls, history replay). There is no caller
+   * to report errors to, so sync errors and async rejections are logged instead of escaping.
+   */
+  private invokeDetached<T>(callback: EventCallback<T>, args: T, errorMessage: string): void {
+    try {
+      const result = callback(args);
+      if (result instanceof Promise) {
+        result.catch(error => console.error(errorMessage, error));
+      }
+    } catch (error) {
+      console.error(errorMessage, error);
+    }
+  }
+
+  /**
    * Subscribe to an event with optional filters
    * @param event - The event name to subscribe to
    * @param callback - The callback to invoke when the event is published
@@ -397,61 +415,137 @@ class EvEm implements IEventEmitter {
     // Reference to the original callback
     let finalCallback: EventCallback<T> = callback;
     
-    // Build the callback chain:
-    // 1. Start with original callback
-    // 2. Apply once wrapper if needed
-    // 3. Apply filter wrapper if needed
-    // 4. Apply throttle/debounce wrappers if needed
+    // Build the callback chain from the inside out. Events flow through it in this order:
+    // schema validation → filters → throttle/debounce → once → original callback
     
-    // First, wrap with once logic if needed - this allows us to unsubscribe after successfully handling an event
+    // First, wrap with once logic if needed. It's innermost, so only an event that got through
+    // every other step consumes it, and the flag makes it fire exactly once even when events
+    // arrive concurrently or are replayed from history
     if (options?.once) {
       const onceOriginalCallback = finalCallback;
       const self = this; // Store reference to 'this' for the closure
+      let hasFired = false;
       
-      // Handle both sync and async callbacks
-      if (typeof onceOriginalCallback === 'function') {
-        finalCallback = function onceWrapper(args: T) {
-          try {
-            // Call the original callback
-            const result = onceOriginalCallback(args);
-            
-            // Check if it's a promise
-            if (result instanceof Promise) {
-              // If it's a promise, wait for it to resolve and then unsubscribe
-              return result.then(
-                // On success
-                (value) => {
-                  self.unsubscribeById(subscriptionId);
-                  return value;
-                },
-                // On error
-                (error) => {
-                  self.unsubscribeById(subscriptionId);
-                  throw error;
-                }
-              );
-            } else {
-              // If it's not a promise, unsubscribe immediately
-              self.unsubscribeById(subscriptionId);
-              return result;
-            }
-          } catch (error) {
-            // For synchronous errors
-            self.unsubscribeById(subscriptionId);
-            throw error;
-          }
-        };
-      } else {
-        // Failsafe in case callback is not a function (should never happen)
-        finalCallback = function(args: T) {
-          self.unsubscribeById(subscriptionId);
-          return (onceOriginalCallback as any)(args);
-        };
-      }
+      finalCallback = function onceWrapper(args: T) {
+        if (hasFired) {
+          return;
+        }
+        hasFired = true;
+        // Unsubscribe before calling, so the subscription is removed even if the callback throws or never settles
+        self.unsubscribeById(subscriptionId);
+        return onceOriginalCallback(args);
+      };
     }
     
-    // Apply filters if needed - this ensures filters run before the once logic,
-    // so once-unsubscribe only happens when a filter passes
+    // Store reference to the callback with once logic
+    // This will be called by the throttle/debounce wrappers
+    const processedCallback = finalCallback;
+    
+    // Apply throttle/debounce logic
+    const hasThrottle = options?.throttleTime && options.throttleTime > 0;
+    const hasDebounce = options?.debounceTime && options.debounceTime > 0;
+    
+    // Handle throttle only
+    if (hasThrottle && !hasDebounce) {
+      const throttleTime = options.throttleTime!;
+      
+      finalCallback = (args: T) => {
+        const timerId = `throttle_${event}_${subscriptionId}`;
+        const now = Date.now();
+        
+        // Check if we're currently throttled
+        if (this.throttleTimers.has(timerId)) {
+          const throttleData = this.throttleTimers.get(timerId)!;
+          
+          // If throttle window hasn't expired, ignore this event
+          if (now < throttleData.expiresAt) {
+            return;
+          }
+          
+          // Throttle window has expired, clean up the old timer
+          clearTimeout(throttleData.timer);
+          this.throttleTimers.delete(timerId);
+        }
+        
+        // Set up a new throttle window
+        const expiresAt = now + throttleTime;
+        const timer = setTimeout(() => {
+          this.throttleTimers.delete(timerId);
+        }, throttleTime);
+        
+        this.throttleTimers.set(timerId, { timer, expiresAt });
+        
+        // Execute the callback immediately (throttle processes first event right away)
+        return processedCallback(args);
+      };
+    }
+    // Handle debounce only
+    else if (!hasThrottle && hasDebounce) {
+      const debounceTime = options.debounceTime!;
+      
+      finalCallback = (args: T) => {
+        const timerId = `debounce_${event}_${subscriptionId}`;
+        
+        // Clear any existing timer for this callback
+        if (this.debounceTimers.has(timerId)) {
+          clearTimeout(this.debounceTimers.get(timerId));
+        }
+        
+        // Set a new timer
+        const timer = setTimeout(() => {
+          this.debounceTimers.delete(timerId);
+          // Execute the callback directly; there's no publish to report errors to anymore
+          this.invokeDetached(processedCallback, args, `Error in debounced handler for "${event}":`);
+        }, debounceTime);
+        
+        this.debounceTimers.set(timerId, timer);
+        return;
+      };
+    }
+    // Handle both throttle and debounce
+    else if (hasThrottle && hasDebounce) {
+      const throttleTime = options.throttleTime!;
+      const debounceTime = options.debounceTime!;
+      
+      // Track the last throttled time
+      const throttleState = { lastThrottledTime: 0 };
+      
+      finalCallback = (args: T) => {
+        const timerId = `combined_${event}_${subscriptionId}`;
+        const now = Date.now();
+        
+        // Check if throttling allows this event to pass through
+        let shouldProcessNow = false;
+        
+        // If no throttle window or it has expired, we can process immediately
+        if (now - throttleState.lastThrottledTime > throttleTime) {
+          throttleState.lastThrottledTime = now;
+          shouldProcessNow = true;
+        }
+        
+        // Clear any existing debounce timer
+        if (this.debounceTimers.has(timerId)) {
+          clearTimeout(this.debounceTimers.get(timerId));
+        }
+        
+        // If it should process now due to throttle, do it immediately
+        if (shouldProcessNow) {
+          return processedCallback(args);
+        }
+        
+        // Otherwise, debounce it
+        const timer = setTimeout(() => {
+          this.debounceTimers.delete(timerId);
+          this.invokeDetached(processedCallback, args, `Error in debounced handler for "${event}":`);
+        }, debounceTime);
+        
+        this.debounceTimers.set(timerId, timer);
+        return;
+      };
+    }
+    
+    // Apply filters if needed. Filters wrap throttle/debounce and once, so a rejected event
+    // never uses up a throttle window, resets a debounce timer or consumes a once subscription
     const filters = options?.filter ? 
       (Array.isArray(options.filter) ? options.filter : [options.filter]) : 
       null;
@@ -578,113 +672,6 @@ class EvEm implements IEventEmitter {
       };
     }
     
-    // Store reference to the callback with filter and once logic
-    // This will be called by the throttle/debounce wrappers
-    const processedCallback = finalCallback;
-    
-    // Apply throttle/debounce logic
-    const hasThrottle = options?.throttleTime && options.throttleTime > 0;
-    const hasDebounce = options?.debounceTime && options.debounceTime > 0;
-    
-    // Handle throttle only
-    if (hasThrottle && !hasDebounce) {
-      const throttleTime = options.throttleTime!;
-      
-      finalCallback = (args: T) => {
-        const timerId = `throttle_${event}_${subscriptionId}`;
-        const now = Date.now();
-        
-        // Check if we're currently throttled
-        if (this.throttleTimers.has(timerId)) {
-          const throttleData = this.throttleTimers.get(timerId)!;
-          
-          // If throttle window hasn't expired, ignore this event
-          if (now < throttleData.expiresAt) {
-            return;
-          }
-          
-          // Throttle window has expired, clean up the old timer
-          clearTimeout(throttleData.timer);
-          this.throttleTimers.delete(timerId);
-        }
-        
-        // Set up a new throttle window
-        const expiresAt = now + throttleTime;
-        const timer = setTimeout(() => {
-          this.throttleTimers.delete(timerId);
-        }, throttleTime);
-        
-        this.throttleTimers.set(timerId, { timer, expiresAt });
-        
-        // Execute the callback immediately (throttle processes first event right away)
-        return processedCallback(args);
-      };
-    }
-    // Handle debounce only
-    else if (!hasThrottle && hasDebounce) {
-      const debounceTime = options.debounceTime!;
-      
-      finalCallback = (args: T) => {
-        const timerId = `debounce_${event}_${subscriptionId}`;
-        
-        // Clear any existing timer for this callback
-        if (this.debounceTimers.has(timerId)) {
-          clearTimeout(this.debounceTimers.get(timerId));
-        }
-        
-        // Set a new timer
-        const timer = setTimeout(() => {
-          this.debounceTimers.delete(timerId);
-          // Execute the callback directly
-          processedCallback(args);
-        }, debounceTime);
-        
-        this.debounceTimers.set(timerId, timer);
-        return;
-      };
-    }
-    // Handle both throttle and debounce
-    else if (hasThrottle && hasDebounce) {
-      const throttleTime = options.throttleTime!;
-      const debounceTime = options.debounceTime!;
-      
-      // Track the last throttled time
-      const throttleState = { lastThrottledTime: 0 };
-      
-      finalCallback = (args: T) => {
-        const timerId = `combined_${event}_${subscriptionId}`;
-        const now = Date.now();
-        
-        // Check if throttling allows this event to pass through
-        let shouldProcessNow = false;
-        
-        // If no throttle window or it has expired, we can process immediately
-        if (now - throttleState.lastThrottledTime > throttleTime) {
-          throttleState.lastThrottledTime = now;
-          shouldProcessNow = true;
-        }
-        
-        // Clear any existing debounce timer
-        if (this.debounceTimers.has(timerId)) {
-          clearTimeout(this.debounceTimers.get(timerId));
-        }
-        
-        // If it should process now due to throttle, do it immediately
-        if (shouldProcessNow) {
-          return processedCallback(args);
-        }
-        
-        // Otherwise, debounce it
-        const timer = setTimeout(() => {
-          this.debounceTimers.delete(timerId);
-          processedCallback(args);
-        }, debounceTime);
-        
-        this.debounceTimers.set(timerId, timer);
-        return;
-      };
-    }
-
     // Convert priority option to a numeric value
     let priority = 0; // Default priority (normal)
     
@@ -715,6 +702,7 @@ class EvEm implements IEventEmitter {
     const callbacks = this.events.get(event) ?? new Map();
     callbacks.set(subscriptionId, {
       callback: finalCallback as EventCallback,
+      originalCallback: callback as EventCallback,
       priority,
       transform
     });
@@ -735,22 +723,14 @@ class EvEm implements IEventEmitter {
       if (relevantHistory.length > 0) {
         // If replayLastEvent is true, only replay the most recent event
         if (options?.replayLastEvent) {
-          const lastEvent = relevantHistory[relevantHistory.length - 1];
+          const lastEvent = relevantHistory[relevantHistory.length - 1]!;
           // Directly call the callback with the historical data
-          try {
-            finalCallback(lastEvent.data);
-          } catch (error) {
-            console.error(`Error replaying last event "${event}" to new subscriber:`, error);
-          }
+          this.invokeDetached(finalCallback, lastEvent.data, `Error replaying last event "${event}" to new subscriber:`);
         } 
         // If replayHistory is true, replay all matching historical events in order
         else if (options?.replayHistory) {
           for (const record of relevantHistory) {
-            try {
-              finalCallback(record.data);
-            } catch (error) {
-              console.error(`Error replaying historical event "${event}" to new subscriber:`, error);
-            }
+            this.invokeDetached(finalCallback, record.data, `Error replaying historical event "${event}" to new subscriber:`);
           }
         }
       }
@@ -785,16 +765,9 @@ class EvEm implements IEventEmitter {
     }
 
     for (const [id, cbInfo] of callbacks) {
-      if (cbInfo.callback === callback) {
-        callbacks.delete(id);
-        
-        // Clear memory leak warning if subscription count falls below threshold
-        if (this.memoryLeakDetectionEnabled && 
-            this.warnedEvents.has(event) && 
-            callbacks.size <= this.memoryLeakThreshold) {
-          this.warnedEvents.delete(event);
-        }
-        
+      // Match the callback passed to subscribe: the stored one is wrapped when options were used
+      if (cbInfo.originalCallback === callback) {
+        this.removeSubscription(event, callbacks, id);
         break;
       }
     }
@@ -806,38 +779,44 @@ class EvEm implements IEventEmitter {
     // Find and remove the callback
     for (const [event, callbacks] of this.events) {
       if (callbacks.has(id)) {
-        callbacks.delete(id);
-        
-        // Clear memory leak warning if subscription count falls below threshold
-        if (this.memoryLeakDetectionEnabled && 
-            this.warnedEvents.has(event) && 
-            callbacks.size <= this.memoryLeakThreshold) {
-          this.warnedEvents.delete(event);
-        }
-        
-        // Clean up any debounce timers associated with this subscription
-        const debounceTimerKey = `debounce_${event}_${id}`;
-        if (this.debounceTimers.has(debounceTimerKey)) {
-          clearTimeout(this.debounceTimers.get(debounceTimerKey));
-          this.debounceTimers.delete(debounceTimerKey);
-        }
-        
-        // Clean up any throttle timers associated with this subscription
-        const throttleTimerKey = `throttle_${event}_${id}`;
-        if (this.throttleTimers.has(throttleTimerKey)) {
-          clearTimeout(this.throttleTimers.get(throttleTimerKey)!.timer);
-          this.throttleTimers.delete(throttleTimerKey);
-        }
-        
-        // Clean up any combined throttle+debounce timers
-        const combinedTimerKey = `combined_${event}_${id}`;
-        if (this.debounceTimers.has(combinedTimerKey)) {
-          clearTimeout(this.debounceTimers.get(combinedTimerKey));
-          this.debounceTimers.delete(combinedTimerKey);
-        }
-        
+        this.removeSubscription(event, callbacks, id);
         break;
       }
+    }
+  }
+
+  /**
+   * Remove a subscription and clean up its leak warning and pending throttle/debounce timers
+   */
+  private removeSubscription(event: string, callbacks: Map<string, CallbackInfo>, id: string): void {
+    callbacks.delete(id);
+    
+    // Clear memory leak warning if subscription count falls below threshold
+    if (this.memoryLeakDetectionEnabled && 
+        this.warnedEvents.has(event) && 
+        callbacks.size <= this.memoryLeakThreshold) {
+      this.warnedEvents.delete(event);
+    }
+    
+    // Clean up any debounce timers associated with this subscription
+    const debounceTimerKey = `debounce_${event}_${id}`;
+    if (this.debounceTimers.has(debounceTimerKey)) {
+      clearTimeout(this.debounceTimers.get(debounceTimerKey));
+      this.debounceTimers.delete(debounceTimerKey);
+    }
+    
+    // Clean up any throttle timers associated with this subscription
+    const throttleTimerKey = `throttle_${event}_${id}`;
+    if (this.throttleTimers.has(throttleTimerKey)) {
+      clearTimeout(this.throttleTimers.get(throttleTimerKey)!.timer);
+      this.throttleTimers.delete(throttleTimerKey);
+    }
+    
+    // Clean up any combined throttle+debounce timers
+    const combinedTimerKey = `combined_${event}_${id}`;
+    if (this.debounceTimers.has(combinedTimerKey)) {
+      clearTimeout(this.debounceTimers.get(combinedTimerKey));
+      this.debounceTimers.delete(combinedTimerKey);
     }
   }
 

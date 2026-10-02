@@ -190,3 +190,24 @@ describe("EvEm - Event History Tests", () => {
     expect(callback).not.toHaveBeenCalled();
   });
 });
+describe("EvEm - Event History replay errors", () => {
+  test("should log, not leak, errors from an async callback replaying history", async () => {
+    const emitter = new EvEm();
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    emitter.enableHistory();
+    await emitter.publish("sensor.reading", { value: 1 });
+    const error = new Error("replay bug");
+
+    emitter.subscribe("sensor.reading", async () => {
+      throw error;
+    }, { replayLastEvent: true });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    process.off("unhandledRejection", unhandled);
+
+    expect(unhandled).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('"sensor.reading"'), error);
+    consoleErrorSpy.mockRestore();
+  });
+});

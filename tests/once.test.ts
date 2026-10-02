@@ -187,3 +187,51 @@ describe('Once-only events', () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 });
+describe('Once-only events - exactly once', () => {
+  let emitter: EvEm;
+
+  beforeEach(() => {
+    emitter = new EvEm();
+  });
+
+  test('an async once callback runs only once when events are published concurrently', async () => {
+    const handler = vi.fn(async () => {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    });
+    emitter.subscribeOnce('job.done', handler);
+
+    await Promise.all([
+      emitter.publish('job.done', 1),
+      emitter.publish('job.done', 2),
+      emitter.publish('job.done', 3)
+    ]);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(1);
+  });
+
+  test('a once callback behind an async filter runs only once under concurrency', async () => {
+    const handler = vi.fn();
+    emitter.subscribeOnce('job.done', handler, {
+      filter: async (n: number) => n > 0
+    });
+
+    await Promise.all([emitter.publish('job.done', 1), emitter.publish('job.done', 2)]);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  test('subscribeOnce with replayHistory receives only the first historical event', async () => {
+    emitter.enableHistory();
+    await emitter.publish('price.update', 1);
+    await emitter.publish('price.update', 2);
+    await emitter.publish('price.update', 3);
+
+    const handler = vi.fn();
+    emitter.subscribeOnce('price.update', handler, { replayHistory: true });
+    await emitter.publish('price.update', 4);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(1);
+  });
+});

@@ -183,3 +183,39 @@ describe('Event throttling', () => {
     expect(handler).toHaveBeenCalledWith('third');
   });
 });
+describe('Event throttling - filters and schema run first', () => {
+  let emitter: EvEm;
+
+  beforeEach(() => {
+    emitter = new EvEm();
+  });
+
+  test('an event rejected by a filter does not start a throttle window', async () => {
+    const handler = vi.fn();
+    emitter.subscribe('sensor.reading', handler, {
+      throttleTime: 1000,
+      filter: (reading: { value: number }) => reading.value > 10
+    });
+
+    await emitter.publish('sensor.reading', { value: 5 });  // Rejected by the filter
+    await emitter.publish('sensor.reading', { value: 20 }); // First accepted event
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith({ value: 20 });
+  });
+
+  test('an event rejected by the schema does not start a throttle window', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const handler = vi.fn();
+    emitter.subscribe('sensor.reading', handler, {
+      throttleTime: 1000,
+      schema: (reading: { value: unknown }) => typeof reading.value === 'number'
+    });
+
+    await emitter.publish('sensor.reading', { value: 'oops' });
+    await emitter.publish('sensor.reading', { value: 20 });
+
+    expect(handler).toHaveBeenCalledWith({ value: 20 });
+    vi.restoreAllMocks();
+  });
+});

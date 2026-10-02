@@ -121,3 +121,43 @@ describe("EvEm - Unsubscription Tests", () => {
     });
   });
 });
+
+describe("EvEm - unsubscribe(event, callback) with subscription options", () => {
+  let evem: EvEm;
+
+  beforeEach(() => {
+    evem = new EvEm();
+  });
+
+  const optionCases: Array<[string, Record<string, unknown>]> = [
+    ["filter", { filter: () => true }],
+    ["once", { once: true }],
+    ["schema", { schema: () => true }],
+    ["throttleTime", { throttleTime: 50 }],
+    ["debounceTime", { debounceTime: 10 }],
+    ["priority", { priority: "high" }]
+  ];
+
+  test.each(optionCases)("should remove a subscription created with %s", async (_name, options) => {
+    const callback = vi.fn();
+    evem.subscribe("order.placed", callback, options);
+
+    evem.unsubscribe("order.placed", callback);
+    await evem.publish("order.placed", { id: 1 });
+    await new Promise(resolve => setTimeout(resolve, 30));
+
+    expect(callback).not.toHaveBeenCalled();
+    expect(evem.info("order.placed")).toEqual([]);
+  });
+
+  test("should cancel a pending debounced call", async () => {
+    const callback = vi.fn();
+    evem.subscribe("search.input", callback, { debounceTime: 20 });
+
+    await evem.publish("search.input", "abc");
+    evem.unsubscribe("search.input", callback);
+    await new Promise(resolve => setTimeout(resolve, 40));
+
+    expect(callback).not.toHaveBeenCalled();
+  });
+});
