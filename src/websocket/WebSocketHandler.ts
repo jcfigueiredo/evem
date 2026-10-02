@@ -307,6 +307,19 @@ export class WebSocketHandler {
   }
 
   /**
+   * Name of the EvEm event for a server event: the server's name with serverEventPrefix added,
+   * unless it already starts with it ("notification" → "server.notification", while
+   * "server.notification" stays as it is). With an empty prefix, the name is used as-is.
+   */
+  private toServerEventName(name: string): string {
+    const prefix = this.options.serverEventPrefix;
+    if (!prefix || name.startsWith(`${prefix}.`)) {
+      return name;
+    }
+    return `${prefix}.${name}`;
+  }
+
+  /**
    * Handle incoming WebSocket messages
    */
   private handleIncomingMessage(rawData: string): void {
@@ -333,28 +346,13 @@ export class WebSocketHandler {
 
       // Route server-sent events (recommended format)
       if (message.event) {
-        // If event already has the prefix, use it as-is
-        // Otherwise, add the prefix unless it starts with the prefix already
-        let eventName = message.event;
-        if (!eventName.startsWith(this.options.serverEventPrefix + '.')) {
-          // Check if the event name needs the prefix
-          // If it's just "notification", make it "server.notification"
-          // If it's already "server.notification", keep it as-is
-          eventName = this.options.serverEventPrefix
-            ? `${this.options.serverEventPrefix}.${eventName}`
-            : eventName;
-        }
-
-        this.evem.publish(eventName, message.data);
+        this.evem.publish(this.toServerEventName(message.event), message.data);
         return;
       }
 
       // Legacy format: use type field (but not for responses)
       if (message.type && message.type !== 'response') {
-        const eventName = this.options.serverEventPrefix
-          ? `${this.options.serverEventPrefix}.${message.type}`
-          : message.type;
-        this.evem.publish(eventName, message.data);
+        this.evem.publish(this.toServerEventName(message.type), message.data);
         return;
       }
 

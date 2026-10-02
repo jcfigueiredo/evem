@@ -42,6 +42,8 @@ First release published to npm, as `@jcfigueiredo/evem`.
 
 - `unsubscribe(event, callback)` now removes subscriptions created with options (filter, once, throttle, debounce, schema) and cancels their pending timers.
 - Removing an event's last subscription frees its entry, so dynamic event names no longer accumulate.
+- `WebSocketEvents` lists the events the adapter actually publishes (`ws.error`, `ws.message`, `ws.parse.error`, `ws.queue.overflow`, `ws.send.queued`, …) with their payloads; it listed events that were never published.
+- A legacy `{ type: 'server.x' }` message is routed to `server.x`, like `{ event: 'server.x' }`, instead of `server.server.x`.
 - `WebSocketHandler`: an already-open socket starts `connected`; messages the socket can't take (closing, or dropped mid-flush) go back into the queue; `disconnect()` removes all of its subscriptions; an empty `serverEventPrefix` no longer routes to `.name`.
 - `MessageQueue.disable()` and `RequestResponseManager.cleanup()` now remove their subscriptions and middleware.
 - `RequestResponseManager`: an error response without details rejects instead of hanging forever.

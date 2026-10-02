@@ -148,25 +148,29 @@ export interface QueuedMessage {
 }
 
 /**
- * WebSocket event payloads
+ * Events published by the WebSocket adapter, with their payloads
+ * Server events are published as `<serverEventPrefix>.<name>` (e.g. `server.user.login`) with the
+ * message's `data`; their names depend on the server, so they aren't listed here.
  */
 export interface WebSocketEvents {
   // Connection lifecycle
-  'ws.connection.open': void;
-  'ws.connection.close': { code: number; reason: string };
-  'ws.connection.error': Error;
   'ws.connection.state': ConnectionStateChangeEvent;
+  'ws.error': { error: Error; event?: unknown };
   'ws.reconnect.failed': { attempts: number };
 
-  // Message flow
+  // Outgoing messages (published by the app; other ws.send.* names are sent too)
   'ws.send': any;
-  'ws.receive': any;
-  'ws.queued': QueuedMessage;
+  'ws.send.queued': any;
+  'ws.queue.overflow': { maxSize: number; droppedMessage: any };
 
-  // Request-response
-  'ws.send.request': RequestMessage;
-  'ws.response': ResponseMessage;
-  'ws.response.error': ResponseMessage;
+  // Request-response (`type: 'request'` is added when a WebSocketHandler is attached)
+  'ws.send.request': RequestMessage & { type?: 'request' };
+  'ws.response': Pick<ResponseMessage, 'id' | 'result' | 'timestamp'>;
+  'ws.response.error': Pick<ResponseMessage, 'id' | 'error' | 'timestamp'>;
+
+  // Incoming messages that aren't responses or server events, and ones that couldn't be parsed
+  'ws.message': IncomingMessage;
+  'ws.parse.error': { error: unknown; rawData: string };
 }
 
 /**

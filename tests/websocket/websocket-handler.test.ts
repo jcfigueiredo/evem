@@ -1234,3 +1234,43 @@ describe('WebSocketHandler - request() and ws.send.* events', () => {
     });
   });
 });
+
+describe('WebSocketHandler - server event prefix', () => {
+  let evem: EvEm;
+  let mockWs: MockWebSocket;
+  let handler: WebSocketHandler;
+
+  beforeEach(() => {
+    evem = new EvEm();
+    mockWs = new MockWebSocket('wss://test.example.com');
+  });
+
+  afterEach(async () => {
+    await handler?.disconnect();
+  });
+
+  const routedName = async (message: object, prefix?: string) => {
+    handler = new WebSocketHandler(mockWs, evem, prefix === undefined ? {} : { serverEventPrefix: prefix });
+    mockWs.simulateOpen();
+    const names: string[] = [];
+    evem.use((event, data) => {
+      names.push(event);
+      return data;
+    });
+    mockWs.simulateMessage(JSON.stringify(message));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    return names.find(name => !name.startsWith('ws.'));
+  };
+
+  it('should not add the prefix twice to a legacy type that already has it', async () => {
+    expect(await routedName({ type: 'server.notification', data: 1 })).toBe('server.notification');
+  });
+
+  it('should prefix a legacy type without it', async () => {
+    expect(await routedName({ type: 'notification', data: 1 })).toBe('server.notification');
+  });
+
+  it('should apply the same rule to the event field and to custom prefixes', async () => {
+    expect(await routedName({ event: 'app.user.login', data: 1 }, 'app')).toBe('app.user.login');
+  });
+});

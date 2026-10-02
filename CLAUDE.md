@@ -104,7 +104,7 @@ Real-time communication patterns built on top of EvEm, in `src/websocket/` and p
 - `ws.error` - socket errors (and sockets that can't be created when reconnecting)
 - `ws.reconnect.failed` - `{ attempts }` after the last reconnection attempt
 
-**Type definitions** (`types.ts`): `IWebSocket` (browser `WebSocket` and Node.js `ws`; its optional `url` is used to reconnect), `ConnectionState`, message and option types, error classes. The `WebSocketEvents` interface is out of date (it lists `ws.connection.open/close/error`, `ws.receive` and `ws.queued`, which are never published, and omits several events above); `ConnectionError`, `QueueOverflowError` and `WebSocketAdapterOptions` are exported but unused.
+**Type definitions** (`types.ts`): `IWebSocket` (browser `WebSocket` and Node.js `ws`; its optional `url` is used to reconnect), `ConnectionState`, message and option types, error classes. `WebSocketEvents` maps each event the adapter publishes to its payload type; keep it in sync when adding events. `ConnectionError`, `QueueOverflowError` and `WebSocketAdapterOptions` are exported but unused.
 
 ## Code Style Guidelines
 - **Imports**: Use named imports; sort imports alphabetically
