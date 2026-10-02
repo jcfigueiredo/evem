@@ -265,9 +265,9 @@
             </div>
             <div id="global-code" class="tab-content">
                 <div class="code-block"><pre><code class="language-javascript">// Global middleware intercepts ALL events
-evem.use(async (event, data, next) => {
+evem.use((event, data) => {
     console.log('Middleware:', event);
-    await next(); // Continue to handlers
+    return data; // Continue to handlers (return null to cancel)
 });
 
 // Subscribe to some events
@@ -296,10 +296,13 @@ await evem.publish('system.update', { version: '2.0' });</code></pre></div>
             </div>
             <div id="pattern-code" class="tab-content">
                 <div class="code-block"><pre><code class="language-javascript">// Pattern-based middleware only runs for matching events
-evem.use('api.*', async (event, data, next) => {
-    data.timestamp = Date.now();
-    data.requestId = Math.random().toString(36).substr(2, 9);
-    await next();
+evem.use({
+    pattern: 'api.*',
+    handler: (event, data) => ({
+        ...data,
+        timestamp: Date.now(),
+        requestId: Math.random().toString(36).substr(2, 9)
+    })
 });
 
 // Subscribe to API events
@@ -307,7 +310,7 @@ evem.subscribe('api.*', (data) => {
     console.log('API handler:', data);
 });
 
-// These will trigger the middleware
+// These will trigger the middleware (a trailing * also matches deeper names)
 await evem.publish('api.users.get', { userId: 123 });
 await evem.publish('api.posts.create', { title: 'Hello' });</code></pre></div>
             </div>
@@ -315,7 +318,7 @@ await evem.publish('api.posts.create', { title: 'Hello' });</code></pre></div>
 
         <div class="demo-section">
             <h2>3. Event Transformations</h2>
-            <p>Transform event data before it reaches handlers</p>
+            <p>Transform event data before it reaches the next handler</p>
             <div class="tabs">
                 <button class="tab active" onclick="switchTab(event, 'transform-controls')">Controls</button>
                 <button class="tab" onclick="switchTab(event, 'transform-code')">View Code</button>
@@ -327,15 +330,22 @@ await evem.publish('api.posts.create', { title: 'Hello' });</code></pre></div>
                 </div>
             </div>
             <div id="transform-code" class="tab-content">
-                <div class="code-block"><pre><code class="language-javascript">// Transform modifies data before handler receives it
+                <div class="code-block"><pre><code class="language-javascript">// A transform runs after its own handler and replaces the data
+// that the next (lower-priority) handlers receive
 evem.subscribe('user.input', (data) => {
-    console.log('Received:', data.text); // "HELLO WORLD"
+    console.log('Original:', data.text); // "hello world"
 }, {
+    priority: 'high',
     transform: (data) => ({
         ...data,
         text: data.text.toUpperCase(),
         processed: true
     })
+});
+
+// Runs next and receives the transformed data
+evem.subscribe('user.input', (data) => {
+    console.log('Received:', data.text); // "HELLO WORLD"
 });
 
 // Publish original data
@@ -360,12 +370,12 @@ await evem.publish('user.input', {
                 </div>
             </div>
             <div id="chain-code" class="tab-content">
-                <div class="code-block"><pre><code class="language-javascript">// Each subscriber can have its own transform
-// Transforms are applied independently per handler
+                <div class="code-block"><pre><code class="language-javascript">// Handlers run in priority order (here: subscription order).
+// After a handler runs, its transform's result is passed to the NEXT handler
 
-// Handler 1: trim whitespace
+// Handler 1: receives the raw value, then trims whitespace
 evem.subscribe('data.process', (data) => {
-    console.log('Step 1:', data.value); // "hello world"
+    console.log('Step 1:', data.value); // "  hello world  "
 }, {
     transform: (data) => ({
         ...data,
@@ -373,9 +383,9 @@ evem.subscribe('data.process', (data) => {
     })
 });
 
-// Handler 2: uppercase
+// Handler 2: receives the trimmed value, then uppercases it
 evem.subscribe('data.process', (data) => {
-    console.log('Step 2:', data.value); // "HELLO WORLD"
+    console.log('Step 2:', data.value); // "hello world"
 }, {
     transform: (data) => ({
         ...data,
@@ -383,9 +393,10 @@ evem.subscribe('data.process', (data) => {
     })
 });
 
-// Handler 3: add prefix
+// Handler 3: receives the uppercased value, then adds a prefix
+// (handlers subscribed after it would receive "PROCESSED: HELLO WORLD")
 evem.subscribe('data.process', (data) => {
-    console.log('Step 3:', data.value); // "PROCESSED: HELLO WORLD"
+    console.log('Step 3:', data.value); // "HELLO WORLD"
 }, {
     transform: (data) => ({
         ...data,
@@ -414,13 +425,15 @@ await evem.publish('data.process', {
                 </div>
             </div>
             <div id="cancel-code" class="tab-content">
-                <div class="code-block"><pre><code class="language-javascript">// Middleware can cancel events by throwing an error
-evem.use('user.delete', async (event, data, next) => {
-    if (!data.confirmed) {
-        // Cancel event by throwing with 'CANCEL' message
-        throw new Error('CANCEL');
+                <div class="code-block"><pre><code class="language-javascript">// Middleware cancels an event by returning null
+evem.use({
+    pattern: 'user.delete',
+    handler: (event, data) => {
+        if (!data.confirmed) {
+            return null; // Cancel: no handlers run, publish resolves to false
+        }
+        return data; // Continue to handlers
     }
-    await next(); // Continue to handlers
 });
 
 evem.subscribe('user.delete', (data) => {
@@ -524,34 +537,38 @@ await evem.publish('user.delete', {
                     return false;
                 }
 
-                // Get handlers
+                // Get handlers (an exact name matches itself, so each subscription is added once)
                 const handlers = [];
-                if (this.events.has(event)) {
-                    handlers.push(...Array.from(this.events.get(event).values()));
-                }
-
                 for (const [pattern, subs] of this.events) {
                     if (this.matchesPattern(event, pattern)) {
                         handlers.push(...Array.from(subs.values()));
                     }
                 }
 
-                // Execute handlers
+                // Sort by priority (high first)
+                handlers.sort((a, b) => {
+                    const priorityA = a.options.priority === 'high' ? 100 :
+                                     a.options.priority === 'low' ? -100 : 0;
+                    const priorityB = b.options.priority === 'high' ? 100 :
+                                     b.options.priority === 'low' ? -100 : 0;
+                    return priorityB - priorityA;
+                });
+
+                // Execute handlers. Each handler receives the current data; after it runs,
+                // its transform (if any) produces the data the NEXT handler receives
+                let currentData = data;
                 for (const handler of handlers) {
-                    let handlerData = data;
-
-                    // Apply transform if present
-                    if (handler.options.transform) {
-                        handlerData = handler.options.transform(data);
-                        window.transformCount++;
-                        updateStats();
-                        log(`Transform applied: <span class="transform">${JSON.stringify(handlerData)}</span>`, 'transform');
-                    }
-
                     try {
-                        await handler.callback(handlerData);
+                        await handler.callback(currentData);
                         window.handledCount++;
                         updateStats();
+
+                        if (handler.options.transform) {
+                            currentData = await handler.options.transform(currentData);
+                            window.transformCount++;
+                            updateStats();
+                            log(`Transform applied: <span class="transform">${JSON.stringify(currentData)}</span>`, 'transform');
+                        }
                     } catch (error) {
                         console.error('Error in handler:', error);
                     }
@@ -560,11 +577,20 @@ await evem.publish('user.delete', {
                 return true;
             }
 
+            // Same rules as the real EvEm: '*' matches everything, a trailing '*' also
+            // matches deeper names ('api.*' matches 'api.users.get'), and otherwise the
+            // segment counts must be equal with each segment equal or '*'
             matchesPattern(event, pattern) {
-                if (pattern === event || pattern === '*') return true;
+                if (pattern === '*') return true;
                 const eventParts = event.split('.');
                 const patternParts = pattern.split('.');
-                if (patternParts.length !== eventParts.length) return false;
+                if (patternParts.length > eventParts.length) return false;
+                if (patternParts.length < eventParts.length) {
+                    if (patternParts[patternParts.length - 1] !== '*') return false;
+                    return patternParts.slice(0, -1).every((part, i) =>
+                        part === '*' || part === eventParts[i]
+                    );
+                }
                 return patternParts.every((part, i) =>
                     part === '*' || part === eventParts[i]
                 );
@@ -631,14 +657,21 @@ await evem.publish('user.delete', {
         };
 
         window.setupTransform = () => {
+            // High priority runs first and sees the original data; its transform runs after it
             window.evem.subscribe('user.input', (data) => {
-                log(`Received transformed data: <span class="data">${data.text}</span>`, 'info');
+                log(`Original input: <span class="data">${data.text}</span>`, 'info');
             }, {
+                priority: 'high',
                 transform: (data) => ({
                     ...data,
                     text: data.text.toUpperCase(),
                     processed: true
                 })
+            });
+
+            // Runs next and receives the transformed data
+            window.evem.subscribe('user.input', (data) => {
+                log(`Received transformed data: <span class="data">${data.text}</span>`, 'info');
             });
             log('Transform subscription created', 'info');
         };
@@ -649,9 +682,9 @@ await evem.publish('user.delete', {
         };
 
         window.setupTransformChain = () => {
-            // First subscriber: trim whitespace
+            // First subscriber: receives the raw input, then trims whitespace
             window.evem.subscribe('data.process', (data) => {
-                log(`Step 1 received: <span class="data">${data.value}</span>`, 'info');
+                log(`Step 1 received: <span class="data">${JSON.stringify(data.value)}</span>`, 'info');
             }, {
                 transform: (data) => ({
                     ...data,
@@ -659,9 +692,9 @@ await evem.publish('user.delete', {
                 })
             });
 
-            // Second subscriber: uppercase
+            // Second subscriber: receives the trimmed value, then uppercases it
             window.evem.subscribe('data.process', (data) => {
-                log(`Step 2 received: <span class="data">${data.value}</span>`, 'info');
+                log(`Step 2 received: <span class="data">${JSON.stringify(data.value)}</span>`, 'info');
             }, {
                 transform: (data) => ({
                     ...data,
@@ -669,9 +702,9 @@ await evem.publish('user.delete', {
                 })
             });
 
-            // Third subscriber: add prefix
+            // Third subscriber: receives the uppercased value, then adds a prefix
             window.evem.subscribe('data.process', (data) => {
-                log(`Step 3 received: <span class="data">${data.value}</span>`, 'info');
+                log(`Step 3 received: <span class="data">${JSON.stringify(data.value)}</span>`, 'info');
             }, {
                 transform: (data) => ({
                     ...data,

@@ -650,23 +650,36 @@ async function disconnect() {
             }
 
             async publish(event, data) {
-                if (this.events.has(event)) {
-                    for (const cb of this.events.get(event).values()) {
-                        await cb(data);
+                // Exact and wildcard matches (an exact name matches itself, so each callback runs once)
+                const callbacks = [];
+                for (const [pattern, cbs] of this.events) {
+                    if (this.matchesPattern(event, pattern)) {
+                        callbacks.push(...cbs.values());
                     }
                 }
 
-                // Wildcard
-                for (const [pattern, cbs] of this.events) {
-                    if (pattern.includes('*')) {
-                        const regex = new RegExp('^' + pattern.replace(/\*/g, '[^.]+') + '$');
-                        if (regex.test(event) && pattern !== event) {
-                            for (const cb of cbs.values()) {
-                                await cb(data);
-                            }
-                        }
-                    }
+                for (const cb of callbacks) {
+                    await cb(data);
                 }
+            }
+
+            // Same rules as the real EvEm: '*' matches everything, a trailing '*' also
+            // matches deeper names ('api.*' matches 'api.users.get'), and otherwise the
+            // segment counts must be equal with each segment equal or '*'
+            matchesPattern(event, pattern) {
+                if (pattern === '*') return true;
+                const eventParts = event.split('.');
+                const patternParts = pattern.split('.');
+                if (patternParts.length > eventParts.length) return false;
+                if (patternParts.length < eventParts.length) {
+                    if (patternParts[patternParts.length - 1] !== '*') return false;
+                    return patternParts.slice(0, -1).every((part, i) =>
+                        part === '*' || part === eventParts[i]
+                    );
+                }
+                return patternParts.every((part, i) =>
+                    part === '*' || part === eventParts[i]
+                );
             }
         }
 

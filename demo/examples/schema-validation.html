@@ -302,19 +302,18 @@
                 </div>
             </div>
             <div id="simple-code" class="tab-content">
-                <div class="code-block"><pre><code class="language-javascript">// Setup a simple validator for user creation
-evem.setSchema('user.create', {
-    validate: (data) => {
-        if (!data.username) throw new Error('username required');
-        if (!data.email) throw new Error('email required');
-        if (data.username.length < 3) throw new Error('username must be at least 3 characters');
-        return true;
-    }
-});
+                <div class="code-block"><pre><code class="language-javascript">// A simple validator returns true (valid) or false (invalid)
+const validateUser = (data) =>
+    typeof data.username === 'string' &&
+    data.username.length >= 3 &&
+    typeof data.email === 'string';
 
-// Subscribe to the event
+// Subscribe with the validator as the schema option
+// (invalid data skips the handler and logs an error by default)
 evem.subscribe('user.create', (data) => {
     console.log('User created:', data.username);
+}, {
+    schema: validateUser
 });
 
 // Publish valid data
@@ -340,34 +339,36 @@ evem.publish('user.create', {
                 </div>
             </div>
             <div id="advanced-code" class="tab-content">
-                <div class="code-block"><pre><code class="language-javascript">// Advanced multi-field validation
-evem.setSchema('payment.process', {
-    validate: (data) => {
-        const errors = [];
+                <div class="code-block"><pre><code class="language-javascript">// Advanced validators return { valid, errors } with error details
+const validatePayment = (data) => {
+    const errors = [];
 
-        // Validate amount
-        if (!data.amount || typeof data.amount !== 'number' || data.amount <= 0) {
-            errors.push('Amount must be a positive number');
-        }
-
-        // Validate currency code
-        if (!data.currency || !/^[A-Z]{3}$/.test(data.currency)) {
-            errors.push('Currency must be a 3-letter code (e.g., USD)');
-        }
-
-        // Validate payment method
-        if (!data.method || !['card', 'bank', 'crypto'].includes(data.method)) {
-            errors.push('Payment method must be: card, bank, or crypto');
-        }
-
-        // Throw all errors at once
-        if (errors.length > 0) {
-            throw new Error(errors.join('; '));
-        }
-
-        return true;
+    // Validate amount
+    if (!data.amount || typeof data.amount !== 'number' || data.amount <= 0) {
+        errors.push({ path: 'amount', message: 'Amount must be a positive number' });
     }
-});</code></pre></div>
+
+    // Validate currency code
+    if (!data.currency || !/^[A-Z]{3}$/.test(data.currency)) {
+        errors.push({ path: 'currency', message: 'Currency must be a 3-letter code (e.g., USD)' });
+    }
+
+    // Validate payment method
+    if (!data.method || !['card', 'bank', 'crypto'].includes(data.method)) {
+        errors.push({ path: 'method', message: 'Payment method must be: card, bank, or crypto' });
+    }
+
+    // Report all errors at once
+    return { valid: errors.length === 0, errors };
+};
+
+evem.subscribe('payment.process', (data) => {
+    console.log('Payment processed:', data.amount, data.currency);
+}, {
+    schema: validatePayment
+});
+
+evem.publish('payment.process', { amount: 99.99, currency: 'USD', method: 'card' });</code></pre></div>
             </div>
         </div>
 
@@ -390,22 +391,24 @@ evem.setSchema('payment.process', {
                 </div>
             </div>
             <div id="policy-code" class="tab-content">
-                <div class="code-block"><pre><code class="language-javascript">// Set error policy to control validation failure behavior
-evem.setErrorPolicy('throw');  // Stop execution and throw error (default)
-evem.setErrorPolicy('log');    // Log error to console and skip event
-evem.setErrorPolicy('ignore'); // Silently skip invalid events
+                <div class="code-block"><pre><code class="language-javascript">import { ErrorPolicy } from 'evem';
 
-// Example: Using 'log' policy
-evem.setErrorPolicy('log');
+// schemaErrorPolicy controls what happens when validation fails:
+// ErrorPolicy.CANCEL_ON_ERROR  - log the error and skip the handler (default)
+// ErrorPolicy.LOG_AND_CONTINUE - log the error and still run the handler
+// ErrorPolicy.SILENT           - skip the handler without logging
+// ErrorPolicy.THROW            - throw a validation error (publish rejects
+//                                when published with errorPolicy: ErrorPolicy.THROW)
 
-evem.setSchema('test.event', {
-    validate: (data) => {
-        if (!data.valid) throw new Error('Data is invalid');
-        return true;
-    }
+// Example: Using LOG_AND_CONTINUE
+evem.subscribe('test.event', (data) => {
+    console.log('Handler ran with:', data);
+}, {
+    schema: (data) => data.valid === true,
+    schemaErrorPolicy: ErrorPolicy.LOG_AND_CONTINUE
 });
 
-// This will log an error but won't throw
+// This will log a validation error, then still run the handler
 evem.publish('test.event', { valid: false });</code></pre></div>
             </div>
         </div>
@@ -426,32 +429,32 @@ evem.publish('test.event', { valid: false });</code></pre></div>
             </div>
             <div id="type-code" class="tab-content">
                 <div class="code-block"><pre><code class="language-javascript">// Type checking validation
-evem.setSchema('data.submit', {
-    validate: (data) => {
-        const errors = [];
+const validateSubmission = (data) => {
+    const errors = [];
 
-        if (typeof data.id !== 'number') {
-            errors.push('id must be a number');
-        }
-
-        if (typeof data.name !== 'string') {
-            errors.push('name must be a string');
-        }
-
-        if (!Array.isArray(data.tags)) {
-            errors.push('tags must be an array');
-        }
-
-        if (typeof data.active !== 'boolean') {
-            errors.push('active must be a boolean');
-        }
-
-        if (errors.length > 0) {
-            throw new Error(errors.join('; '));
-        }
-
-        return true;
+    if (typeof data.id !== 'number') {
+        errors.push({ path: 'id', message: 'id must be a number' });
     }
+
+    if (typeof data.name !== 'string') {
+        errors.push({ path: 'name', message: 'name must be a string' });
+    }
+
+    if (!Array.isArray(data.tags)) {
+        errors.push({ path: 'tags', message: 'tags must be an array' });
+    }
+
+    if (typeof data.active !== 'boolean') {
+        errors.push({ path: 'active', message: 'active must be a boolean' });
+    }
+
+    return { valid: errors.length === 0, errors };
+};
+
+evem.subscribe('data.submit', (data) => {
+    console.log('Data submitted:', data.name);
+}, {
+    schema: validateSubmission
 });
 
 // Valid data
@@ -487,33 +490,35 @@ const validators = {
 };
 
 // Use them in your schema
-evem.setSchema('contact.add', {
-    validate: (data) => {
-        const errors = [];
+const validateContact = (data) => {
+    const errors = [];
 
-        if (!validators.notEmpty(data.name)) {
-            errors.push('Name cannot be empty');
-        }
-
-        if (!validators.email(data.email)) {
-            errors.push('Invalid email format');
-        }
-
-        if (data.website && !validators.url(data.website)) {
-            errors.push('Invalid website URL');
-        }
-
-        if (data.phone && !validators.phone(data.phone)) {
-            errors.push('Invalid phone format');
-        }
-
-        if (errors.length > 0) {
-            throw new Error(errors.join('; '));
-        }
-
-        return true;
+    if (!validators.notEmpty(data.name)) {
+        errors.push({ path: 'name', message: 'Name cannot be empty' });
     }
-});</code></pre></div>
+
+    if (!validators.email(data.email)) {
+        errors.push({ path: 'email', message: 'Invalid email format' });
+    }
+
+    if (data.website && !validators.url(data.website)) {
+        errors.push({ path: 'website', message: 'Invalid website URL' });
+    }
+
+    if (data.phone && !validators.phone(data.phone)) {
+        errors.push({ path: 'phone', message: 'Invalid phone format' });
+    }
+
+    return { valid: errors.length === 0, errors };
+};
+
+evem.subscribe('contact.add', (data) => {
+    console.log('Contact added:', data.name);
+}, {
+    schema: validateContact
+});
+
+evem.publish('contact.add', { name: 'John Doe', email: 'john@example.com' });</code></pre></div>
             </div>
         </div>
 

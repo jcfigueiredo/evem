@@ -500,28 +500,31 @@ evem.subscribe('ws.response', (message) => {
             }
 
             async publish(event, data) {
-                // Exact match
-                if (this.events.has(event)) {
-                    for (const cb of this.events.get(event).values()) {
-                        await cb(data);
+                // Exact and wildcard matches (an exact name matches itself, so each callback runs once)
+                const callbacks = [];
+                for (const [pattern, cbs] of this.events) {
+                    if (this.matchPattern(event, pattern)) {
+                        callbacks.push(...cbs.values());
                     }
                 }
 
-                // Wildcard match
-                for (const [pattern, cbs] of this.events) {
-                    if (this.matchPattern(event, pattern)) {
-                        for (const cb of cbs.values()) {
-                            await cb(data);
-                        }
-                    }
+                for (const cb of callbacks) {
+                    await cb(data);
                 }
             }
 
+            // Same rules as the real EvEm: '*' matches everything, a trailing '*' also
+            // matches deeper names ('api.*' matches 'api.users.get'), and otherwise the
+            // segment counts must be equal with each segment equal or '*'
             matchPattern(event, pattern) {
-                if (pattern === event) return false; // Already handled
+                if (pattern === '*') return true;
                 const eParts = event.split('.');
                 const pParts = pattern.split('.');
-                if (eParts.length !== pParts.length) return false;
+                if (pParts.length > eParts.length) return false;
+                if (pParts.length < eParts.length) {
+                    if (pParts[pParts.length - 1] !== '*') return false;
+                    return pParts.slice(0, -1).every((p, i) => p === '*' || p === eParts[i]);
+                }
                 return pParts.every((p, i) => p === '*' || p === eParts[i]);
             }
         }

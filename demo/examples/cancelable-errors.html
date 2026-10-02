@@ -327,22 +327,26 @@
                 </div>
             </div>
             <div id="cancelable-code" class="tab-content">
-                <div class="code-block"><pre><code class="language-javascript">// Publish a cancelable event
-const result = await evem.publishCancelable('user.delete', {
-    userId: 123,
-    confirmed: true
+                <div class="code-block"><pre><code class="language-javascript">// Handler can cancel the event: cancelable events get a cancel() method on their data
+evem.subscribe('user.delete', (data) => {
+    if (!data.confirmed) {
+        data.cancel(); // Deletion not confirmed - remaining handlers are skipped
+    }
+}, { priority: 'high' });
+
+evem.subscribe('user.delete', (data) => {
+    console.log('Deleting user:', data.userId);
 });
 
-if (result.cancelled) {
-    console.log('Event was cancelled by:', result.cancelledBy);
-}
+// Publish a cancelable event - resolves to false if a handler canceled it
+const completed = await evem.publish('user.delete', {
+    userId: 123,
+    confirmed: true
+}, { cancelable: true });
 
-// Handler can cancel the event
-evem.subscribe('user.delete', (event) => {
-    if (!event.data.confirmed) {
-        event.cancel('Deletion not confirmed');
-    }
-});</code></pre></div>
+if (!completed) {
+    console.log('Event was cancelled');
+}</code></pre></div>
             </div>
         </div>
 
@@ -365,19 +369,24 @@ evem.subscribe('user.delete', (event) => {
                 </div>
             </div>
             <div id="policy-code" class="tab-content">
-                <div class="code-block"><pre><code class="language-javascript">// Set error handling policy
-evem.setErrorPolicy('continue'); // Continue to next handlers (default)
-evem.setErrorPolicy('stop');     // Stop at first error
-evem.setErrorPolicy('collect');  // Collect all errors and report
+                <div class="code-block"><pre><code class="language-javascript">import { ErrorPolicy } from 'evem';
 
-// When policy is 'continue', errors are logged but execution continues
+// Choose the error policy for each publish:
+// ErrorPolicy.LOG_AND_CONTINUE - log the error, run the next handlers (default)
+// ErrorPolicy.SILENT           - ignore the error, run the next handlers
+// ErrorPolicy.CANCEL_ON_ERROR  - log the error and stop; publish resolves to false
+// ErrorPolicy.THROW            - stop and reject the publish with the error
+
 evem.subscribe('event', () => {
     throw new Error('Handler 1 failed');
 });
 
 evem.subscribe('event', () => {
     console.log('Handler 2 still runs');
-});</code></pre></div>
+});
+
+// With LOG_AND_CONTINUE, errors are logged but execution continues
+await evem.publish('event', {}, { errorPolicy: ErrorPolicy.LOG_AND_CONTINUE });</code></pre></div>
             </div>
         </div>
 
@@ -399,29 +408,32 @@ evem.subscribe('event', () => {
             </div>
             <div id="validation-code" class="tab-content">
                 <div class="code-block"><pre><code class="language-javascript">// Chain multiple validators together
-evem.subscribe('data.validate', (event) => {
-    if (event.data.value.length < 3) {
-        event.cancel('Value too short');
+evem.subscribe('data.validate', (data) => {
+    if (data.value.length < 3) {
+        data.cancel(); // Value too short
     }
 });
 
-evem.subscribe('data.validate', (event) => {
-    if (!/^[a-zA-Z]+$/.test(event.data.value)) {
-        event.cancel('Invalid format (letters only)');
+evem.subscribe('data.validate', (data) => {
+    if (!/^[a-zA-Z]+$/.test(data.value)) {
+        data.cancel(); // Invalid format (letters only)
     }
 });
 
-evem.subscribe('data.validate', (event) => {
+evem.subscribe('data.validate', (data) => {
     const forbidden = ['admin', 'root', 'system'];
-    if (forbidden.includes(event.data.value.toLowerCase())) {
-        event.cancel('Reserved word');
+    if (forbidden.includes(data.value.toLowerCase())) {
+        data.cancel(); // Reserved word
     }
 });
 
 // All validators must pass before final handler runs
-evem.subscribe('data.validate', (event) => {
-    console.log('Data saved:', event.data.value);
-});</code></pre></div>
+evem.subscribe('data.validate', (data) => {
+    console.log('Data saved:', data.value);
+});
+
+await evem.publish('data.validate', { value: 'TestUser' }, { cancelable: true }); // true
+await evem.publish('data.validate', { value: 'ab' }, { cancelable: true });       // false</code></pre></div>
             </div>
         </div>
 
@@ -441,29 +453,29 @@ evem.subscribe('data.validate', (event) => {
             </div>
             <div id="permission-code" class="tab-content">
                 <div class="code-block"><pre><code class="language-javascript">// Use cancelable events for authorization checks
-evem.subscribe('admin.action', (event) => {
+evem.subscribe('admin.action', (data) => {
     // Permission check
-    if (event.data.role !== 'admin') {
-        event.cancel('Insufficient permissions');
+    if (data.role !== 'admin') {
+        data.cancel(); // Insufficient permissions
         return;
     }
 });
 
-evem.subscribe('admin.action', (event) => {
+evem.subscribe('admin.action', (data) => {
     // Only runs if permission check passed
-    console.log('Executing admin action:', event.data.action);
+    console.log('Executing admin action:', data.action);
 });
 
 // Publish with different roles
-await evem.publishCancelable('admin.action', {
+await evem.publish('admin.action', {
     role: 'admin',  // Will execute
     action: 'Delete database'
-});
+}, { cancelable: true });
 
-await evem.publishCancelable('admin.action', {
+await evem.publish('admin.action', {
     role: 'user',   // Will be cancelled
     action: 'Delete database'
-});</code></pre></div>
+}, { cancelable: true });</code></pre></div>
             </div>
         </div>
 
@@ -481,8 +493,7 @@ await evem.publishCancelable('admin.action', {
                 </div>
             </div>
             <div id="recovery-code" class="tab-content">
-                <div class="code-block"><pre><code class="language-javascript">// Set policy to continue so fallback handlers run
-evem.setErrorPolicy('continue');
+                <div class="code-block"><pre><code class="language-javascript">import { ErrorPolicy } from 'evem';
 
 // Primary handler that might fail
 evem.subscribe('api.call', async (data) => {
@@ -497,8 +508,10 @@ evem.subscribe('api.call', async (data) => {
     return await fallbackApi.call(data);
 });
 
-// With 'continue' policy, errors don't stop execution
-await evem.publish('api.call', { endpoint: '/users' });</code></pre></div>
+// With the LOG_AND_CONTINUE policy (the default), errors don't stop execution
+await evem.publish('api.call', { endpoint: '/users' }, {
+    errorPolicy: ErrorPolicy.LOG_AND_CONTINUE
+});</code></pre></div>
             </div>
         </div>
 

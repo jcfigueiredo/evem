@@ -293,7 +293,7 @@
 
         <div class="demo-section">
             <h2>1. Event History Recording</h2>
-            <p>Enable history tracking for specific events</p>
+            <p>Record published events and query them by name or pattern</p>
             <div class="tabs">
                 <button class="tab active" onclick="switchTab(event, 'history-controls')">Controls</button>
                 <button class="tab" onclick="switchTab(event, 'history-code')">View Code</button>
@@ -307,8 +307,8 @@
             </div>
             <div id="history-code" class="tab-content">
                 <div class="code-block">
-                    <pre><code class="language-javascript">// Enable history tracking for events matching pattern
-evem.enableHistory('user.*', { maxSize: 10 });
+                    <pre><code class="language-javascript">// Enable history recording (keeps the 10 most recent events)
+evem.enableHistory(10);
 
 // Publish events - they will be recorded
 evem.publish('user.action', {
@@ -316,9 +316,9 @@ evem.publish('user.action', {
     userId: 123
 });
 
-// View history
-const history = evem.getHistory('user.action');
-console.log(history); // Array of event records</code></pre>
+// View history, filtered by event name or pattern (e.g. 'user.*')
+const history = evem.getEventHistory('user.action');
+console.log(history); // Array of { event, data, timestamp } records</code></pre>
                 </div>
             </div>
         </div>
@@ -339,7 +339,7 @@ console.log(history); // Array of event records</code></pre>
             <div id="replayLast-code" class="tab-content">
                 <div class="code-block">
                     <pre><code class="language-javascript">// Enable history first
-evem.enableHistory('status.*', { maxSize: 5 });
+evem.enableHistory(5);
 
 // Publish an event
 evem.publish('status.update', {
@@ -351,7 +351,7 @@ evem.publish('status.update', {
 evem.subscribe('status.update', (data) => {
     console.log('Received:', data);
 }, {
-    replayLast: true  // Automatically receive most recent event
+    replayLastEvent: true  // Automatically receive most recent event
 });</code></pre>
                 </div>
             </div>
@@ -373,7 +373,7 @@ evem.subscribe('status.update', (data) => {
             <div id="replayHistory-code" class="tab-content">
                 <div class="code-block">
                     <pre><code class="language-javascript">// Enable history
-evem.enableHistory('chat.*', { maxSize: 20 });
+evem.enableHistory(20);
 
 // Publish multiple events
 evem.publish('chat.message', { user: 'Alice', text: 'Hello!' });
@@ -407,7 +407,7 @@ evem.subscribe('chat.message', (data) => {
             <div id="timeline-code" class="tab-content">
                 <div class="code-block">
                     <pre><code class="language-javascript">// Event history visualization
-const history = evem.getHistory('user.action');
+const history = evem.getEventHistory('user.action');
 
 history.forEach(record => {
     console.log(`[${new Date(record.timestamp).toLocaleTimeString()}]`,
@@ -454,7 +454,7 @@ class ChatComponent {
 }
 
 // Publish some messages before component exists
-evem.enableHistory('chat.*', { maxSize: 20 });
+evem.enableHistory(20);
 evem.publish('chat.message', { user: 'Alice', text: 'Hello!' });
 evem.publish('chat.message', { user: 'Bob', text: 'Hi there!' });
 
@@ -567,12 +567,8 @@ const chat = new ChatComponent();
                     }
                 }
 
-                // Get handlers
+                // Get handlers (an exact name matches itself, so each subscription is added once)
                 const handlers = [];
-                if (this.events.has(event)) {
-                    handlers.push(...Array.from(this.events.get(event).values()));
-                }
-
                 for (const [pattern, subs] of this.events) {
                     if (this.matchesPattern(event, pattern)) {
                         handlers.push(...Array.from(subs.values()));
@@ -611,11 +607,20 @@ const chat = new ChatComponent();
                 return total;
             }
 
+            // Same rules as the real EvEm: '*' matches everything, a trailing '*' also
+            // matches deeper names ('api.*' matches 'api.users.get'), and otherwise the
+            // segment counts must be equal with each segment equal or '*'
             matchesPattern(event, pattern) {
-                if (pattern === event || pattern === '*') return true;
+                if (pattern === '*') return true;
                 const eventParts = event.split('.');
                 const patternParts = pattern.split('.');
-                if (patternParts.length !== eventParts.length) return false;
+                if (patternParts.length > eventParts.length) return false;
+                if (patternParts.length < eventParts.length) {
+                    if (patternParts[patternParts.length - 1] !== '*') return false;
+                    return patternParts.slice(0, -1).every((part, i) =>
+                        part === '*' || part === eventParts[i]
+                    );
+                }
                 return patternParts.every((part, i) =>
                     part === '*' || part === eventParts[i]
                 );
