@@ -1,3 +1,5 @@
+import type { ConnectionState, ConnectionStateChangeEvent } from '../shared/types.js';
+
 /**
  * Universal WebSocket interface that abstracts over browser WebSocket and Node.js 'ws'
  */
@@ -24,24 +26,8 @@ export interface IWebSocket {
   onmessage: ((event: any) => void) | null;
 }
 
-/**
- * Connection states for the WebSocket adapter
- */
-export type ConnectionState =
-  | 'disconnected'
-  | 'connecting'
-  | 'connected'
-  | 'reconnecting'
-  | 'disconnecting';
-
-/**
- * Connection state change event payload
- */
-export interface ConnectionStateChangeEvent {
-  from: ConnectionState;
-  to: ConnectionState;
-  timestamp: number;
-}
+// Shared with the SSE adapter
+export type { ConnectionState, ConnectionStateChangeEvent };
 
 /**
  * WebSocket adapter configuration options

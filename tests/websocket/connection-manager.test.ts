@@ -357,3 +357,28 @@ describe('ConnectionManager', () => {
     });
   });
 });
+
+describe('ConnectionManager - stateEvent option', () => {
+  it('should publish state changes to ws.connection.state by default', async () => {
+    const evem = new EvEm();
+    const handler = vi.fn();
+    evem.subscribe('ws.connection.state', handler);
+
+    await new ConnectionManager(evem).transitionTo('connected');
+
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ from: 'disconnected', to: 'connected' }));
+  });
+
+  it('should publish state changes to a custom event', async () => {
+    const evem = new EvEm();
+    const sseHandler = vi.fn();
+    const wsHandler = vi.fn();
+    evem.subscribe('sse.connection.state', sseHandler);
+    evem.subscribe('ws.connection.state', wsHandler);
+
+    await new ConnectionManager(evem, { stateEvent: 'sse.connection.state' }).transitionTo('connecting');
+
+    expect(sseHandler).toHaveBeenCalledWith(expect.objectContaining({ from: 'disconnected', to: 'connecting' }));
+    expect(wsHandler).not.toHaveBeenCalled();
+  });
+});

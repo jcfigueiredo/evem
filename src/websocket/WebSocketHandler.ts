@@ -2,10 +2,10 @@ import type { EvEm, MiddlewareConfig } from '../eventEmitter.js';
 import { ConnectionManager } from './ConnectionManager.js';
 import { MessageQueue } from './MessageQueue.js';
 import { RequestResponseManager } from './RequestResponseManager.js';
+import { routeServerMessage } from '../shared/routing.js';
 import type {
   IWebSocket,
   WebSocketHandlerOptions,
-  IncomingMessage,
   RequestOptions,
 } from './types.js';
 
@@ -317,64 +317,17 @@ export class WebSocketHandler {
   }
 
   /**
-   * Name of the EvEm event for a server event: the server's name with serverEventPrefix added,
-   * unless it already starts with it ("notification" → "server.notification", while
-   * "server.notification" stays as it is). With an empty prefix, the name is used as-is.
-   */
-  private toServerEventName(name: string): string {
-    const prefix = this.options.serverEventPrefix;
-    if (!prefix || name.startsWith(`${prefix}.`)) {
-      return name;
-    }
-    return `${prefix}.${name}`;
-  }
-
-  /**
    * Handle incoming WebSocket messages
    */
   private handleIncomingMessage(rawData: string): void {
     try {
-      const message: IncomingMessage | null = this.options.messageParser(rawData);
-
-      // A valid message that isn't an object (e.g. null or a number) can't be routed
-      if (message === null || typeof message !== 'object') {
-        this.evem.publish('ws.message', message);
-        return;
-      }
-
-      // Route RPC responses
-      if (message.type === 'response' && this.options.enableRequestResponse) {
-        if (message.error) {
-          this.evem.publish('ws.response.error', {
-            id: message.id,
-            error: message.error,
-            timestamp: message.timestamp ?? Date.now(),
-          });
-        } else {
-          this.evem.publish('ws.response', {
-            id: message.id,
-            result: message.result,
-            timestamp: message.timestamp ?? Date.now(),
-          });
-        }
-        return;
-      }
-
-      // Route server-sent events (recommended format)
-      if (message.event) {
-        this.evem.publish(this.toServerEventName(message.event), message.data);
-        return;
-      }
-
-      // Legacy format: use type field (but not for responses)
-      if (message.type && message.type !== 'response') {
-        this.evem.publish(this.toServerEventName(message.type), message.data);
-        return;
-      }
-
-      // If no routing matched, emit a generic message event
-      this.evem.publish('ws.message', message);
-
+      const message: unknown = this.options.messageParser(rawData);
+      const routed = routeServerMessage(message, {
+        prefix: this.options.serverEventPrefix,
+        channel: 'ws',
+        handleResponses: this.options.enableRequestResponse,
+      });
+      this.evem.publish(routed.event, routed.data);
     } catch (error) {
       // Emit parse error event
       this.evem.publish('ws.parse.error', {
