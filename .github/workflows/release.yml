@@ -1,8 +1,9 @@
 name: Release
 
-# Publishes to npm when a GitHub release is published. The release tag must be
-# `v` + the version in package.json (e.g. v0.2.0). Needs an npm automation token
-# in the NPM_TOKEN repository secret.
+# Publishes to npm when a GitHub release is published; `pnpm release <version>`
+# creates the release (see docs/releasing.md). The release tag must be `v` + the
+# version in package.json (e.g. v0.3.0). Needs an npm token with write access in
+# the NPM_TOKEN repository secret.
 on:
   release:
     types: [published]

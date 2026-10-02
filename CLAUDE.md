@@ -10,13 +10,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Watch mode tests**: `pnpm test`
 - **TypeScript check**: `pnpm typecheck` (same as `pnpm tsc --noEmit`)
 - **Build**: `pnpm build` (compiles `src/` to `dist/` as ES modules with `.d.ts` files, via `tsconfig.build.json`)
+- **Everything CI runs**: `pnpm check` (typecheck, tests and package check; also the `prepublishOnly` hook)
 - **Package check**: `pnpm test:package` (builds, packs, installs the tarball into a temp project, imports every entry point from Node and type-checks a strict TypeScript consumer, with and without Node.js types)
 
 ## Packaging and Releases
 - Published to npm as `@jcfigueiredo/evem`: ESM only, no runtime dependencies, Node.js 20+
 - Four entry points (`exports` in package.json): `.` → `src/index.ts`, `./websocket` → `src/websocket/index.ts`, `./sse` → `src/sse/index.ts`, `./sse/server` → `src/sse/server.ts`. New public exports must go through one of these files; `./sse/server` exports only the formatting helpers, so servers don't load the client
 - Relative imports in `src/` must use `.js` extensions (Node ESM output); public types must not reference `NodeJS.*` (browser consumers have no Node types) — `pnpm test:package` catches both
-- Releasing: bump `version` in package.json and update CHANGELOG.md, merge to main, then publish a GitHub release tagged `v<version>`. `.github/workflows/release.yml` checks the tag, runs `prepublishOnly` (typecheck, tests, package check) and publishes with provenance using the `NPM_TOKEN` secret
+- Changes go under `## Unreleased` (or `## <version> (unreleased)`) at the top of CHANGELOG.md; that section becomes the release notes
+- Releasing (`docs/releasing.md`): `pnpm release <version>` (`scripts/release.mjs`; `--dry-run`, `--yes`) runs from a clean `main` that matches `origin/main`, refuses existing tags, versions lower than package.json's, pre-releases and a missing or empty unreleased section, then dates that section, sets package.json's `version`, runs `pnpm check` (restoring both files if it fails), commits `Release v<version>`, pushes and runs `gh release create v<version> --target <sha>` with the section as notes. Publishing the release starts `.github/workflows/release.yml`, which checks the tag, runs `prepublishOnly` (`pnpm check`) and publishes with provenance using the `NPM_TOKEN` secret
 
 ## Architecture
 
@@ -63,6 +65,7 @@ The implementation has distinct layers that can be composed:
 - `tests/sse/integration.test.ts` runs `SseHandler` against a real `node:http` server with Node's global `fetch` (stream, server drop, resume with `Last-Event-ID`, headers and POST, 401); `tests/sse/python.test.ts` checks `examples/python/evem_sse.py` against the JS helper and parser and connects `SseHandler` to the Python example server, and is skipped when `python3` isn't installed
 - `tests/demo/`: tests for the demo pages in `demo/examples/`, which embed their own simplified `EvEm` copies: the copies must dispatch, match wildcards and apply transforms like the library, and the pages' "View Code" samples may only use the real API (`demoPages.ts` extracts both from the HTML)
 - Vitest with globals; common patterns: `vi.fn()` callbacks, fake or short real timers, `vi.spyOn(console, ...)` for logged errors
+- `tests/scripts/release.test.ts` runs `scripts/release.mjs` in a temporary repository with a local bare `origin` and fake `gh` / `pnpm` executables that log their arguments
 - Don't hard-code test counts in docs; they change with every fix
 
 ### Shared Adapter Code (`src/shared/`)
@@ -158,5 +161,5 @@ A receive-only Server-Sent Events client in `src/sse/`, published as `@jcfigueir
 ## Development Approach
 - No runtime dependencies (subscription and request IDs come from `generateId()` in `src/id.ts`: `crypto.randomUUID()`, or `crypto.getRandomValues()` where browsers don't expose it outside secure contexts)
 - Focus on performance with Map-based lookups and efficient iteration
-- Maintain backward compatibility when adding features; record behavior changes in CHANGELOG.md
+- Maintain backward compatibility when adding features; record behavior changes in CHANGELOG.md, under `## Unreleased`
 - Each feature should be independently testable and composable
