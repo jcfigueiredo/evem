@@ -304,6 +304,13 @@ describe('SseHandler', () => {
       expect(handler.getConnectionState()).toBe('reconnecting');
     });
 
+    it('treats an abort it did not ask for (from a custom transport) as the stream ending', async () => {
+      await runUntilEnd({ reason: 'aborted' });
+      expect(handler.getConnectionState()).toBe('reconnecting');
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(transport.connections).toHaveLength(2);
+    });
+
     it('never reconnects with reconnect: false', async () => {
       await runUntilEnd({ reason: 'ended' }, { reconnect: false });
       expect(handler.getConnectionState()).toBe('disconnected');

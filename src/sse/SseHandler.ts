@@ -308,11 +308,10 @@ export class SseHandler {
   private async handleEnd(info: SseCloseInfo, generation: number): Promise<void> {
     let end = info;
     if (end.reason === 'aborted') {
-      if (!this.heartbeatExpired) {
-        return;
-      }
+      // disconnect() aborts too, but it also changes the generation, so it never gets here. What's left
+      // is the heartbeat timeout, or a custom transport ending on its own, treated as the stream ending
+      end = this.heartbeatExpired ? { reason: 'heartbeat-timeout' } : { reason: 'ended' };
       this.heartbeatExpired = false;
-      end = { reason: 'heartbeat-timeout' };
     }
 
     const error = errorFor(end, this.heartbeatTimeout);
