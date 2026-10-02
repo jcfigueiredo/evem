@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **TypeScript check**: `pnpm typecheck` (same as `pnpm tsc --noEmit`)
 - **Build**: `pnpm build` (compiles `src/` to `dist/` as ES modules with `.d.ts` files, via `tsconfig.build.json`)
 - **Everything CI runs**: `pnpm check` (typecheck, tests and package check; also the `prepublishOnly` hook). CI runs these steps on Node 20 and 22 (Node 20 has no global `WebSocket`)
-- **No lint or format step**: `.eslintrc.cjs` extends `plugin:@next/next/recommended`, which isn't installed, so `eslint` fails, and Prettier isn't a dependency (`.prettierrc` is never applied). `pnpm typecheck` is the only static check
+- **No linter or formatter**: `pnpm typecheck` is the only static check. `.prettierrc` exists, but Prettier isn't a dependency and nothing runs it (see Formatting under Code Style)
 - **Package check**: `pnpm test:package` (builds, packs, installs the tarball into a temp project, imports every entry point from Node and type-checks a strict TypeScript consumer, with and without Node.js types)
 
 ## Packaging and Releases
