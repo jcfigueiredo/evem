@@ -14,6 +14,9 @@ import { publishSubscribe } from './publishSubscribe';
 import { recursionProtection } from './recursionProtection';
 import { requests } from './requests';
 import { serverEvents } from './serverEvents';
+import { sseFailures } from './sseFailures';
+import { sseReconnect } from './sseReconnect';
+import { sseStream } from './sseStream';
 import { schemaValidation } from './schemaValidation';
 import { throttle } from './throttle';
 import { throttleDebounce } from './throttleDebounce';
@@ -41,5 +44,8 @@ export const scenarios: readonly Scenario[] = [
   connectionQueue,
   requests,
   serverEvents,
+  sseStream,
+  sseReconnect,
+  sseFailures,
   chat
 ];
