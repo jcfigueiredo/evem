@@ -126,6 +126,9 @@ const realSetImmediate = setImmediate;
 /** Idle turns (no timer pending, the sample not finished) before a sample counts as stuck */
 const MAX_IDLE_TURNS = 20;
 
+/** Timers run while a sample hasn't finished before it counts as stuck (a heartbeat while it waits forever) */
+const MAX_TIMER_ADVANCES = 10_000;
+
 /**
  * Run a sample with `__modules` and `scope` in scope and capture what it prints. Timers are faked, so delays
  * take no real time, and timers still pending when it finishes (debounced calls) run too. Throws, prefixed with
@@ -159,8 +162,12 @@ export async function runSample(
     done.catch(() => undefined);
 
     let idleTurns = 0;
+    let timerAdvances = 0;
     while (!settled) {
       if (vi.getTimerCount() > 0) {
+        if (++timerAdvances > MAX_TIMER_ADVANCES) {
+          throw new Error('the sample never finished: it keeps scheduling timers');
+        }
         idleTurns = 0;
         await vi.advanceTimersToNextTimerAsync();
       } else if (++idleTurns > MAX_IDLE_TURNS) {

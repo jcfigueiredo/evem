@@ -111,6 +111,14 @@ describe('runSample', () => {
     );
   });
 
+  it('fails with the location when the sample keeps scheduling timers and never finishes', async () => {
+    await expect(
+      runSample('setInterval(() => {}, 1000);\nawait new Promise(() => {});', 'README.md:11', MODULES)
+    ).rejects.toThrow('README.md:11: the sample never finished: it keeps scheduling timers');
+    expect(vi.isFakeTimers()).toBe(false);
+    expect(vi.isMockFunction(console.log)).toBe(false);
+  }, 15_000);
+
   it('fails with the location when the sample keeps scheduling timers', async () => {
     await expect(runSample("setInterval(() => console.log('tick'), 1000);", 'README.md:9', MODULES)).rejects.toThrow(
       'README.md:9: Aborting after running'
