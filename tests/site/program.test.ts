@@ -17,6 +17,16 @@ describe('renderCode', () => {
     ).toBe("subscribe('a', f, { priority: 'high', once: false })");
   });
 
+  it('writes the values of raw controls as they are: they are code', () => {
+    expect(
+      renderCode(
+        'publish(e, d, { errorPolicy: {{policy}} }); log({{name}})',
+        { policy: 'ErrorPolicy.THROW', name: 'ada' },
+        new Set(['policy'])
+      )
+    ).toBe("publish(e, d, { errorPolicy: ErrorPolicy.THROW }); log('ada')");
+  });
+
   it('throws for a placeholder that has no control', () => {
     expect(() => renderCode('{{missing}}', {})).toThrow('No control named missing for {{missing}}');
   });

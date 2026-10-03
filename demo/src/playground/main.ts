@@ -12,14 +12,20 @@ const menu = document.getElementById('scenario-menu')!;
 const workbench = document.getElementById('workbench')!;
 const sidebarToggle = document.getElementById('sidebar') as HTMLInputElement;
 let teardown: (() => void) | undefined;
+// Counts navigations: a workbench that finishes mounting after a newer navigation is torn down at once
+let navigation = 0;
 
 bus.subscribe<string>('playground.navigate', async hash => {
+  const current = ++navigation;
   const scenario = scenarioForHash(hash, scenarios);
   renderMenu(menu, scenarios, scenario);
   document.title = `${scenario.title} · EvEm Playground`;
   sidebarToggle.checked = false;
   teardown?.();
-  teardown = await mountWorkbench(workbench, scenario, bus);
+  teardown = undefined;
+  const mounted = await mountWorkbench(workbench, scenario, bus);
+  if (current === navigation) teardown = mounted;
+  else mounted();
 });
 
 window.addEventListener('hashchange', () => void bus.publish('playground.navigate', location.hash));

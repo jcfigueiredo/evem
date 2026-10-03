@@ -8,19 +8,30 @@ import { Trace } from './trace';
 import { createTracedEvEm } from './tracedEvEm';
 
 export type Control =
-  | { kind: 'select'; label: string; options: readonly ControlValue[]; default: ControlValue }
+  /** `raw`: the options are code (`ErrorPolicy.THROW`), written into the code as they are, not as string literals */
+  | { kind: 'select'; label: string; options: readonly ControlValue[]; default: ControlValue; raw?: boolean }
   | { kind: 'number'; label: string; min: number; max: number; step?: number; default: number }
-  | { kind: 'toggle'; label: string; default: boolean };
+  | { kind: 'toggle'; label: string; default: boolean }
+  /** Free text; `suggestions` are offered in the input (and type-checked by the scenario tests) */
+  | { kind: 'text'; label: string; default: string; suggestions?: readonly string[] };
 
 /** A hand-checked expectation for one action, used by the scenario tests */
 export interface ScenarioCheck {
   /** Control values for this check; the defaults otherwise */
   values?: Record<string, ControlValue>;
+  /** Actions to run first (their trace isn't checked) */
+  before?: string[];
   action: string;
   /** Subscription names in the order their callbacks ran during the action */
   calls: string[];
   /** What the action's last publish resolved to */
   result?: boolean;
+  /** Part of the error the action's last publish rejected with */
+  rejects?: string;
+  /** Parts of what the action logged, in order (the code's console, and EvEm's own warnings and errors) */
+  logs?: string[];
+  /** `name: reason` for each subscription the action's publishes skipped, in order */
+  skipped?: string[];
 }
 
 export interface Scenario {
@@ -36,6 +47,8 @@ export interface Scenario {
   /** The code, with `{{control}}` placeholders and `// ▶ Label` lines that start action blocks */
   code: string;
   checks: ScenarioCheck[];
+  /** Record, for every publish, whether each subscription's pattern matched and why (the Wildcards scenario) */
+  explainMatches?: boolean;
 }
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
@@ -43,9 +56,32 @@ const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
 ) => (...args: unknown[]) => Promise<unknown>;
 
 /** The page's own console methods, which every run that replaces them puts back */
-const pageConsole = { warn: console.warn, error: console.error };
+const CAPTURED = ['log', 'info', 'warn', 'error', 'group', 'groupCollapsed', 'groupEnd'] as const;
+type Captured = (typeof CAPTURED)[number];
+const pageConsole: Pick<Console, Captured> = Object.fromEntries(
+  CAPTURED.map(method => [method, console[method]])
+) as Pick<Console, Captured>;
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/**
+ * What a number control's input means: the number, kept between the control's min and max, or `previous` when the
+ * input is empty or not a number
+ */
+export function numberInput(text: string, control: { min: number; max: number }, previous: number): number {
+  const value = Number(text);
+  if (text.trim() === '' || !Number.isFinite(value)) return previous;
+  return Math.min(control.max, Math.max(control.min, value));
+}
+
+/** The controls whose values are code, written as they are */
+export function rawControls(scenario: Scenario): Set<string> {
+  return new Set(
+    Object.entries(scenario.controls).flatMap(([name, control]) =>
+      control.kind === 'select' && control.raw ? [name] : []
+    )
+  );
+}
 
 /** The default value of every control */
 export function defaultValues(scenario: Scenario): Record<string, ControlValue> {
@@ -69,7 +105,7 @@ export class ScenarioSession {
     private readonly bus?: EvEm
   ) {
     this.values = defaultValues(scenario);
-    this.code = renderCode(scenario.code, this.values);
+    this.code = renderCode(scenario.code, this.values, rawControls(scenario));
     this.trace = new Trace(bus);
   }
 
@@ -77,7 +113,7 @@ export class ScenarioSession {
   setValue(name: string, value: ControlValue): Promise<void> {
     this.values[name] = value;
     if (!this.edited) {
-      this.code = renderCode(this.scenario.code, this.values);
+      this.code = renderCode(this.scenario.code, this.values, rawControls(this.scenario));
     }
     return this.reset();
   }
@@ -92,7 +128,7 @@ export class ScenarioSession {
   /** Go back to the code the controls render */
   restoreTemplate(): Promise<void> {
     this.edited = false;
-    this.code = renderCode(this.scenario.code, this.values);
+    this.code = renderCode(this.scenario.code, this.values, rawControls(this.scenario));
     return this.reset();
   }
 
@@ -104,11 +140,15 @@ export class ScenarioSession {
     const trace = new Trace(this.bus);
     this.trace = trace;
     this.program = undefined;
+    this.actions = [];
     try {
       const { body, actions, imports } = compileProgram(this.code);
       this.actions = actions;
       const modules: Record<string, object> = {
-        '@jcfigueiredo/evem': { ...core, EvEm: createTracedEvEm(trace, this.helperNames()) },
+        '@jcfigueiredo/evem': {
+          ...core,
+          EvEm: createTracedEvEm(trace, this.helperNames(), { explainMatches: this.scenario.explainMatches })
+        },
         '@jcfigueiredo/evem/websocket': websocket,
         '@jcfigueiredo/evem/sse': sse,
         '@jcfigueiredo/evem/sse/server': sseServer
@@ -144,31 +184,59 @@ export class ScenarioSession {
     return new Map(Object.entries(this.scenario.helpers).map(([name, helper]) => [helper as Function, name]));
   }
 
-  /** The `console` the scenario's code sees: what it logs goes to `trace` */
-  private consoleForCode(trace: Trace): Pick<Console, 'log' | 'warn' | 'error'> {
+  /**
+   * The `console` the scenario's code sees: what it logs goes to `trace` (`info` and `debug` as logs); its other
+   * methods (`table`, `time`, …) are the page's
+   */
+  private consoleForCode(trace: Trace): Console {
     const record =
       (level: 'log' | 'warn' | 'error') =>
       (...args: unknown[]) =>
         trace.record({ kind: 'log', level, text: args.map(formatArgument).join(' ') });
-    return { log: record('log'), warn: record('warn'), error: record('error') };
+    return Object.assign(Object.create(console) as Console, {
+      log: record('log'),
+      info: record('log'),
+      debug: record('log'),
+      warn: record('warn'),
+      error: record('error')
+    });
   }
 
-  /** Run `work`, recording what EvEm itself logs meanwhile (e.g. "Error in event handler …") in `trace` */
+  /**
+   * Run `work`, recording in `trace` what the library logs meanwhile: EvEm's warnings and errors ("Error in event
+   * handler …") and what it prints with console.log and console.group (memory leak details), indented by group
+   */
   private async capturingLogs<V>(trace: Trace, work: () => Promise<V>): Promise<V> {
+    let depth = 0;
     const record =
-      (level: 'warn' | 'error') =>
+      (level: 'log' | 'warn' | 'error') =>
       (...args: unknown[]) =>
-        trace.record({ kind: 'log', level, text: args.map(formatArgument).join(' ') });
-    const capture = { warn: record('warn'), error: record('error') };
-    console.warn = capture.warn;
-    console.error = capture.error;
+        trace.record({ kind: 'log', level, text: '  '.repeat(depth) + args.map(formatArgument).join(' ') });
+    const group = (...args: unknown[]) => {
+      record('log')(...args);
+      depth++;
+    };
+    const capture: Pick<Console, Captured> = {
+      log: record('log'),
+      info: record('log'),
+      warn: record('warn'),
+      error: record('error'),
+      group,
+      groupCollapsed: group,
+      groupEnd: () => {
+        depth = Math.max(0, depth - 1);
+      }
+    };
+    Object.assign(console, capture);
     try {
       return await work();
     } finally {
       // Undo only this capture, back to the page's console: a newer run that replaced it undoes its own, so a run
       // that never finishes (or finishes late) can't keep the console
-      if (console.warn === capture.warn) console.warn = pageConsole.warn;
-      if (console.error === capture.error) console.error = pageConsole.error;
+      const own = console as unknown as Record<Captured, unknown>;
+      for (const method of CAPTURED) {
+        if (own[method] === capture[method]) own[method] = pageConsole[method];
+      }
     }
   }
 }
@@ -189,7 +257,10 @@ function formatArgument(value: unknown): string {
   if (typeof value === 'string') return value;
   if (value instanceof Error) return `${value.name}: ${value.message}`;
   try {
-    return JSON.stringify(value) ?? String(value);
+    const line = JSON.stringify(value);
+    if (line === undefined) return String(value);
+    // Long values (info() output, history records) read better indented, one property per line
+    return line.length <= 80 ? line : JSON.stringify(value, null, 2);
   } catch {
     return String(value);
   }

@@ -6,14 +6,15 @@ export type SkipReason = 'filtered' | 'schema' | 'throttled' | 'debounced' | 'ca
 /** One thing EvEm did, as the timeline shows it. `publish` is the id of the publish it happened in, if any */
 export type TraceEntry = { at: number; publish?: number } & (
   | { kind: 'subscribe'; subscription: string; pattern: string; options: string[] }
-  | { kind: 'unsubscribe'; subscription: string }
+  | { kind: 'unsubscribe'; subscription: string; once?: boolean }
   | { kind: 'publish'; id: number; event: string; data: unknown }
   | { kind: 'result'; id: number; result: boolean }
   | { kind: 'rejected'; id: number; error: string }
-  | { kind: 'middleware'; name: string; outcome: 'continue' | 'cancel' | 'reroute'; to?: string }
+  | { kind: 'middleware'; name: string; outcome: 'continue' | 'cancel' | 'reroute'; to?: string; data?: unknown }
   | { kind: 'schema'; subscription: string; valid: boolean }
   | { kind: 'filter'; subscription: string; name: string; passed: boolean }
-  | { kind: 'call'; subscription: string; data: unknown; later?: boolean }
+  | { kind: 'call'; subscription: string; data: unknown; later?: boolean; replayed?: boolean }
+  | { kind: 'match'; subscription: string; pattern: string; event: string; matched: boolean; reason: string }
   | { kind: 'cancel'; subscription: string }
   | { kind: 'transform'; subscription: string; data: unknown }
   | { kind: 'skip'; subscription: string; reason: SkipReason }

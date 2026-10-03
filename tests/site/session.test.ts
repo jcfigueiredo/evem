@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { defaultValues, ScenarioSession, type Scenario } from '../../demo/src/engine/session';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { defaultValues, numberInput, ScenarioSession, type Scenario } from '../../demo/src/engine/session';
 
 const scenario: Scenario = {
   id: 'greeting',
@@ -28,6 +28,12 @@ const scenario: Scenario = {
 };
 
 const kinds = (session: ScenarioSession) => session.trace.entries.map(entry => entry.kind);
+const logs = (session: ScenarioSession) =>
+  session.trace.entries.flatMap(entry => (entry.kind === 'log' ? [entry.text] : []));
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('ScenarioSession', () => {
   it('starts from the default values and the code they render', () => {
@@ -151,10 +157,86 @@ describe('ScenarioSession', () => {
     expect(session.trace.entries).toEqual([expect.objectContaining({ kind: 'log', text: 'new' })]);
   });
 
+  it('writes raw select values into the code as code, and text values as strings', () => {
+    const session = new ScenarioSession({
+      ...scenario,
+      controls: {
+        greeting: { kind: 'select', label: 'greeting', options: ['[1, 2]', 'null'], default: '[1, 2]', raw: true },
+        loud: { kind: 'text', label: 'loud', default: 'very' }
+      }
+    });
+    expect(session.code).toContain("await evem.publish('greet', [1, 2]);");
+    expect(session.code).toContain("console.log('greeted', 'very');");
+  });
+
+  it('clears the action buttons when the code stops compiling', async () => {
+    const session = new ScenarioSession(scenario);
+    await session.reset();
+    expect(session.actions).toHaveLength(1);
+
+    await session.edit("import WebSocket from 'ws';\n// ▶ Greet\n");
+
+    expect(session.actions).toEqual([]);
+  });
+
+  it("gives the code a console that logs info and debug too, and whose other methods are the page's", async () => {
+    const table = vi.spyOn(console, 'table').mockImplementation(() => {});
+    const session = new ScenarioSession(scenario);
+
+    await session.edit("console.info('hi');\nconsole.debug('there');\nconsole.table([1]);");
+
+    expect(logs(session)).toEqual(['hi', 'there']);
+    expect(kinds(session)).toEqual(['log', 'log']);
+    expect(table).toHaveBeenCalledWith([1]);
+  });
+
+  it('logs short values on one line and long ones indented', async () => {
+    const session = new ScenarioSession(scenario);
+    await session.edit("console.log({ a: 1 });\nconsole.log({ name: 'x'.repeat(90) });");
+    expect(logs(session)).toEqual(['{"a":1}', `{\n  "name": "${'x'.repeat(90)}"\n}`]);
+  });
+
+  it('records what the library logs with console.log and console.group during a run, indented by group', async () => {
+    const originalLog = console.log;
+    const session = new ScenarioSession({
+      ...scenario,
+      helpers: {
+        libraryLog: () => {
+          console.group('Details:');
+          console.log('inside');
+          console.groupEnd();
+          console.info('after');
+        }
+      },
+      code: '// ▶ Log\nlibraryLog();'
+    });
+    await session.reset();
+    await session.run('log');
+
+    expect(logs(session)).toEqual(['Details:', '  inside', 'after']);
+    expect(console.log).toBe(originalLog);
+  });
+
   it('records an error thrown by an action', async () => {
     const session = new ScenarioSession({ ...scenario, code: '// ▶ Fail\nthrow new Error("no");' });
     await session.reset();
     await session.run('fail');
     expect(session.trace.entries).toEqual([expect.objectContaining({ kind: 'error', message: 'no' })]);
+  });
+});
+
+describe('numberInput', () => {
+  const control = { min: 0, max: 100 };
+
+  it('keeps a number between the min and the max', () => {
+    expect(numberInput('42', control, 5)).toBe(42);
+    expect(numberInput('-3', control, 5)).toBe(0);
+    expect(numberInput('250', control, 5)).toBe(100);
+  });
+
+  it('keeps the previous value for an empty input or one that is not a number', () => {
+    expect(numberInput('', control, 5)).toBe(5);
+    expect(numberInput('  ', control, 5)).toBe(5);
+    expect(numberInput('abc', control, 5)).toBe(5);
   });
 });
