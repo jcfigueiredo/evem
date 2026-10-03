@@ -84,6 +84,11 @@ export function numberInput(text: string, control: { min: number; max: number },
   return Math.min(control.max, Math.max(control.min, value));
 }
 
+/** A select option's label: the option as it is, but the empty string as `'' (empty)`, which a blank label would hide */
+export function optionLabel(option: ControlValue): string {
+  return option === '' ? "'' (empty)" : String(option);
+}
+
 /** The controls whose values are code, written as they are */
 export function rawControls(scenario: Scenario): Set<string> {
   return new Set(

@@ -1,7 +1,7 @@
 import type { EvEm } from '@jcfigueiredo/evem';
 import { el } from '../dom';
 import type { ControlValue } from '../engine/program';
-import { numberInput, ScenarioSession, type Control, type Scenario } from '../engine/session';
+import { numberInput, optionLabel, ScenarioSession, type Control, type Scenario } from '../engine/session';
 import { laneChart } from '../lanes';
 import { announcement, timelineRows, type Tone } from '../timeline';
 import { renderLaneChart } from './laneChart';
@@ -79,7 +79,7 @@ function controlField(
     'select',
     { class: 'select select-sm w-full', name },
     control.options.map(option => {
-      const element = el('option', { value: JSON.stringify(option) }, [String(option)]);
+      const element = el('option', { value: JSON.stringify(option) }, [optionLabel(option)]);
       element.selected = option === value;
       return element;
     })

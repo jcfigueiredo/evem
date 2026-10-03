@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { defaultValues, numberInput, ScenarioSession, type Scenario } from '../../demo/src/engine/session';
+import { defaultValues, numberInput, optionLabel, ScenarioSession, type Scenario } from '../../demo/src/engine/session';
 
 const scenario: Scenario = {
   id: 'greeting',
@@ -322,6 +322,15 @@ describe('ScenarioSession with a fake WebSocket server', () => {
     session.stop();
     await vi.advanceTimersByTimeAsync(200);
     expect(second.openConnections).toBe(0);
+  });
+});
+
+describe('optionLabel', () => {
+  it("shows a select's options as they are, and the empty string as something to see", () => {
+    expect(optionLabel('server')).toBe('server');
+    expect(optionLabel('ErrorPolicy.THROW')).toBe('ErrorPolicy.THROW');
+    expect(optionLabel(500)).toBe('500');
+    expect(optionLabel('')).toBe("'' (empty)");
   });
 });
 
