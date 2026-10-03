@@ -184,6 +184,12 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 |---|---|---|
 | 3b review | The lane chart has no legend: filled (ran) and hollow (held back) are explained only in tooltips | 4 |
 | 3b review | The site has no favicon (a 404 in the console) | 4 |
+| 4a review | Quick Show code clicks before the editor has loaded create two editors in a widget: reuse the pending import | 4 |
+| 4a review | The hero's Pause button reads Play while `aria-pressed` is true (a screen reader hears "Play, pressed"): keep the label fixed, or drop `aria-pressed` | 4 |
+| 4a review | The copy button's "Copied" isn't announced (its `aria-label` stays "Copy the install command") | 4 |
+| 4a review | A lanes widget redraws on every resize without the rAF batching the workbench uses | 4 |
+| 4a review | The still diagram (reduced motion, no JavaScript) shows `order.created` with `welcome` lit, which wouldn't run; and no test pins the diagram's first event to `FLOW_EVENTS[0]` | 4 |
+| 4a | On phones, the theme picker's "Theme: Signal" wraps onto two lines in the navbar | 4 |
 | Note, 2026-10-03 | The public site builds the library from `src/` on every push to `main`, not from the npm release, so the playground can show unreleased behavior (phase 1's fixes are still under Unreleased) while the showcase says `npm install`: show which code the site runs, and release a version when the playground depends on unreleased behavior | 4 |
 | Phase 2 review | Check narrow layouts below 513 px, with device emulation | 5 |
 | 3c-2 review | A write after *Go silent* vanishes without a note: the silenced stream still counts as open, and the write is dropped quietly | 5 |
