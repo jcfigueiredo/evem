@@ -7,7 +7,7 @@ import { timelineRows, type Tone } from '../timeline';
 // Full class names, so Tailwind finds them in the source
 const TONE_CLASS: Record<Tone, string> = {
   primary: 'status-primary text-primary',
-  neutral: 'bg-base-content/40 text-base-content/40',
+  neutral: 'bg-base-content/60 text-base-content/60',
   info: 'status-info text-info',
   success: 'status-success text-success',
   warning: 'status-warning text-warning',
@@ -99,7 +99,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
           row.detail
             ? el('span', { class: 'font-mono text-xs text-base-content/60 ms-2 break-all' }, [row.detail])
             : null,
-          el('span', { class: 'text-xs text-base-content/40 ms-2' }, [`${row.at} ms`])
+          el('span', { class: 'text-xs text-base-content/60 ms-2' }, [`${row.at} ms`])
         ])
       )
     );
@@ -192,7 +192,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
 
   root.replaceChildren(
     el('header', { class: 'mb-6' }, [
-      el('p', { class: 'text-xs uppercase tracking-widest text-base-content/50' }, [scenario.group]),
+      el('p', { class: 'text-xs uppercase tracking-widest text-base-content/70' }, [scenario.group]),
       el('h1', { class: 'font-mono text-3xl font-bold tracking-tight' }, [scenario.title]),
       el('p', { class: 'mt-2 text-base-content/70 max-w-prose' }, [
         scenario.summary,
@@ -203,14 +203,14 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     el('div', { class: 'grid gap-4 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]' }, [
       el('section', { class: 'card bg-base-100 border border-base-300', 'aria-label': 'Scenario' }, [
         el('div', { class: 'card-body p-4 gap-2' }, [
-          el('h2', { class: 'text-xs uppercase tracking-widest text-base-content/50' }, ['Scenario']),
+          el('h2', { class: 'text-xs uppercase tracking-widest text-base-content/70' }, ['Scenario']),
           controls,
           actions
         ])
       ]),
       el('section', { class: 'card bg-base-100 border border-base-300', 'aria-label': 'What EvEm did' }, [
         el('div', { class: 'card-body p-4 gap-3' }, [
-          el('h2', { class: 'text-xs uppercase tracking-widest text-base-content/50' }, ['What EvEm did']),
+          el('h2', { class: 'text-xs uppercase tracking-widest text-base-content/70' }, ['What EvEm did']),
           timelineBox
         ])
       ])
@@ -218,7 +218,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     el('section', { class: 'card bg-base-100 border border-base-300 mt-4', 'aria-label': 'Code' }, [
       el('div', { class: 'card-body p-4 gap-3' }, [
         el('div', { class: 'flex flex-wrap items-center gap-2' }, [
-          el('h2', { class: 'text-xs uppercase tracking-widest text-base-content/50 me-auto' }, [
+          el('h2', { class: 'text-xs uppercase tracking-widest text-base-content/70 me-auto' }, [
             'Code that runs ',
             editedBadge
           ]),

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const css = readFileSync(new URL('../../demo/src/styles.css', import.meta.url), 'utf8');
@@ -27,6 +27,31 @@ const menuColor = (variable: string, fallback: string) =>
 const focusRing = /\.menu :is\(a, button\):focus-visible \{\s*outline: 2px solid var\(--color-([\w-]+)\)/.exec(
   css
 )?.[1];
+
+/** The site's markup and scripts: the pages, and everything under demo/src */
+const demoFile = (path: string) => readFileSync(new URL(`../../demo/${path}`, import.meta.url), 'utf8');
+const sources = [
+  demoFile('index.html'),
+  demoFile('playground/index.html'),
+  ...readdirSync(new URL('../../demo/src', import.meta.url), { recursive: true })
+    .map(String)
+    .filter(path => path.endsWith('.ts'))
+    .map(path => demoFile(`src/${path}`))
+].join('\n');
+
+/** The opacities the sources use with a base-content utility (`text-base-content/60` → 60) */
+const opacities = (utility: string) => [
+  ...new Set([...sources.matchAll(new RegExp(`\\b${utility}-base-content/(\\d+)`, 'g'))].map(match => Number(match[1])))
+];
+
+/** `foreground` at `opacity` over `background`, as the browser composites it (per sRGB channel) */
+function blend(foreground: string, background: string, opacity: number): string {
+  const channel = (hex: string, index: number) => parseInt(hex.slice(index, index + 2), 16);
+  return `#${[1, 3, 5]
+    .map(index => Math.round(channel(foreground, index) * opacity + channel(background, index) * (1 - opacity)))
+    .map(value => value.toString(16).padStart(2, '0'))
+    .join('')}`;
+}
 
 /** WCAG 2.1 contrast ratio of two #rrggbb colors */
 function contrast(a: string, b: string): number {
@@ -73,6 +98,23 @@ describe('theme colors', () => {
       const background = color(menuColor('menu-active-bg', 'neutral'));
       expect(contrast(background, color('base-300'))).toBeGreaterThanOrEqual(3);
       expect(contrast(color(menuColor('menu-active-fg', 'neutral-content')), background)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    // Faded text and shapes (`text-base-content/60`, the neutral timeline dot): the theme tokens alone don't show them
+    const bases = ['base-100', 'base-200', 'base-300'];
+
+    it.each(opacities('text'))('base-content text at %i%% opacity meets WCAG AA on every base color', opacity => {
+      for (const base of bases) {
+        const faded = blend(color('base-content'), color(base), opacity / 100);
+        expect(contrast(faded, color(base)), `on ${base}`).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+
+    it.each(opacities('bg'))('base-content shapes at %i%% opacity stand out from every base color (3:1)', opacity => {
+      for (const base of bases) {
+        const faded = blend(color('base-content'), color(base), opacity / 100);
+        expect(contrast(faded, color(base)), `on ${base}`).toBeGreaterThanOrEqual(3);
+      }
     });
 
     it('menu items show keyboard focus with a ring that stands out from the sidebar', () => {
