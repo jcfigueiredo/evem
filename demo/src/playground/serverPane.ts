@@ -2,15 +2,8 @@ import { el } from '../dom';
 import type { ScenarioSession, ServerSample } from '../engine/session';
 import { checkLocalServer } from '../fakes/localSseServer';
 import { keepsFollowing } from '../timeline';
-import { BUTTON } from './views';
-import type { FakeServer, WireEntry } from '../fakes/wire';
-
-// Full class names, so Tailwind finds them in the source
-const DIRECTION: Record<WireEntry['direction'], { mark: string; label: string; className: string }> = {
-  client: { mark: '→', label: 'client sent', className: 'text-info' },
-  server: { mark: '←', label: 'server sent', className: 'text-success' },
-  note: { mark: '·', label: 'connection', className: 'text-base-content/70' }
-};
+import { BUTTON, WIRE_DIRECTION, wireItem } from './views';
+import type { FakeServer } from '../fakes/wire';
 
 /** How many wire lines the pane keeps on screen */
 const SHOWN = 200;
@@ -29,9 +22,6 @@ export function connectionStatus(open: number, states: readonly string[]): strin
   if (states.length > 0) return 'No open connection: the client has stopped. Reset starts over.';
   return 'No open connection.';
 }
-
-/** A wire entry's text with its line breaks visible (`↵`), since in an event stream they're the syntax */
-const visible = (text: string): string => text.replace(/\r/g, '␍').replace(/\n/g, '↵\n');
 
 /**
  * The scenario's server, as a card: its wire log (what each side sent, and what happened to connections) and
@@ -179,8 +169,8 @@ export function serverPane(
     { class: 'flex flex-wrap gap-x-4 text-xs text-base-content/70' },
     (['client', 'server', 'note'] as const).map(direction =>
       el('span', {}, [
-        el('span', { class: DIRECTION[direction].className }, [DIRECTION[direction].mark]),
-        ` ${DIRECTION[direction].label}`
+        el('span', { class: WIRE_DIRECTION[direction].className }, [WIRE_DIRECTION[direction].mark]),
+        ` ${WIRE_DIRECTION[direction].label}`
       ])
     )
   );
@@ -197,20 +187,7 @@ export function serverPane(
     const wire = server?.wire ?? [];
     if (server !== shown.server || wire.length !== shown.length) {
       following = server !== shown.server || keepsFollowing(logBox, following);
-      log.replaceChildren(
-        ...wire.slice(-SHOWN).map(entry => {
-          const direction = DIRECTION[entry.direction];
-          return el('li', { class: 'flex gap-2' }, [
-            el(
-              'span',
-              { class: `${direction.className} shrink-0`, title: direction.label, 'aria-label': direction.label },
-              [direction.mark]
-            ),
-            el('span', { class: 'break-all whitespace-pre-wrap' }, [visible(entry.text)]),
-            el('span', { class: 'shrink-0 text-base-content/70' }, [`${entry.at} ms`])
-          ]);
-        })
-      );
+      log.replaceChildren(...wire.slice(-SHOWN).map(wireItem));
       if (wire.length === 0) log.append(el('li', { class: 'text-base-content/70' }, ['Nothing on the wire yet.']));
       reveal();
       shown = { server, length: wire.length };
