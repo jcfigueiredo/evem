@@ -1,4 +1,5 @@
 import { EvEm } from '@jcfigueiredo/evem';
+import { ActionGate } from '../actionGate';
 import { el } from '../dom';
 import type { CodeEditor } from '../editor';
 import { ScenarioSession, type Scenario } from '../engine/session';
@@ -25,7 +26,8 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
   const bus = new EvEm();
   const session = new ScenarioSession(scenario, bus);
   const prefix = `widget-${scenario.id}`;
-  let busy = false;
+  // A run from before a control changed must not free the buttons while a newer run holds them
+  const gate = new ActionGate();
   let lastInteraction = Number.NEGATIVE_INFINITY;
 
   const controls = el('div', { class: 'grid gap-x-3 sm:grid-cols-2' });
@@ -78,15 +80,14 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
   if (scenario.lanes) new ResizeObserver(() => render()).observe(output);
 
   const run = async (id: string) => {
-    if (busy) return;
-    busy = true;
+    const token = gate.start();
+    if (token === undefined) return;
     for (const button of actions.querySelectorAll('button')) button.disabled = true;
     announced = 0;
     try {
       await session.run(id);
     } finally {
-      busy = false;
-      for (const button of actions.querySelectorAll('button')) button.disabled = false;
+      if (gate.end(token)) for (const button of actions.querySelectorAll('button')) button.disabled = false;
     }
   };
   const renderActions = () => {
@@ -108,7 +109,7 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
           control,
           session.values[name]!,
           async value => {
-            busy = false;
+            gate.reset();
             await session.setValue(name, value);
             editor?.setCode(session.code);
             renderActions();
