@@ -12,7 +12,12 @@ const scratch = mkdtempSync(join(tmpdir(), 'evem-scenarios-'));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
+
+/** The scenarios run in a page, whose address resolves relative URLs (SseHandler checks that it can) */
+const PAGE = { href: 'http://localhost:5199/playground/' };
 
 /** The scenario's code with every value of every control, one control at a time (the others at their defaults) */
 function variants(scenario: Scenario): string[] {
@@ -33,18 +38,25 @@ function variants(scenario: Scenario): string[] {
   return codes;
 }
 
-/** Run an action, or a command to the scenario's fake server: `server:drop`, `server:refuse`, `server:send <text>` */
-function step(session: ScenarioSession, action: string): Promise<void> {
+/**
+ * Run an action; a command to the scenario's server, `server:<command> <argument>` (what the Server card's controls
+ * do: `server:drop`, `server:send <text>`, …); or `wait:<ms>`, which lets that much time pass
+ */
+async function step(session: ScenarioSession, action: string): Promise<void> {
+  if (action.startsWith('wait:')) {
+    await vi.advanceTimersByTimeAsync(Number(action.slice('wait:'.length)));
+    return;
+  }
   if (!action.startsWith('server:')) return session.run(action);
   const server = session.server;
   if (!server) throw new Error(`${action}: the scenario has no server`);
-  const [command, ...text] = action.slice('server:'.length).split(' ');
-  if (command === 'drop') server.drop();
-  else if (command === 'refuse') server.refuseNext();
-  else if (command === 'send') server.send(text.join(' '));
-  else throw new Error(`Unknown server command: ${action}`);
-  return Promise.resolve();
+  const space = action.indexOf(' ');
+  const command = action.slice('server:'.length, space === -1 ? undefined : space);
+  server.run(command, space === -1 ? '' : action.slice(space + 1));
 }
+
+/** Whether a check's step is an action of the scenario's code (not a server command or a wait) */
+const isAction = (step: string) => !step.startsWith('server:') && !step.startsWith('wait:');
 
 /** In order: each expected part appears in a later line than the one before */
 function expectInOrder(lines: string[], expected: string[] | undefined, what: string): void {
@@ -56,11 +68,18 @@ function expectInOrder(lines: string[], expected: string[] | undefined, what: st
   }
 }
 
-/** Finish a session step under fake timers, firing every timer it starts (delays, timeouts, slow callbacks) */
-async function settle(step: Promise<void>): Promise<void> {
+/**
+ * Finish a session step under fake timers. By default every timer it starts fires (delays, timeouts, slow callbacks);
+ * a scenario whose server never runs out of timers (a stream of ticks) is `bounded`: time passes in small steps until
+ * the step is done, and then only as checks ask (`wait`)
+ */
+async function settle(step: Promise<void>, bounded = false): Promise<void> {
   let done = false;
   void step.finally(() => (done = true));
-  for (let turn = 0; !done && turn < 100; turn++) await vi.runAllTimersAsync();
+  for (let turn = 0; !done && turn < 100; turn++) {
+    if (bounded) await vi.advanceTimersByTimeAsync(50);
+    else await vi.runAllTimersAsync();
+  }
   await step;
 }
 
@@ -82,13 +101,16 @@ describe.each(scenarios.map(scenario => [scenario.id, scenario] as const))('scen
     for (const control of Object.values(scenario.controls)) {
       if (control.kind === 'select') expect(control.options).toContain(control.default);
     }
+    vi.stubGlobal('location', PAGE);
     const session = new ScenarioSession(scenario);
     await session.reset();
+    // Its connections end here (with real timers, a server's ticks would keep running)
+    session.stop();
     const actions = session.actions.map(action => action.id);
     expect(scenario.checks.length).toBeGreaterThan(0);
     for (const check of scenario.checks) {
       for (const action of [...(check.before ?? []), check.action]) {
-        if (!action.startsWith('server:')) expect(actions).toContain(action);
+        if (isAction(action)) expect(actions).toContain(action);
       }
     }
   });
@@ -109,14 +131,19 @@ describe.each(scenarios.map(scenario => [scenario.id, scenario] as const))('scen
     'check %i: the action does what the scenario says',
     async (_index, check) => {
       vi.useFakeTimers();
+      vi.stubGlobal('location', PAGE);
+      const bounded = scenario.sse !== undefined;
+      // No jitter in reconnect delays (0.5 is a factor of exactly 1), so the checks can count on them
+      if (bounded) vi.spyOn(Math, 'random').mockReturnValue(0.5);
       const session = new ScenarioSession(scenario);
       Object.assign(session.values, check.values ?? {});
-      await settle(session.restoreTemplate());
-      for (const action of check.before ?? []) await settle(step(session, action));
+      await settle(session.restoreTemplate(), bounded);
+      for (const action of check.before ?? []) await settle(step(session, action), bounded);
       const before = session.trace.entries.length;
       const wireBefore = session.server?.wire.length ?? 0;
 
-      await settle(step(session, check.action));
+      await settle(step(session, check.action), bounded);
+      if (check.wait) await vi.advanceTimersByTimeAsync(check.wait);
 
       const entries = session.trace.entries.slice(before);
       // Subscribers may throw on purpose; the code itself, the setup and the actions must not

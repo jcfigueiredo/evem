@@ -72,9 +72,9 @@ export function serverPane(session: ScenarioSession, sample: string): { element:
     el('div', { class: 'flex flex-col gap-2' }, [
       status,
       frame,
-      button('Send to the client', 'btn btn-sm btn-primary', () => session.server?.send(frame.value)),
-      button('Drop the connection', 'btn btn-sm', () => session.server?.drop()),
-      button('Refuse the next connection', 'btn btn-sm', () => session.server?.refuseNext())
+      button('Send to the client', 'btn btn-sm btn-primary', () => session.server?.run('send', frame.value)),
+      button('Drop the connection', 'btn btn-sm', () => session.server?.run('drop')),
+      button('Refuse the next connection', 'btn btn-sm', () => session.server?.run('refuse'))
     ])
   ]);
   render();
