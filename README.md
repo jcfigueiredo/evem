@@ -1390,7 +1390,7 @@ This feature is particularly useful for:
 1. Debugging complex event setups
 2. Visualizing the current state of the event system
 3. Checking which middleware will be applied to specific events
-4. Inspecting the priorities of event handlers (listed in subscription order, not in the order they run)
+4. Inspecting the priorities of event handlers (grouped by event name, in subscription order within each name, not in the order they run)
 
 For a comprehensive set of examples, check out the [examples](docs/examples.md) page.
 
