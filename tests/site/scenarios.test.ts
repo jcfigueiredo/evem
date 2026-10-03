@@ -33,6 +33,29 @@ function variants(scenario: Scenario): string[] {
   return codes;
 }
 
+/** Run an action, or a command to the scenario's fake server: `server:drop`, `server:refuse`, `server:send <text>` */
+function step(session: ScenarioSession, action: string): Promise<void> {
+  if (!action.startsWith('server:')) return session.run(action);
+  const server = session.server;
+  if (!server) throw new Error(`${action}: the scenario has no server`);
+  const [command, ...text] = action.slice('server:'.length).split(' ');
+  if (command === 'drop') server.drop();
+  else if (command === 'refuse') server.refuseNext();
+  else if (command === 'send') server.send(text.join(' '));
+  else throw new Error(`Unknown server command: ${action}`);
+  return Promise.resolve();
+}
+
+/** In order: each expected part appears in a later line than the one before */
+function expectInOrder(lines: string[], expected: string[] | undefined, what: string): void {
+  let from = 0;
+  for (const part of expected ?? []) {
+    const index = lines.findIndex((line, position) => position >= from && line.includes(part));
+    expect(index, `${what} containing ${JSON.stringify(part)}, in order, in ${JSON.stringify(lines)}`).not.toBe(-1);
+    from = index + 1;
+  }
+}
+
 /** Finish a session step under fake timers, firing every timer it starts (delays, timeouts, slow callbacks) */
 async function settle(step: Promise<void>): Promise<void> {
   let done = false;
@@ -64,7 +87,9 @@ describe.each(scenarios.map(scenario => [scenario.id, scenario] as const))('scen
     const actions = session.actions.map(action => action.id);
     expect(scenario.checks.length).toBeGreaterThan(0);
     for (const check of scenario.checks) {
-      for (const action of [...(check.before ?? []), check.action]) expect(actions).toContain(action);
+      for (const action of [...(check.before ?? []), check.action]) {
+        if (!action.startsWith('server:')) expect(actions).toContain(action);
+      }
     }
   });
 
@@ -87,10 +112,11 @@ describe.each(scenarios.map(scenario => [scenario.id, scenario] as const))('scen
       const session = new ScenarioSession(scenario);
       Object.assign(session.values, check.values ?? {});
       await settle(session.restoreTemplate());
-      for (const action of check.before ?? []) await settle(session.run(action));
+      for (const action of check.before ?? []) await settle(step(session, action));
       const before = session.trace.entries.length;
+      const wireBefore = session.server?.wire.length ?? 0;
 
-      await settle(session.run(check.action));
+      await settle(step(session, check.action));
 
       const entries = session.trace.entries.slice(before);
       // Subscribers may throw on purpose; the code itself, the setup and the actions must not
@@ -110,14 +136,9 @@ describe.each(scenarios.map(scenario => [scenario.id, scenario] as const))('scen
         ).toEqual(check.skipped);
       }
       const logs = entries.flatMap(entry => (entry.kind === 'log' ? [entry.text] : []));
-      let from = 0;
-      for (const expected of check.logs ?? []) {
-        const index = logs.findIndex((text, position) => position >= from && text.includes(expected));
-        expect(index, `a log containing ${JSON.stringify(expected)}, in order, in ${JSON.stringify(logs)}`).not.toBe(
-          -1
-        );
-        from = index + 1;
-      }
+      expectInOrder(logs, check.logs, 'a log');
+      const wire = (session.server?.wire ?? []).slice(wireBefore).map(entry => `${entry.direction}: ${entry.text}`);
+      expectInOrder(wire, check.wire, 'a wire line');
     }
   );
 });

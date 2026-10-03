@@ -8,6 +8,11 @@ describe('preview', () => {
     expect(preview(undefined)).toBe('undefined');
     expect(preview('x'.repeat(100), 10)).toBe(`"${'x'.repeat(8)}…`);
   });
+
+  it('shows an error by its name and message, which JSON would drop', () => {
+    const error = new SyntaxError('Unexpected token');
+    expect(preview({ error, rawData: 'oops' })).toBe('{"error":"SyntaxError: Unexpected token","rawData":"oops"}');
+  });
 });
 
 describe('describeEntry', () => {

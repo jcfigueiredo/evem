@@ -154,8 +154,11 @@ export function createTracedEvEm(
      * the latest publish of an event that `pattern` matches
      */
     private publishFor(pattern: string, data: unknown): number | undefined {
-      for (let index = this.history.length - 1; index >= 0; index--) {
-        if (this.history[index]!.data === data && data !== undefined) return this.history[index]!.id;
+      // Only an object is the same one EvEm passed along; equal primitives (the same number, say) prove nothing. A
+      // cancelable publish's copy, or data a middleware or transform replaced, falls back to the event too
+      const identifiable = (typeof data === 'object' && data !== null) || typeof data === 'function';
+      for (let index = this.history.length - 1; identifiable && index >= 0; index--) {
+        if (this.history[index]!.data === data) return this.history[index]!.id;
       }
       for (let index = this.history.length - 1; index >= 0; index--) {
         const publish = this.history[index]!;
@@ -171,7 +174,7 @@ export function createTracedEvEm(
     ): string {
       // EvEm refuses an empty name before doing anything: so does the trace
       if (!event) return super.subscribe(event, callback, options);
-      const name = nameOf(callback, () => `subscriber ${++this.anonymous}`);
+      const name = trace.owner ?? nameOf(callback, () => `subscriber ${++this.anonymous}`);
       let id = '';
       const wrapped: EventCallback<T> = data => {
         const state = this.current();
@@ -318,7 +321,7 @@ export function createTracedEvEm(
 
     override use<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void {
       const handler = typeof middleware === 'function' ? middleware : middleware.handler;
-      const name = nameOf(handler, `middleware ${this.middlewares.size + 1}`);
+      const name = trace.owner ?? nameOf(handler, `middleware ${this.middlewares.size + 1}`);
       const traced: MiddlewareFunction<T> = (event, data) => {
         const state = this.current();
         const publish = trace.currentPublish;

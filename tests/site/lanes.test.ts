@@ -9,6 +9,12 @@ describe('timeAxis', () => {
     expect(timeAxis(4000).ticks).toEqual([0, 1000, 2000, 3000, 4000]);
   });
 
+  it('covers a long burst in at most 8 steps, and takes the smaller step when it fits exactly', () => {
+    expect(timeAxis(12_000).ticks).toEqual([0, 2000, 4000, 6000, 8000, 10_000, 12_000]);
+    // 800 ms × 1.05 = 840: 100 ms steps would be 8.4 intervals; 800 / 1.05 → span 800: exactly 8 steps of 100
+    expect(timeAxis(800 / 1.05).ticks).toHaveLength(9);
+  });
+
   it('takes fewer, larger steps when the track only has room for a few labels', () => {
     expect(timeAxis(1000, 3)).toEqual({ span: 1050, ticks: [0, 500, 1000] });
     expect(timeAxis(12_000, 2).ticks).toEqual([0, 10_000]);

@@ -1,6 +1,6 @@
 # Demo Revamp Design
 
-> **Status: phases 1 (examples audit), 2 (foundation), 3a (core scenarios) and 3b (flow control) implemented; 3c, 4 and 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
+> **Status: phases 1 (examples audit), 2 (foundation), 3a (core scenarios), 3b (flow control) and 3c-1 (WebSocket and Recipes) implemented; 3c-2 (SSE and Python mode), 4 and 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
 
 ## Summary
 
@@ -143,7 +143,7 @@ The timeline is built without changing the library:
 - **Traced helpers** record each call with its data and timing, filter and schema verdicts, middleware input and output, transforms, thrown errors and `cancel()` calls.
 - **`EvEm` in a scenario's scope is a thin subclass** that records calls to `publish`, `subscribe`, `unsubscribe`, `unsubscribeById` and `use` and their results (resolved value or rejection), then calls the real methods. It doesn't change behavior.
 - **Skipped subscribers:** after each publish, a subscription whose pattern matched the event but whose callback didn't run is shown with its reason: filtered, rejected by its schema, throttled, debounced (with the later call when it happens), or a `once` that was already used. Matching uses EvEm's own `isEventMatch`, which is private: it's reached in one engine function, and a test pins it to the wildcard rules.
-- **The timeline** shows one card per publish, with its steps nested in order; delayed calls (debounce) appear when they happen, labeled with the publish that caused them.
+- **The timeline** shows a row per step, nested under its publish in order; delayed calls (debounce) are rows of their own when they happen, labeled with the time of the publish whose data they got.
 
 #### Engine and scenario tests
 
@@ -154,7 +154,7 @@ The timeline is built without changing the library:
 
 The sidebar groups follow the README. Each entry is a scenario with a deep link (`/playground/#/core/priorities`) and a link to its docs.
 
-Phase 3 ships in three parts, each with its own plan and pull request: **3a**, the engine upgrades and the Core, Data, Middleware, Control & errors and State & diagnostics groups; **3b**, Flow control, with the burst buttons and lane charts; **3c**, the WebSocket, SSE and Recipes groups, with the fake servers, the server pane and Python mode.
+Phase 3 ships in three parts, each with its own plan and pull request: **3a**, the engine upgrades and the Core, Data, Middleware, Control & errors and State & diagnostics groups; **3b**, Flow control, with the burst buttons and lane charts; **3c**, the WebSocket, SSE and Recipes groups, with the fake servers, the server pane and Python mode. 3c is in two parts as well: **3c-1**, the WebSocket and Recipes groups, with the fake WebSocket server and the server pane; **3c-2**, the SSE group, with the fake SSE server and Python mode.
 
 | Group | Scenarios |
 |---|---|
@@ -182,12 +182,10 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 
 | From | Follow-up | Phase |
 |---|---|---|
-| Phase 2, ruling 13 | `vite/client` types, for `import.meta.env` in Python mode | 3c |
-| 3b review | `publishFor` attributes a debounced call by value for primitives too (a `1` could be matched to an unrelated publish of `1`): only objects should match by identity | 3c |
-| 3b review | The lane chart scans the whole trace for subscriber names on every render (fine now; 3c's server scenarios make long traces) | 3c |
-| 3b review | A test pinning that a second burst replaces the first's pending debounced call (one later call) | 3c |
-| 3b review | `timeAxis` tests at the 12-second long-burst case and where span / step is exactly 8 | 3c |
-| 3b review | The spec's Tracing section still says "one card per publish": rows labeled with their publish's time shipped (3b, ruling 2) | 3c |
+| Phase 2, ruling 13 | `vite/client` types, for `import.meta.env` in Python mode | 3c-2 |
+| 3c-1 review | The Server card rebuilds its log and scrolls it to the end on every redraw, even when no frame arrived: a reader who scrolled up loses their place. Rebuild and re-pin only when the log grew | 3c-2 |
+| 3c-1 review | The fake WebSocket server ignores a client frame that isn't JSON without a note (only edited code with its own `messageFormatter` sends one); decide the rule for frames neither side can read once, for both fake servers | 3c-2 |
+| 3c-1 review | After *Drop the connection* in a scenario whose handler doesn't reconnect (Request–response, Server events & routing), every later action waits or times out until *Reset*, and nothing says so | 3c-2 |
 | 3b review | The lane chart has no legend: filled (ran) and hollow (held back) are explained only in tooltips | 4 |
 | 3b review | The site has no favicon (a 404 in the console) | 4 |
 | Note, 2026-10-03 | The public site builds the library from `src/` on every push to `main`, not from the npm release, so the playground can show unreleased behavior (phase 1's fixes are still under Unreleased) while the showcase says `npm install`: show which code the site runs, and release a version when the playground depends on unreleased behavior | 4 |

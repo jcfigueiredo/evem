@@ -264,6 +264,32 @@ describe('createTracedEvEm', () => {
     expect(lines(trace, ['unsubscribe'])).toEqual(['unsubscribe handler @-']);
   });
 
+  it('matches a debounced call to its publish by identity only for objects: a primitive matches by event', async () => {
+    vi.useFakeTimers();
+    const { trace, evem } = traced();
+    evem.subscribe('count', function counter() {}, { debounceTime: 100 });
+    await evem.publish('count', 1);
+    // Same value, another event: not where the debounced call's 1 came from
+    await evem.publish('other', 1);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(lines(trace, ['call'])).toEqual(['call counter later @1']);
+  });
+
+  it('runs a debounced subscriber once for a burst: each publish replaces the pending call', async () => {
+    vi.useFakeTimers();
+    const { trace, evem } = traced();
+    evem.subscribe('typed', function search() {}, { debounceTime: 100 });
+    await evem.publish('typed', { q: 'e' });
+    await vi.advanceTimersByTimeAsync(50);
+    await evem.publish('typed', { q: 'ev' });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(lines(trace, ['call', 'skip'])).toEqual([
+      'skip search debounced @1',
+      'skip search debounced @2',
+      'call search later @2'
+    ]);
+  });
+
   it('records the data each middleware passes on', async () => {
     const { trace, evem } = traced();
     evem.use(function stamp(_event: string, data: any) {

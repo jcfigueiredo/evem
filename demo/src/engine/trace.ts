@@ -42,6 +42,11 @@ export class Trace {
    * publishes overlap.
    */
   currentPublish: number | undefined;
+  /**
+   * Who is subscribing or adding middleware right now, when it isn't the scenario's code (`WebSocketHandler` while it
+   * sets itself up): what it registers is named after it
+   */
+  owner: string | undefined;
   private readonly started = performance.now();
   private nextPublishId = 1;
   /** Publishes still running, oldest first, each with the publish it was started in */
@@ -71,10 +76,15 @@ export class Trace {
     return nested === this.running.size ? newest : undefined;
   }
 
+  /** Milliseconds since the trace started, as entries record them */
+  now(): number {
+    return Math.round(performance.now() - this.started);
+  }
+
   record(record: TraceRecord): TraceEntry {
     const entry = {
       ...record,
-      at: Math.round(performance.now() - this.started),
+      at: this.now(),
       publish: 'publish' in record ? record.publish : (this.currentPublish ?? this.soleRunningPublish())
     } as TraceEntry;
     this.entries.push(entry);

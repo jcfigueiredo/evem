@@ -24,11 +24,15 @@ const SKIP_TEXT: Record<SkipReason, string> = {
   'not-called': 'not called'
 };
 
+/** JSON keeps none of an error's own fields: show its name and message */
+const showErrors = (_key: string, value: unknown) =>
+  value instanceof Error ? `${value.name}: ${value.message}` : value;
+
 /** Data as short JSON for the timeline */
 export function preview(value: unknown, max = 72): string {
   let text: string;
   try {
-    text = JSON.stringify(value) ?? String(value);
+    text = JSON.stringify(value, showErrors) ?? String(value);
   } catch {
     text = String(value);
   }

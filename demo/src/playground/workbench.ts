@@ -1,10 +1,11 @@
 import type { EvEm } from '@jcfigueiredo/evem';
 import { el } from '../dom';
 import type { ControlValue } from '../engine/program';
-import { numberInput, ScenarioSession, type Control, type Scenario } from '../engine/session';
+import { numberInput, optionLabel, ScenarioSession, type Control, type Scenario } from '../engine/session';
 import { laneChart } from '../lanes';
 import { announcement, timelineRows, type Tone } from '../timeline';
 import { renderLaneChart } from './laneChart';
+import { serverPane } from './serverPane';
 
 // Full class names, so Tailwind finds them in the source
 const TONE_CLASS: Record<Tone, string> = {
@@ -78,7 +79,7 @@ function controlField(
     'select',
     { class: 'select select-sm w-full', name },
     control.options.map(option => {
-      const element = el('option', { value: JSON.stringify(option) }, [String(option)]);
+      const element = el('option', { value: JSON.stringify(option) }, [optionLabel(option)]);
       element.selected = option === value;
       return element;
     })
@@ -124,6 +125,8 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
 
   // Flow control scenarios show the latest action over time too
   const lanesHost = scenario.lanes ? el('div', {}) : undefined;
+  // Adapter scenarios show their fake server: the wire log, and controls
+  const server = scenario.websocket ? serverPane(session, scenario.websocket.sample ?? '') : undefined;
 
   const renderTimeline = () => {
     const rows = timelineRows(session.trace.entries);
@@ -147,6 +150,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     }
     timelineBox.scrollTop = timelineBox.scrollHeight;
     if (lanesHost) renderLaneChart(lanesHost, laneChart(session.trace.entries));
+    server?.render();
     // A new trace means the reader started over (a control, Reset, edited code): its setup isn't announced
     if (session.trace !== announcedTrace) {
       announcedTrace = session.trace;
@@ -165,6 +169,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     });
   };
   const traceSubscription = bus.subscribe('trace.entry', scheduleRender);
+  const wireSubscription = bus.subscribe('wire.entry', scheduleRender);
   // The chart's tick labels depend on its width: draw it again when that changes
   const resizes = lanesHost ? new ResizeObserver(() => scheduleRender()) : undefined;
   if (lanesHost) resizes?.observe(lanesHost);
@@ -276,6 +281,16 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
           ])
         ]
       : []),
+    ...(server
+      ? [
+          el('section', { class: 'card bg-base-100 border border-base-300 mt-4', 'aria-label': 'Server' }, [
+            el('div', { class: 'card-body p-4 gap-3' }, [
+              el('h2', { class: 'text-xs uppercase tracking-widest text-base-content/70' }, ['Server']),
+              server.element
+            ])
+          ])
+        ]
+      : []),
     el('section', { class: 'card bg-base-100 border border-base-300 mt-4', 'aria-label': 'Code' }, [
       el('div', { class: 'card-body p-4 gap-3' }, [
         el('div', { class: 'flex flex-wrap items-center gap-2' }, [
@@ -300,7 +315,10 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
 
   return () => {
     bus.unsubscribeById(traceSubscription);
+    bus.unsubscribeById(wireSubscription);
     resizes?.disconnect();
     editor.destroy();
+    // Leaving the scenario ends its connections, which would otherwise keep reconnecting
+    session.stop();
   };
 }
