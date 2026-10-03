@@ -184,6 +184,9 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 |---|---|---|
 | Note, 2026-10-03 | The site runs the library from source (its footer and the playground's sidebar now say which version and commit), and the package isn't on npm yet though the hero says `npm install`: release 0.3.0 (`pnpm release 0.3.0 --dry-run` first, then the user's OK) | after 4b |
 | Phase 2 review | Check narrow layouts below 513 px, with device emulation | 5 |
+| 4b-2 review | After *Drop the stream*, an adapter card announces the drop but not the resume a few seconds later (it announces once per click): announce connection changes too, or keep the window and leave out the stream's own ticks | 5 |
+| 4b-2 review | The workbench sets a hidden tab's count before it resets `seen` for a new trace; harmless while setups are synchronous, but move the reset above the counts | 5 |
+| 4b-2 review | CLAUDE.md's demo status line misses a comma after "the UX pass (code beside output)" | 5 |
 | 3c-2 review | A write after *Go silent* vanishes without a note: the silenced stream still counts as open, and the write is dropped quietly | 5 |
 | 3c-2 review | An empty send box writes empty chunks (one, or two with *Write it in two chunks*) and logs blank lines: note that there's nothing to write instead | 5 |
 | 3c-2 review | The fake SSE server logs a request's path only, so an absolute URL in edited code (`https://api.example.com/events`) looks as if it reached that host: log the URL as given, as `LocalSseServer` does | 5 |
