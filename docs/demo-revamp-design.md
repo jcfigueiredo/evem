@@ -1,6 +1,6 @@
 # Demo Revamp Design
 
-> **Status: phases 1 (examples audit) and 2 (foundation) implemented; phases 3–5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
+> **Status: phases 1 (examples audit), 2 (foundation) and 3a (core scenarios) implemented; 3b, 3c, 4 and 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
 
 ## Summary
 
@@ -153,6 +153,8 @@ The timeline is built without changing the library:
 ## Phase 3: Playground
 
 The sidebar groups follow the README. Each entry is a scenario with a deep link (`/playground/#/core/priorities`) and a link to its docs.
+
+Phase 3 ships in three parts, each with its own plan and pull request: **3a**, the engine upgrades and the Core, Data, Middleware, Control & errors and State & diagnostics groups; **3b**, Flow control, with the burst buttons and lane charts; **3c**, the WebSocket, SSE and Recipes groups, with the fake servers, the server pane and Python mode.
 
 | Group | Scenarios |
 |---|---|
