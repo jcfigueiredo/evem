@@ -20,6 +20,7 @@ export type TraceEntry = { at: number; publish?: number } & (
   | { kind: 'skip'; subscription: string; reason: SkipReason }
   | { kind: 'error'; message: string; subscription?: string }
   | { kind: 'log'; level: 'log' | 'warn' | 'error'; text: string }
+  | { kind: 'action'; label: string }
 );
 
 /** A TraceEntry without the fields the trace fills in */

@@ -100,13 +100,14 @@ export function createTracedEvEm(
   { explainMatches = false }: TraceOptions = {}
 ): typeof EvEm {
   /** A function's display name: the scenario's name for it, else its own (only code the reader wrote keeps one) */
-  const nameOf = (fn: Function, fallback: string) => names.get(fn) ?? (fn.name || fallback);
+  const nameOf = (fn: Function, fallback: string | (() => string)) =>
+    names.get(fn) ?? (fn.name || (typeof fallback === 'string' ? fallback : fallback()));
 
   return class TracedEvEm extends EvEm {
     private readonly subscriptions = new Map<string, Subscription>();
     private readonly publishes = new Map<number, PublishState>();
     /** Recent publishes, newest last, to attribute calls that happen after their publish (debounce) */
-    private readonly history: Array<{ id: number; event: string }> = [];
+    private readonly history: Array<{ id: number; event: string; data: unknown }> = [];
     private readonly middlewares = new Map<MiddlewareFunction<any>, MiddlewareFunction<any>>();
     /** The publish each publish chain belongs to */
     private readonly chains = new WeakMap<Map<string, number>, number>();
@@ -148,8 +149,14 @@ export function createTracedEvEm(
       return id === undefined ? undefined : this.publishes.get(id);
     }
 
-    /** The latest publish of an event that `pattern` matches */
-    private latestFor(pattern: string): number | undefined {
+    /**
+     * The publish a call outside any publish came from (a debounced call): the latest one whose data it got, or else
+     * the latest publish of an event that `pattern` matches
+     */
+    private publishFor(pattern: string, data: unknown): number | undefined {
+      for (let index = this.history.length - 1; index >= 0; index--) {
+        if (this.history[index]!.data === data && data !== undefined) return this.history[index]!.id;
+      }
       for (let index = this.history.length - 1; index >= 0; index--) {
         const publish = this.history[index]!;
         if (matchesPattern(this, publish.event, pattern)) return publish.id;
@@ -162,14 +169,16 @@ export function createTracedEvEm(
       callback: EventCallback<T>,
       options?: SubscriptionOptions<T, R>
     ): string {
-      const name = names.get(callback) ?? (callback.name || `subscriber ${++this.anonymous}`);
+      // EvEm refuses an empty name before doing anything: so does the trace
+      if (!event) return super.subscribe(event, callback, options);
+      const name = nameOf(callback, () => `subscriber ${++this.anonymous}`);
       let id = '';
       const wrapped: EventCallback<T> = data => {
         const state = this.current();
         state?.called.add(id);
         // Outside any publish: a replay from history while subscribing, or a call that comes later (debounce)
         const replayed = !state && this.subscribing > 0;
-        const publish = state?.id ?? (replayed ? undefined : this.latestFor(event));
+        const publish = state?.id ?? (replayed ? undefined : this.publishFor(event, data));
         trace.record({
           kind: 'call',
           subscription: name,
@@ -355,7 +364,9 @@ export function createTracedEvEm(
         canceled: false
       };
       this.publishes.set(id, state);
-      if (explainMatches) {
+      // EvEm refuses a publish with an empty name before doing anything: nothing matched, nothing was skipped
+      const refused = !event;
+      if (explainMatches && !refused) {
         for (const subscription of state.live) {
           const { matched, reason } = explainMatch(event, subscription.pattern);
           const pattern = subscription.pattern;
@@ -370,7 +381,7 @@ export function createTracedEvEm(
           });
         }
       }
-      this.history.push({ id, event });
+      this.history.push({ id, event, data: args });
       if (this.history.length > 50) this.history.shift();
       // EvEm creates this publish's chain before its first await, so this is set while it does
       const starting = this.starting;
@@ -387,7 +398,7 @@ export function createTracedEvEm(
         trace.record({ kind: 'result', id, result, publish: parent });
         return result;
       } catch (error) {
-        this.recordSkips(state, 'rejected');
+        if (!refused) this.recordSkips(state, 'rejected');
         trace.record({ kind: 'rejected', id, error: messageOf(error), publish: parent });
         throw error;
       } finally {

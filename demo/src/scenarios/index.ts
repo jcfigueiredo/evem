@@ -1,5 +1,6 @@
 import type { Scenario } from '../engine/session';
 import { cancelableEvents } from './cancelableEvents';
+import { debounce } from './debounce';
 import { errorPolicies } from './errorPolicies';
 import { filters } from './filters';
 import { historyReplay } from './historyReplay';
@@ -10,6 +11,8 @@ import { priorities } from './priorities';
 import { publishSubscribe } from './publishSubscribe';
 import { recursionProtection } from './recursionProtection';
 import { schemaValidation } from './schemaValidation';
+import { throttle } from './throttle';
+import { throttleDebounce } from './throttleDebounce';
 import { transforms } from './transforms';
 import { wildcards } from './wildcards';
 
@@ -20,6 +23,9 @@ export const scenarios: readonly Scenario[] = [
   priorities,
   filters,
   once,
+  throttle,
+  debounce,
+  throttleDebounce,
   transforms,
   schemaValidation,
   middleware,

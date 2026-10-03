@@ -49,6 +49,8 @@ export interface Scenario {
   checks: ScenarioCheck[];
   /** Record, for every publish, whether each subscription's pattern matched and why (the Wildcards scenario) */
   explainMatches?: boolean;
+  /** Show the latest action over time: a lane for its publishes and one per subscriber (flow control) */
+  lanes?: boolean;
 }
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
@@ -160,6 +162,8 @@ export class ScenarioSession {
       const program = await this.capturingLogs(trace, () => run(modules, this.consoleForCode(trace), ...helpers));
       if (this.trace === trace) this.program = program as Record<string, () => Promise<void>>;
     } catch (error) {
+      // No program, so no action can run: no buttons (unless a newer reset has taken over)
+      if (this.trace === trace) this.actions = [];
       trace.record({ kind: 'error', message: messageOf(error) });
     }
   }
@@ -172,6 +176,7 @@ export class ScenarioSession {
       trace.record({ kind: 'error', message: `No action ${actionId} (the setup failed, or the code changed)` });
       return;
     }
+    trace.record({ kind: 'action', label: this.actions.find(known => known.id === actionId)?.label ?? actionId });
     try {
       await this.capturingLogs(trace, action);
     } catch (error) {

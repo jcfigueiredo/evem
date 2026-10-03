@@ -102,6 +102,8 @@ export function describeEntry(entry: TraceEntry): Omit<TimelineRow, 'depth' | 'a
         text: entry.subscription ? `${entry.subscription} threw: ${entry.message}` : `error: ${entry.message}`,
         tone: 'error'
       };
+    case 'action':
+      return { text: `▶ ${entry.label}`, tone: 'primary' };
     case 'log':
       return {
         text: entry.text,
@@ -113,9 +115,19 @@ export function describeEntry(entry: TraceEntry): Omit<TimelineRow, 'depth' | 'a
 /** The trace as timeline rows, in order; what happened during a publish is indented under it */
 export function timelineRows(entries: readonly TraceEntry[]): TimelineRow[] {
   const publishDepth = new Map<number, number>();
+  const publishedAt = new Map<number, number>();
   return entries.map(entry => {
+    if (entry.kind === 'call' && entry.later) {
+      // A call that comes after its publish ended (debounce) stands on its own, and says which publish it came from
+      const at = entry.publish === undefined ? undefined : publishedAt.get(entry.publish);
+      const text = `${entry.subscription} ran later${at === undefined ? '' : `, with the data published at ${at} ms`}`;
+      return { ...describeEntry(entry), text, depth: 0, at: entry.at };
+    }
     const depth = entry.publish === undefined ? 0 : (publishDepth.get(entry.publish) ?? 0) + 1;
-    if (entry.kind === 'publish') publishDepth.set(entry.id, depth);
+    if (entry.kind === 'publish') {
+      publishDepth.set(entry.id, depth);
+      publishedAt.set(entry.id, entry.at);
+    }
     return { ...describeEntry(entry), depth, at: entry.at };
   });
 }

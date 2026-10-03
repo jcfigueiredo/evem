@@ -2,7 +2,9 @@ import type { EvEm } from '@jcfigueiredo/evem';
 import { el } from '../dom';
 import type { ControlValue } from '../engine/program';
 import { numberInput, ScenarioSession, type Control, type Scenario } from '../engine/session';
+import { laneChart } from '../lanes';
 import { announcement, timelineRows, type Tone } from '../timeline';
+import { renderLaneChart } from './laneChart';
 
 // Full class names, so Tailwind finds them in the source
 const TONE_CLASS: Record<Tone, string> = {
@@ -120,6 +122,9 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     'The code is edited, so the controls are off. Run it with ⌘/Ctrl+Enter; Reset goes back to the controls.'
   ]);
 
+  // Flow control scenarios show the latest action over time too
+  const lanesHost = scenario.lanes ? el('div', {}) : undefined;
+
   const renderTimeline = () => {
     const rows = timelineRows(session.trace.entries);
     timeline.replaceChildren(
@@ -141,6 +146,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
       timeline.append(el('li', { class: 'ps-4 text-sm text-base-content/60' }, ['Nothing yet: run an action.']));
     }
     timelineBox.scrollTop = timelineBox.scrollHeight;
+    if (lanesHost) renderLaneChart(lanesHost, laneChart(session.trace.entries));
     // A new trace means the reader started over (a control, Reset, edited code): its setup isn't announced
     if (session.trace !== announcedTrace) {
       announcedTrace = session.trace;
@@ -159,6 +165,9 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     });
   };
   const traceSubscription = bus.subscribe('trace.entry', scheduleRender);
+  // The chart's tick labels depend on its width: draw it again when that changes
+  const resizes = lanesHost ? new ResizeObserver(() => scheduleRender()) : undefined;
+  if (lanesHost) resizes?.observe(lanesHost);
 
   const runAction = async (id: string) => {
     if (busy) return;
@@ -257,6 +266,16 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
         ])
       ])
     ]),
+    ...(lanesHost
+      ? [
+          el('section', { class: 'card bg-base-100 border border-base-300 mt-4', 'aria-label': 'Over time' }, [
+            el('div', { class: 'card-body p-4 gap-3' }, [
+              el('h2', { class: 'text-xs uppercase tracking-widest text-base-content/70' }, ['Over time']),
+              lanesHost
+            ])
+          ])
+        ]
+      : []),
     el('section', { class: 'card bg-base-100 border border-base-300 mt-4', 'aria-label': 'Code' }, [
       el('div', { class: 'card-body p-4 gap-3' }, [
         el('div', { class: 'flex flex-wrap items-center gap-2' }, [
@@ -281,6 +300,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
 
   return () => {
     bus.unsubscribeById(traceSubscription);
+    resizes?.disconnect();
     editor.destroy();
   };
 }

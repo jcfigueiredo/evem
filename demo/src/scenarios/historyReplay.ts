@@ -18,8 +18,9 @@ export const historyReplay: Scenario = {
     '',
     '// ▶ Publish three events',
     "await evem.publish('user.login', { name: 'Ada' });",
-    "await evem.publish('notification', { message: 'New feature!' });",
     "await evem.publish('user.login', { name: 'Bo' });",
+    "// The last event overall isn't a login: replayLastEvent still replays the last *matching* one",
+    "await evem.publish('notification', { message: 'New feature!' });",
     "console.log('history:', evem.getEventHistory().map(record => record.event));",
     '',
     '// ▶ Subscribe late with replayLastEvent',
@@ -35,7 +36,7 @@ export const historyReplay: Scenario = {
     "console.log('history:', evem.getEventHistory().length, 'events');"
   ].join('\n'),
   checks: [
-    { action: 'publish-three-events', calls: [], logs: ['history: ["user.login","notification","user.login"]'] },
+    { action: 'publish-three-events', calls: [], logs: ['history: ["user.login","user.login","notification"]'] },
     {
       before: ['publish-three-events'],
       action: 'subscribe-late-with-replaylastevent',
@@ -49,7 +50,7 @@ export const historyReplay: Scenario = {
       logs: ['login: Ada', 'login: Bo']
     },
     {
-      values: { size: 1 },
+      values: { size: 2 },
       before: ['publish-three-events'],
       action: 'subscribe-late-with-replayhistory',
       calls: ['everyLogin'],

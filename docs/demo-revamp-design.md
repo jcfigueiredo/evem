@@ -1,6 +1,6 @@
 # Demo Revamp Design
 
-> **Status: phases 1 (examples audit), 2 (foundation) and 3a (core scenarios) implemented; 3b, 3c, 4 and 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
+> **Status: phases 1 (examples audit), 2 (foundation), 3a (core scenarios) and 3b (flow control) implemented; 3c, 4 and 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
 
 ## Summary
 
@@ -175,6 +175,23 @@ Phase 3 ships in three parts, each with its own plan and pull request: **3a**, t
 - **Fake SSE server** (`fakes/`): a `fetch` returning a `Response` whose `ReadableStream` the server writes with the real `formatSseMessage` / `formatSseComment`; keeps an event log for `Last-Event-ID` resume; can send heartbeats, split chunks mid-line and mid-character, fail with a status, or end.
 - **Fake WebSocket server**: a class implementing `IWebSocket`, connected to an in-page server that echoes, answers requests (`{ type: 'response' }`), sends server events, closes, or refuses connections.
 - **Python mode** (development only): the SSE scenarios get a server switch, Simulated or Local Python, showing the command to start the server and whether it answers.
+
+## Follow-ups
+
+Findings that reviews deferred, with the phase that takes each. A follow-up leaves this list with the pull request that fixes it.
+
+| From | Follow-up | Phase |
+|---|---|---|
+| Phase 2, ruling 13 | `vite/client` types, for `import.meta.env` in Python mode | 3c |
+| 3b review | `publishFor` attributes a debounced call by value for primitives too (a `1` could be matched to an unrelated publish of `1`): only objects should match by identity | 3c |
+| 3b review | The lane chart scans the whole trace for subscriber names on every render (fine now; 3c's server scenarios make long traces) | 3c |
+| 3b review | A test pinning that a second burst replaces the first's pending debounced call (one later call) | 3c |
+| 3b review | `timeAxis` tests at the 12-second long-burst case and where span / step is exactly 8 | 3c |
+| 3b review | The spec's Tracing section still says "one card per publish": rows labeled with their publish's time shipped (3b, ruling 2) | 3c |
+| 3b review | The lane chart has no legend: filled (ran) and hollow (held back) are explained only in tooltips | 4 |
+| 3b review | The site has no favicon (a 404 in the console) | 4 |
+| Note, 2026-10-03 | The public site builds the library from `src/` on every push to `main`, not from the npm release, so the playground can show unreleased behavior (phase 1's fixes are still under Unreleased) while the showcase says `npm install`: show which code the site runs, and release a version when the playground depends on unreleased behavior | 4 |
+| Phase 2 review | Check narrow layouts below 513 px, with device emulation | 5 |
 
 ## Phase 4: Showcase
 
