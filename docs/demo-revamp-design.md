@@ -1,6 +1,6 @@
 # Demo Revamp Design
 
-> **Status: phases 1 (examples audit), 2 (foundation) and 3a (core scenarios) implemented; 3b, 3c, 4 and 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
+> **Status: phases 1 (examples audit), 2 (foundation), 3a (core scenarios) and 3b (flow control) implemented; 3c, 4 and 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
 
 ## Summary
 
@@ -182,14 +182,6 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 
 | From | Follow-up | Phase |
 |---|---|---|
-| Phase 2, ruling 11 | Decide between timeline rows and one card per publish, and label calls that come later (debounce) with the publish that caused them | 3b |
-| 3a review | Publishing an empty event name records match and skip rows before the rejection | 3b |
-| 3a review | An empty pattern's subscribe row is recorded before `subscribe()` throws | 3b |
-| 3a review | After a setup that throws, the action buttons remain and report "No action …" | 3b |
-| 3a review | The traced `subscribe()` names subscribers inline instead of through `nameOf` | 3b |
-| 3a review | No test pins `unsubscribe(event, callback)` on a once subscription | 3b |
-| 3a review | History & replay doesn't show `replayLastEvent` picking the last *matching* event | 3b |
-| 3a review | CLAUDE.md's Engine bullet runs two sentences together | 3b |
 | Phase 2, ruling 13 | `vite/client` types, for `import.meta.env` in Python mode | 3c |
 | Note, 2026-10-03 | The public site builds the library from `src/` on every push to `main`, not from the npm release, so the playground can show unreleased behavior (phase 1's fixes are still under Unreleased) while the showcase says `npm install`: show which code the site runs, and release a version when the playground depends on unreleased behavior | 4 |
 | Phase 2 review | Check narrow layouts below 513 px, with device emulation | 5 |
