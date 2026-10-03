@@ -6,6 +6,7 @@ import {
   isAtEnd,
   liveAnnouncement,
   preview,
+  setupSummary,
   sinceLatestAction,
   timelineRows
 } from '../../demo/src/timeline';
@@ -99,7 +100,7 @@ describe('later calls and actions', () => {
       '0 publish search',
       '1 search skipped: debounced (runs later if nothing else arrives)',
       '0 resolved true',
-      '0 search ran later, with the data published at 5 ms',
+      '0 search ran later, with the data published at +5 ms',
       '0 search ran later'
     ]);
   });
@@ -145,6 +146,44 @@ describe('timelineRows', () => {
       '1 resolved true',
       '0 resolved true'
     ]);
+  });
+});
+
+describe('timelineRows times and kinds', () => {
+  it('gives each row its kind, and the time since the latest action (none before the first)', () => {
+    const entries: TraceEntry[] = [
+      { kind: 'subscribe', subscription: 'tick', pattern: 'tick', options: [], at: 2 },
+      { kind: 'action', label: 'Go', at: 100 },
+      { kind: 'publish', id: 1, event: 'tick', data: 1, at: 104 },
+      { kind: 'log', level: 'log', text: 'tick 1', publish: 1, at: 105 },
+      { kind: 'action', label: 'Again', at: 300 },
+      { kind: 'log', level: 'log', text: 'later', at: 340 }
+    ];
+    expect(timelineRows(entries).map(row => [row.kind, row.since])).toEqual([
+      ['subscribe', undefined],
+      ['action', 0],
+      ['publish', 4],
+      ['log', 5],
+      ['action', 0],
+      ['log', 40]
+    ]);
+  });
+});
+
+describe('setupSummary', () => {
+  it('counts what the setup made, in one line', () => {
+    const at = { at: 0 };
+    expect(
+      setupSummary([
+        { kind: 'subscribe', subscription: 'a', pattern: 'a', options: [], ...at },
+        { kind: 'subscribe', subscription: 'b', pattern: 'b', options: [], ...at },
+        { kind: 'publish', id: 1, event: 'a', data: 1, ...at },
+        { kind: 'log', level: 'log', text: 'ready', ...at }
+      ])
+    ).toBe('Setup · 2 subscriptions, 1 publish, 1 log');
+    expect(
+      setupSummary([{ kind: 'match', subscription: 's', pattern: '*', event: 'e', matched: true, reason: 'r', ...at }])
+    ).toBe('Setup · 1 steps');
   });
 });
 
