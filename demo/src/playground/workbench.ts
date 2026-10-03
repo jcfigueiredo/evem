@@ -4,7 +4,7 @@ import { el } from '../dom';
 import { ScenarioSession, type Scenario } from '../engine/session';
 import { laneChart } from '../lanes';
 import { browserStorage } from '../theme';
-import { isAtEnd, liveAnnouncement, setupSummary, timelineRows } from '../timeline';
+import { keepsFollowing, liveAnnouncement, setupSummary, timelineRows } from '../timeline';
 import { renderLaneChart } from './laneChart';
 import { GRID_ROWS, LAYOUTS, readCodeLayout, saveCodeLayout, type CodeLayout } from './layout';
 import { serverPane } from './serverPane';
@@ -47,6 +47,8 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   let shownTrace = session.trace;
   // The first entry the timeline shows: after the setup, or after the reader cleared it
   let clearedFrom = 0;
+  // Whether the timeline follows its end (see keepsFollowing)
+  let followTimeline = true;
 
   const summary = el('p', { class: 'text-sm text-base-content/70' }, [
     scenario.summary,
@@ -104,6 +106,9 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     initial: scenario.lanes ? 'lanes' : 'timeline',
     onSelect: id => {
       clearButton.classList.toggle('invisible', id !== 'timeline');
+      // A panel that grew while hidden couldn't scroll: one that was following its end goes there now it's shown
+      if (id === 'timeline' && followTimeline) timelineBox.scrollTop = timelineBox.scrollHeight;
+      if (id === 'server') server?.reveal();
       scheduleRender();
     }
   });
@@ -117,7 +122,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     const from = Math.max(setupEnd, clearedFrom);
     const setupEntries = clearedFrom === 0 ? entries.slice(0, setupEnd) : [];
     const rows = timelineRows(entries.slice(from));
-    const follow = session.trace !== shownTrace || isAtEnd(timelineBox);
+    followTimeline = session.trace !== shownTrace || keepsFollowing(timelineBox, followTimeline);
     shownTrace = session.trace;
 
     setupFold.hidden = setupEntries.length === 0;
@@ -132,7 +137,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
         ])
       );
     }
-    if (follow) timelineBox.scrollTop = timelineBox.scrollHeight;
+    if (followTimeline) timelineBox.scrollTop = timelineBox.scrollHeight;
     if (lanesHost) renderLaneChart(lanesHost, laneChart(entries));
     server?.render();
 

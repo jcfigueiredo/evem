@@ -196,3 +196,15 @@ export function liveAnnouncement(rows: readonly TimelineRow[], msSinceInteractio
 export function isAtEnd(box: { scrollTop: number; scrollHeight: number; clientHeight: number }): boolean {
   return box.scrollHeight - box.scrollTop - box.clientHeight < 24;
 }
+
+/**
+ * Whether a list that grew should keep following its end. A box on screen is followed while its reader is at its
+ * end; a hidden one (a tab that isn't shown) measures 0 all round, so it keeps what it was doing, and its tab scrolls
+ * it to the end when it's shown again.
+ */
+export function keepsFollowing(
+  box: { scrollTop: number; scrollHeight: number; clientHeight: number },
+  wasFollowing: boolean
+): boolean {
+  return box.clientHeight === 0 ? wasFollowing : isAtEnd(box);
+}

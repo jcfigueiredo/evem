@@ -1,7 +1,7 @@
 import { el } from '../dom';
 import type { ScenarioSession, ServerSample } from '../engine/session';
 import { checkLocalServer } from '../fakes/localSseServer';
-import { isAtEnd } from '../timeline';
+import { keepsFollowing } from '../timeline';
 import { BUTTON } from './views';
 import type { FakeServer, WireEntry } from '../fakes/wire';
 
@@ -43,7 +43,7 @@ const visible = (text: string): string => text.replace(/\r/g, '␍').replace(/\n
 export function serverPane(
   session: ScenarioSession,
   onLocalServer: (local: boolean) => Promise<void>
-): { element: HTMLElement; render: () => void } {
+): { element: HTMLElement; render: () => void; reveal: () => void } {
   const { websocket, sse } = session.scenario;
   const samples: ServerSample[] =
     sse?.samples ?? (websocket?.sample ? [{ label: 'Sample', text: websocket.sample }] : []);
@@ -187,11 +187,16 @@ export function serverPane(
 
   // The log is rebuilt only when it changed, and kept at its end unless the reader scrolled up
   let shown: { server: FakeServer | undefined; length: number } = { server: undefined, length: -1 };
+  // Whether the log follows its end (see keepsFollowing); `reveal` scrolls there when its tab is shown again
+  let following = true;
+  const reveal = () => {
+    if (following) logBox.scrollTop = logBox.scrollHeight;
+  };
   const render = () => {
     const server = session.server;
     const wire = server?.wire ?? [];
     if (server !== shown.server || wire.length !== shown.length) {
-      const atEnd = isAtEnd(logBox);
+      following = server !== shown.server || keepsFollowing(logBox, following);
       log.replaceChildren(
         ...wire.slice(-SHOWN).map(entry => {
           const direction = DIRECTION[entry.direction];
@@ -207,7 +212,7 @@ export function serverPane(
         })
       );
       if (wire.length === 0) log.append(el('li', { class: 'text-base-content/70' }, ['Nothing on the wire yet.']));
-      if (atEnd || server !== shown.server) logBox.scrollTop = logBox.scrollHeight;
+      reveal();
       shown = { server, length: wire.length };
     }
     status.textContent = connectionStatus(server?.openConnections ?? 0, session.connectionStates());
@@ -226,5 +231,5 @@ export function serverPane(
   ]);
   showMode();
   render();
-  return { element, render };
+  return { element, render, reveal };
 }

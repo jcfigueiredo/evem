@@ -7,7 +7,7 @@ import { laneChart } from '../lanes';
 import { renderLaneChart } from '../playground/laneChart';
 import { BUTTON, controlField, tabList, timelineItem } from '../playground/views';
 import { scenarioPath } from '../routing';
-import { isAtEnd, liveAnnouncement, sinceLatestAction, timelineRows } from '../timeline';
+import { keepsFollowing, liveAnnouncement, sinceLatestAction, timelineRows } from '../timeline';
 
 /**
  * The height of a widget, which its slot in index.html reserves (as a card of the same size) until it mounts: a
@@ -58,8 +58,18 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
       { id: 'output', label: 'Output', panel: output },
       { id: 'code', label: 'Code', panel: codeHost }
     ],
-    { label: `${scenario.title}: output or code`, idPrefix: prefix, onSelect: id => void (id === 'code' && showCode()) }
+    {
+      label: `${scenario.title}: output or code`,
+      idPrefix: prefix,
+      onSelect: id => {
+        if (id === 'code') void showCode();
+        // Rows that came while the code was shown couldn't scroll the hidden output: it follows its end now
+        else if (following) output.scrollTop = output.scrollHeight;
+      }
+    }
   );
+  // Whether the output follows its end (see keepsFollowing)
+  let following = true;
 
   let announced = 0;
   const render = () => {
@@ -68,7 +78,7 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
     if (scenario.lanes) {
       renderLaneChart(output, laneChart(session.trace.entries));
     } else {
-      const follow = isAtEnd(output);
+      following = keepsFollowing(output, following);
       timeline.replaceChildren(...rows.map(timelineItem));
       if (rows.length === 0) {
         const first = session.actions[0];
@@ -78,7 +88,7 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
           ])
         );
       }
-      if (follow) output.scrollTop = output.scrollHeight;
+      if (following) output.scrollTop = output.scrollHeight;
     }
     if (rows.length > announced) {
       const text = liveAnnouncement(rows.slice(announced), performance.now() - lastInteraction);

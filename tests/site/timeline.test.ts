@@ -4,6 +4,7 @@ import {
   announcement,
   describeEntry,
   isAtEnd,
+  keepsFollowing,
   liveAnnouncement,
   preview,
   setupSummary,
@@ -196,6 +197,19 @@ describe('sinceLatestAction', () => {
     const later: TraceEntry = { kind: 'log', level: 'log', text: 'later', ...at };
     expect(sinceLatestAction([setup])).toEqual([]);
     expect(sinceLatestAction([setup, first, later, second, later])).toEqual([second, later]);
+  });
+});
+
+describe('keepsFollowing', () => {
+  it("keeps what a hidden box was doing: its sizes are all 0, so it can't say where its reader is", () => {
+    const hidden = { scrollTop: 0, scrollHeight: 0, clientHeight: 0 };
+    expect(keepsFollowing(hidden, true)).toBe(true);
+    expect(keepsFollowing(hidden, false)).toBe(false);
+  });
+
+  it('follows a box on screen while its reader is at its end, whatever it did before', () => {
+    expect(keepsFollowing({ scrollTop: 600, scrollHeight: 1000, clientHeight: 400 }, false)).toBe(true);
+    expect(keepsFollowing({ scrollTop: 0, scrollHeight: 1814, clientHeight: 618 }, true)).toBe(false);
   });
 });
 
