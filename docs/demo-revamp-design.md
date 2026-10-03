@@ -1,6 +1,6 @@
 # Demo Revamp Design
 
-> **Status: phases 1 (examples audit), 2 (foundation), 3a (core scenarios), 3b (flow control) and 3c-1 (WebSocket and Recipes) implemented; 3c-2 (SSE and Python mode), 4 and 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
+> **Status: phases 1 (examples audit), 2 (foundation) and 3 (playground: 3a core scenarios, 3b flow control, 3c-1 WebSocket and Recipes, 3c-2 SSE and the local server switch) implemented; 4 and 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
 
 ## Summary
 
@@ -104,7 +104,7 @@ demo/
 
 ### Python mode
 
-The Python example servers send no CORS headers, so `pnpm demo`'s Vite server proxies `/python/*` to `http://127.0.0.1:8000`, and the SSE scenarios can connect to `examples/python/server.py` (or the Flask / FastAPI apps) unchanged. The switch only exists in development builds (`import.meta.env.DEV`).
+The Python example servers send no CORS headers, so `pnpm demo`'s Vite server proxies `/events` to `http://127.0.0.1:8000`, and an SSE scenario's code reads `/events` from `examples/python/server.py` (or the Flask / FastAPI apps) with the same URL it uses with the simulated server. The switch only exists in development builds (`import.meta.env.DEV`). (Implemented in 3c-2: the Reconnect & resume scenario, whose simulated server is a port of `server.py --drop-after 5`; the other SSE scenarios need envelopes, bad data and failures, which the examples don't send.)
 
 ### GitHub Pages
 
@@ -174,7 +174,7 @@ Phase 3 ships in three parts, each with its own plan and pull request: **3a**, t
 - The code panel shows client code as a user writes it, e.g. `new SseHandler('/events', evem, { headers: () => ({ … }) })`. In the scenario scope, `SseHandler` and `WebSocketHandler` are thin subclasses that only add the fake `fetch` / `WebSocketConstructor` when the code doesn't pass one.
 - **Fake SSE server** (`fakes/`): a `fetch` returning a `Response` whose `ReadableStream` the server writes with the real `formatSseMessage` / `formatSseComment`; keeps an event log for `Last-Event-ID` resume; can send heartbeats, split chunks mid-line and mid-character, fail with a status, or end.
 - **Fake WebSocket server**: a class implementing `IWebSocket`, connected to an in-page server that echoes, answers requests (`{ type: 'response' }`), sends server events, closes, or refuses connections.
-- **Python mode** (development only): the SSE scenarios get a server switch, Simulated or Local Python, showing the command to start the server and whether it answers.
+- **Python mode** (development only): the SSE scenarios get a server switch, Simulated or Local Python, showing the command to start the server and whether it answers. (3c-2: on Reconnect & resume, the scenario the Python examples can serve; the wire log keeps working, through a logging `fetch`.)
 
 ## Follow-ups
 
@@ -182,10 +182,6 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 
 | From | Follow-up | Phase |
 |---|---|---|
-| Phase 2, ruling 13 | `vite/client` types, for `import.meta.env` in Python mode | 3c-2 |
-| 3c-1 review | The Server card rebuilds its log and scrolls it to the end on every redraw, even when no frame arrived: a reader who scrolled up loses their place. Rebuild and re-pin only when the log grew | 3c-2 |
-| 3c-1 review | The fake WebSocket server ignores a client frame that isn't JSON without a note (only edited code with its own `messageFormatter` sends one); decide the rule for frames neither side can read once, for both fake servers | 3c-2 |
-| 3c-1 review | After *Drop the connection* in a scenario whose handler doesn't reconnect (Request–response, Server events & routing), every later action waits or times out until *Reset*, and nothing says so | 3c-2 |
 | 3b review | The lane chart has no legend: filled (ran) and hollow (held back) are explained only in tooltips | 4 |
 | 3b review | The site has no favicon (a 404 in the console) | 4 |
 | Note, 2026-10-03 | The public site builds the library from `src/` on every push to `main`, not from the npm release, so the playground can show unreleased behavior (phase 1's fixes are still under Unreleased) while the showcase says `npm install`: show which code the site runs, and release a version when the playground depends on unreleased behavior | 4 |
@@ -229,6 +225,6 @@ A scroll tour at the site root:
 
 - **The engine reaches private `EvEm` methods**: `isEventMatch` and `isMiddlewareReroute` (matching and reroutes, decided as EvEm decides them) and `enterPublishChain` / `runInPublishChain` (each publish has its own chain and EvEm runs every handler in it, which tells the trace which publish a handler belongs to when publishes overlap). Tests pin each; if one is renamed or changes, they fail rather than the timeline silently lying.
 - **Two Vite versions** (8 for the demo, 5 inside Vitest 1.0). Harmless, but upgrading Vitest later removes the duplicate.
-- **Streaming through Vite's proxy** (Python mode): if the proxy buffers the stream, the fallback is to add CORS headers to the Python examples behind a `--cors` flag.
+- **Streaming through Vite's proxy** (Python mode): if the proxy buffers the stream, the fallback is to add CORS headers to the Python examples behind a `--cors` flag. (3c-2: it doesn't buffer: ticks arrive one by one through it.)
 - **Doc samples as tests** can make documentation edits fail CI. That's the point, and the fragment marker keeps intentional fragments cheap.
 - **Bundle size** of CodeMirror on the showcase: loaded lazily, only when "Show code" is opened.
