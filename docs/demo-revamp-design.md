@@ -176,6 +176,23 @@ Phase 3 ships in three parts, each with its own plan and pull request: **3a**, t
 - **Fake WebSocket server**: a class implementing `IWebSocket`, connected to an in-page server that echoes, answers requests (`{ type: 'response' }`), sends server events, closes, or refuses connections.
 - **Python mode** (development only): the SSE scenarios get a server switch, Simulated or Local Python, showing the command to start the server and whether it answers.
 
+## Follow-ups
+
+Findings that reviews deferred, with the phase that takes each. A follow-up leaves this list with the pull request that fixes it.
+
+| From | Follow-up | Phase |
+|---|---|---|
+| Phase 2, ruling 11 | Decide between timeline rows and one card per publish, and label calls that come later (debounce) with the publish that caused them | 3b |
+| 3a review | Publishing an empty event name records match and skip rows before the rejection | 3b |
+| 3a review | An empty pattern's subscribe row is recorded before `subscribe()` throws | 3b |
+| 3a review | After a setup that throws, the action buttons remain and report "No action …" | 3b |
+| 3a review | The traced `subscribe()` names subscribers inline instead of through `nameOf` | 3b |
+| 3a review | No test pins `unsubscribe(event, callback)` on a once subscription | 3b |
+| 3a review | History & replay doesn't show `replayLastEvent` picking the last *matching* event | 3b |
+| 3a review | CLAUDE.md's Engine bullet runs two sentences together | 3b |
+| Phase 2, ruling 13 | `vite/client` types, for `import.meta.env` in Python mode | 3c |
+| Phase 2 review | Check narrow layouts below 513 px, with device emulation | 5 |
+
 ## Phase 4: Showcase
 
 A scroll tour at the site root:
