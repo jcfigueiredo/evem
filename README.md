@@ -315,7 +315,8 @@ await evem.publish('user.created', { id: 3 });    // Both run, in registration o
 Middleware can also redirect events to a different event name:
 
 ```typescript
-import type { MiddlewareFunction } from "@jcfigueiredo/evem";
+import { EvEm, type MiddlewareFunction } from "@jcfigueiredo/evem";
+const evem = new EvEm();
 
 // Create a middleware that redirects events based on roles
 const routingMiddleware: MiddlewareFunction = (event, data) => {
@@ -575,7 +576,7 @@ await evem.publish('window.resize', { width: 810, height: 600 });
 await evem.publish('window.resize', { width: 820, height: 610 });
 ```
 
-A debounced call happens after `publish` has resolved, so it's outside the publish: `publish` doesn't wait for it, its errors are logged instead of going through the error policy, and the subscriber's transform isn't applied.
+A debounced call runs on its own timer, not as part of the publish (usually after `publish` has resolved, but a slow subscriber can keep a publish running past `debounceTime`): `publish` doesn't wait for it, its errors are logged instead of going through the error policy, and the subscriber's transform isn't applied.
 
 ### Combining Debounce with Filters
 
@@ -601,10 +602,11 @@ evem.subscribe<AppNotification>('notification.received', (notification) => {
 
 ### Combining Throttle and Debounce
 
-With both options, an event is handled immediately when more than `throttleTime` ms have passed since the last event that was handled immediately. Other events are debounced: the latest one is handled `debounceTime` ms after it arrived, unless an event is handled immediately first. While events keep coming, the callback runs at the start of each throttle window, and once they stop, one more time with the last event:
+With both options, an event is handled immediately when more than `throttleTime` ms have passed since the last event that was handled immediately. Other events are debounced: the latest one is handled `debounceTime` ms after it arrived, unless an event is handled immediately first. Debounced calls don't count as handled immediately, so one can be followed closely by an immediate call. While events keep coming, the callback runs at the start of each throttle window, and once they stop, one more time with the last event, unless that event was handled immediately:
 
 ```typescript
-// While the user types: suggest at most every 300ms, and once more 500ms after the last keystroke
+// While the user types: suggest right away at the start of each 300ms window, and with the last
+// keystroke once typing pauses for 500ms
 evem.subscribe('user.typing', suggestCompletions, {
   throttleTime: 300,
   debounceTime: 500
@@ -733,12 +735,12 @@ The subscription is removed just before the callback runs, so it fires exactly o
 Once-only events can be combined with filters, throttling and debouncing. Only an event that gets through them uses up the subscription:
 
 ```typescript
-// Only execute once, for the first important notification
+// Run once, with the last important notification of the first burst
 evem.subscribeOnce<{ type: string; message: string }>('notification', (notification) => {
   showWelcomeDialog(notification.message);
 }, {
   filter: (notification) => notification.type === 'important',
-  debounceTime: 100 // In case multiple notifications arrive simultaneously
+  debounceTime: 100 // Wait until important notifications stop arriving for 100ms
 });
 ```
 
@@ -859,7 +861,7 @@ The priority system ensures that your most critical handlers execute first, prov
 
 A subscriber can have a `transform` function. It runs right after that subscriber's callback, and its result is the data that the subscribers after it (lower priority, or subscribed later with the same priority) receive. This is useful for enriching, modifying, or adapting event data in sequence.
 
-A transform only applies when its subscriber handled the event: not when the subscriber's filter or schema rejected it, while the subscriber is throttled, for debounced calls, or after a `once` subscription has fired. It doesn't run when its callback canceled the event. History keeps the data as the middleware left it, before any transform.
+A transform only applies when its subscriber handled the event: not when the subscriber's filter or schema rejected it, while the subscriber is throttled, for debounced calls, or after a `once` subscription has fired. It doesn't run when its callback canceled the event, threw or timed out; the next subscriber then gets the data unchanged. History keeps the data as the middleware left it, before any transform.
 
 ### Basic Transformation
 
@@ -1010,8 +1012,11 @@ Both transformations and middleware can modify event data, but they serve differ
 
 ```typescript
 // MIDDLEWARE: Application-wide timestamp enrichment
-evem.use((event: string, data: Record<string, unknown>) => {
-  // Add timestamp to ALL events
+evem.use((event: string, data: unknown) => {
+  // Add a timestamp to every object payload, and leave other payloads as they are
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+    return data;
+  }
   return { ...data, timestamp: Date.now() };
 });
 
@@ -1268,7 +1273,7 @@ What gets recorded and replayed:
 
 - History records the data subscribers receive, after middleware (and under the new name if a middleware rerouted the event), without the `cancel()` of cancelable events. Events canceled by middleware aren't recorded.
 - `enableHistory(maxEvents)` keeps the most recent `maxEvents` events (default 50). `enableHistory(0)` keeps nothing, and re-enabling with a smaller limit drops the oldest events.
-- Replay only happens if history is enabled when you subscribe. The callback is called right away, during `subscribe`, once for the last matching event (`replayLastEvent`) or for every matching event (`replayHistory`). A wildcard subscription replays every event its pattern matches.
+- Replay only happens if history is enabled when you subscribe. It starts during `subscribe`, once for the last matching event (`replayLastEvent`) or for every matching event (`replayHistory`): the callback runs before `subscribe` returns, unless the subscription has filters (they're always checked asynchronously) or an async schema, which delay it a moment, or a debounce, which delays it by `debounceTime`. A wildcard subscription replays every event its pattern matches.
 - Replayed events go through the subscription's schema, filters, throttle/debounce and once (a `once` subscription fires only once), but not its transform. Replay happens outside any `publish`: async callbacks aren't awaited, and errors are logged.
 
 ### Uses for Event History
@@ -1385,7 +1390,7 @@ This feature is particularly useful for:
 1. Debugging complex event setups
 2. Visualizing the current state of the event system
 3. Checking which middleware will be applied to specific events
-4. Inspecting the priority order of event handlers
+4. Inspecting the priorities of event handlers (listed in subscription order, not in the order they run)
 
 For a comprehensive set of examples, check out the [examples](docs/examples.md) page.
 
@@ -1436,7 +1441,7 @@ import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';
 const handler = new WebSocketHandler('wss://api.example.com', evem, {
   enableQueue: true,           // Queue outgoing messages while not connected (default: true)
   queueSize: 100,              // Maximum queued messages; the oldest is dropped (default: 100)
-  autoFlush: true,             // Send queued messages once connected (default: true)
+  autoFlush: true,             // Send queued messages once connected (default: true); else call handler.flush()
   enableRequestResponse: true, // Enable handler.request() (default: true)
   serverEventPrefix: 'server', // Prefix for incoming events (default: 'server')
   reconnect: true,             // Reconnect after an unexpected close (default: false)
@@ -1493,7 +1498,7 @@ const sse = new SseHandler('/api/events', evem, {
 await sse.disconnect();
 ```
 
-**What it publishes:** `sse.connection.state` with `{ from, to, timestamp }`; server events as `server.<name>`; other unnamed messages as `sse.message`; data that isn't valid JSON as `sse.parse.error`; connection problems as `sse.error` with `{ error, reason, status?, contentType? }`; and `sse.reconnect.failed` if you set `maxReconnectAttempts` and it's reached. By default the handler stops on `204`, on a response that isn't an event stream, and on `4xx` statuses other than `408` and `429`. Otherwise it reconnects after about 3 seconds (or the server's `retry:` delay), doubling the delay after each failed attempt up to about 30 seconds.
+**What it publishes:** `sse.connection.state` with `{ from, to, timestamp }`; server events as `server.<name>`; other unnamed messages as `sse.message`; data that isn't valid JSON as `sse.parse.error`; connection problems as `sse.error` with `{ error, reason, status?, contentType? }`; and `sse.reconnect.failed` if you set `maxReconnectAttempts` and it's reached. By default the handler stops on `204`, on a response that isn't an event stream, and on any status other than `200`, except `408`, `429` and `5xx` (the `eventsource` transport can't see statuses: it reconnects whenever the browser gives up). Otherwise it reconnects after about 3 seconds (or the server's `retry:` delay), doubling the delay after each failed attempt up to about 30 seconds.
 
 **Servers:** `@jcfigueiredo/evem/sse/server` writes the wire format safely (no forged events from user content) and has the right response headers:
 
@@ -1524,8 +1529,8 @@ For Python servers (FastAPI, Flask or the standard library), see [SSE servers in
   - `options.once`: When true, unsubscribes just before the callback runs for the first time
   - `options.priority`: `'high'` (100), `'normal'` (0), `'low'` (-100), a number or a `Priority` value; higher runs first (default: 0)
   - `options.transform`: `(data: T) => R | Promise<R>`, run after this subscriber's callback; its result is what the following subscribers receive
-  - `options.replayLastEvent`: When true and history is enabled, immediately call the callback with the most recent matching event from history
-  - `options.replayHistory`: When true and history is enabled, immediately call the callback with every matching event from history, oldest first
+  - `options.replayLastEvent`: When true and history is enabled, call the callback with the most recent matching event from history when you subscribe
+  - `options.replayHistory`: When true and history is enabled, call the callback with every matching event from history when you subscribe, oldest first
 - `subscribeOnce<T = unknown, R = any>(event: string, callback: EventCallback<T>, options?: Omit<SubscriptionOptions<T, R>, 'once'>): string`
 - `unsubscribe<T = unknown>(event: string, callback: EventCallback<T>): void`: Remove the subscription to exactly `event` made with `callback`
 - `unsubscribeById(id: string): void`
@@ -1558,6 +1563,7 @@ The package also exports the `Priority` and `ErrorPolicy` enums and the types `C
 - `new WebSocketHandler(urlOrSocket: string | IWebSocket, evem: EvEm, options?: WebSocketHandlerOptions)`
 - `request<T = any>(method: string, params?: any, options?: { timeout?: number; id?: string }): Promise<T>`
 - `isConnected(): boolean`, `getConnectionState(): string`, `getQueueSize(): number`
+- `flush(): Promise<void>`: send the queued messages now (needed with `autoFlush: false`)
 - `disconnect(): Promise<void>`
 
 `SseHandler` (from `@jcfigueiredo/evem/sse`):
