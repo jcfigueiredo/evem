@@ -57,10 +57,16 @@ export function mountThemePicker(container: HTMLElement, bus: EvEm, placement = 
   const media = window.matchMedia('(prefers-color-scheme: light)');
   let choice = readChoice(browserStorage());
   const label = el('span', {}, []);
-  const summary = el('summary', { class: 'btn btn-sm btn-ghost w-full justify-between font-normal' }, [
-    label,
-    el('span', { 'aria-hidden': 'true' }, ['▾'])
-  ]);
+  // On narrow screens the label is just the theme's name, on one line; its accessible name keeps "Theme:"
+  const summary = el(
+    'summary',
+    { class: 'btn btn-sm btn-ghost w-full justify-between font-normal whitespace-nowrap' },
+    [
+      el('span', { class: 'hidden sm:inline', 'aria-hidden': 'true' }, ['Theme: ']),
+      label,
+      el('span', { 'aria-hidden': 'true' }, ['▾'])
+    ]
+  );
   const menu = el('ul', {
     class: 'dropdown-content menu bg-base-100 rounded-box z-10 w-48 p-2 shadow-lg border border-base-300'
   });
@@ -69,7 +75,9 @@ export function mountThemePicker(container: HTMLElement, bus: EvEm, placement = 
   const apply = () => {
     const theme = resolveTheme(choice, media.matches);
     document.documentElement.setAttribute('data-theme', theme);
-    label.textContent = `Theme: ${CHOICES.find(option => option.choice === choice)!.label}`;
+    const name = CHOICES.find(option => option.choice === choice)!.label;
+    label.textContent = name;
+    summary.setAttribute('aria-label', `Theme: ${name}`);
     for (const button of menu.querySelectorAll('button')) {
       button.classList.toggle('menu-active', button.dataset['choice'] === choice);
     }
