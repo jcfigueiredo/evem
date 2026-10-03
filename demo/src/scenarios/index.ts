@@ -1,9 +1,12 @@
 import type { Scenario } from '../engine/session';
+import { cancelableEvents } from './cancelableEvents';
+import { errorPolicies } from './errorPolicies';
 import { filters } from './filters';
 import { middleware } from './middleware';
 import { once } from './once';
 import { priorities } from './priorities';
 import { publishSubscribe } from './publishSubscribe';
+import { recursionProtection } from './recursionProtection';
 import { schemaValidation } from './schemaValidation';
 import { transforms } from './transforms';
 import { wildcards } from './wildcards';
@@ -17,5 +20,8 @@ export const scenarios: readonly Scenario[] = [
   once,
   transforms,
   schemaValidation,
-  middleware
+  middleware,
+  cancelableEvents,
+  errorPolicies,
+  recursionProtection
 ];
