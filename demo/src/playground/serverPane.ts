@@ -89,9 +89,7 @@ export function serverPane(
   const simulated = el('div', { class: 'flex flex-col gap-2' }, [
     el('div', { class: 'flex flex-wrap items-center gap-1.5' }, [
       ...(sampleSelect ? [sampleSelect] : []),
-      button(sse ? 'Write to the stream' : 'Send to the client', 'btn btn-xs btn-primary', () =>
-        run('send', frame.value)
-      ),
+      button(sse ? 'Write to the stream' : 'Send to the client', BUTTON.serverMain, () => run('send', frame.value)),
       ...(sse ? [button('Write it in two chunks', BUTTON.server, () => run('split', frame.value))] : [])
     ]),
     frame,
@@ -146,7 +144,9 @@ export function serverPane(
   const showMode = () => {
     modeButtons.forEach((element, index) => {
       const active = (index === 1) === session.localServer;
+      // The server in use is solid primary; the other one soft, so it still reads as a button
       element.classList.toggle('btn-primary', active);
+      element.classList.toggle('btn-soft', !active);
       element.setAttribute('aria-pressed', String(active));
     });
     simulated.classList.toggle('hidden', session.localServer);
@@ -159,7 +159,7 @@ export function serverPane(
   };
   const modeButtons = local
     ? ['Simulated', 'Local server'].map((label, index) =>
-        button(label, 'btn btn-xs join-item', () => void switchServer(index === 1))
+        button(label, `${BUTTON.server} join-item`, () => void switchServer(index === 1))
       )
     : [];
 

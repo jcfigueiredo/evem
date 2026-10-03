@@ -96,13 +96,15 @@ export function controlField(
 /**
  * The buttons' looks, in one place: the main action (`btn-primary`), the other actions (`btn-soft`, which reads as a
  * button in both themes: plain `btn` is nearly the card's own color in Signal), minor ones (`btn-ghost`), and the
- * Server tab's compact controls
+ * compact ones (the Server tab's controls, its send button, Clear)
  */
 export const BUTTON = {
   main: 'btn btn-sm btn-primary',
   other: 'btn btn-sm btn-soft',
   minor: 'btn btn-sm btn-ghost',
-  server: 'btn btn-xs btn-soft'
+  server: 'btn btn-xs btn-soft',
+  serverMain: 'btn btn-xs btn-primary',
+  minorSmall: 'btn btn-xs btn-ghost'
 } as const;
 
 /** A row's time: an action's start since the scenario started; anything after an action, since that action */
@@ -200,14 +202,18 @@ export function tabList(
     tab.panel.id = `${idPrefix}-panel-${tab.id}`;
     tab.panel.setAttribute('role', 'tabpanel');
     tab.panel.setAttribute('aria-labelledby', button.id);
+    // Focusable, so the keyboard can scroll a panel of plain rows after leaving the tab row
+    tab.panel.tabIndex = 0;
     button.addEventListener('click', () => select(tab.id));
     button.addEventListener('keydown', event => {
       const index = tabAfterKey(tabs.length, tabs.indexOf(tab), event.key);
       if (index === undefined) return;
       const next = tabs[index]!;
+      const nextButton = buttons[index]!;
       event.preventDefault();
       select(next.id);
-      document.getElementById(`${idPrefix}-tab-${next.id}`)?.focus();
+      // The button itself, not by id: while a scenario's workbench replaces another, two lists can share ids
+      nextButton.focus();
     });
     return button;
   });

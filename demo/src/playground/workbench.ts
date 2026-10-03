@@ -32,7 +32,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   const setupFold = el('details', { class: 'mb-3' }, [setupSummaryLine, setupList]);
   const timeline = el('ol', { class: 'relative ms-2 space-y-1.5 border-s border-base-300' });
   const timelineBox = el('div', { class: 'min-h-0 flex-1 overflow-y-auto pe-2' }, [setupFold, timeline]);
-  const clearButton = el('button', { type: 'button', class: 'btn btn-xs btn-ghost' }, ['Clear']);
+  const clearButton = el('button', { type: 'button', class: BUTTON.minorSmall }, ['Clear']);
   // The list is rebuilt on every render, so screen readers hear only what's new, from this status line
   const announcer = el('p', { class: 'sr-only', 'aria-live': 'polite' });
   let announcedTrace = session.trace;
