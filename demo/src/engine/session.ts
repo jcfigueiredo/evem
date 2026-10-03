@@ -33,6 +33,8 @@ export interface ScenarioCheck {
   logs?: string[];
   /** `name: reason` for each subscription the action's publishes skipped, in order */
   skipped?: string[];
+  /** Parts of the fake server's wire log during the action, in order (`client: …`, `server: …`, `note: …`) */
+  wire?: string[];
 }
 
 export interface Scenario {
