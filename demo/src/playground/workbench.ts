@@ -4,7 +4,7 @@ import { el } from '../dom';
 import { ScenarioSession, type Scenario } from '../engine/session';
 import { laneChart } from '../lanes';
 import { browserStorage } from '../theme';
-import { keepsFollowing, liveAnnouncement, setupSummary, timelineRows } from '../timeline';
+import { keepsFollowing, liveAnnouncement, rowsFrom, setupSummary, timelineRows, unseenRows } from '../timeline';
 import { renderLaneChart } from './laneChart';
 import { GRID_ROWS, LAYOUTS, readCodeLayout, saveCodeLayout, type CodeLayout } from './layout';
 import { serverPane } from './serverPane';
@@ -121,7 +121,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     const setupEnd = session.setupEnd;
     const from = Math.max(setupEnd, clearedFrom);
     const setupEntries = clearedFrom === 0 ? entries.slice(0, setupEnd) : [];
-    const rows = timelineRows(entries.slice(from));
+    const rows = rowsFrom(entries, from);
     followTimeline = session.trace !== shownTrace || keepsFollowing(timelineBox, followTimeline);
     shownTrace = session.trace;
 
@@ -133,7 +133,11 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
       const first = session.actions[0];
       timeline.append(
         el('li', { class: 'ps-4 text-sm text-base-content/60' }, [
-          first ? `Nothing yet: press “${first.label}”, or ▶ in the code.` : 'Nothing yet.'
+          clearedFrom > 0
+            ? 'Cleared: what EvEm does next shows here.'
+            : first
+              ? `Nothing yet: press “${first.label}”, or ▶ in the code.`
+              : 'Nothing yet.'
         ])
       );
     }
@@ -143,15 +147,16 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
 
     // Counts on the tabs the reader isn't looking at
     const wire = server ? (session.server?.wire.length ?? 0) : 0;
-    if (tabs.selected() === 'timeline') seen.timeline = rows.length;
+    if (tabs.selected() === 'timeline') seen.timeline = entries.length;
     if (tabs.selected() === 'server') seen.server = wire;
-    tabs.setCount('timeline', rows.length - seen.timeline);
+    tabs.setCount('timeline', unseenRows(entries.length, from, seen.timeline));
     if (server) tabs.setCount('server', wire - seen.server);
 
-    // A new trace means the reader started over (a control, Reset, edited code): its setup isn't announced
+    // A new trace means the reader started over (a control, Reset, edited code): what it holds isn't news (seen is an
+    // entry index, so the rest of a setup still running drops out once its end is known)
     if (session.trace !== announcedTrace) {
       announcedTrace = session.trace;
-      seen.timeline = rows.length;
+      seen.timeline = entries.length;
       seen.server = wire;
     } else if (rows.length > announcedRows) {
       const text = liveAnnouncement(rows.slice(announcedRows), performance.now() - lastInteraction);
@@ -177,7 +182,6 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   clearButton.addEventListener('click', () => {
     clearedFrom = session.trace.entries.length;
     announcedRows = 0;
-    seen.timeline = 0;
     renderTimeline();
   });
 
