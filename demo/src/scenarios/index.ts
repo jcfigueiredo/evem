@@ -2,6 +2,8 @@ import type { Scenario } from '../engine/session';
 import { cancelableEvents } from './cancelableEvents';
 import { errorPolicies } from './errorPolicies';
 import { filters } from './filters';
+import { historyReplay } from './historyReplay';
+import { memoryLeaks } from './memoryLeaks';
 import { middleware } from './middleware';
 import { once } from './once';
 import { priorities } from './priorities';
@@ -23,5 +25,7 @@ export const scenarios: readonly Scenario[] = [
   middleware,
   cancelableEvents,
   errorPolicies,
-  recursionProtection
+  recursionProtection,
+  historyReplay,
+  memoryLeaks
 ];
