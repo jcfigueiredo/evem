@@ -34,7 +34,7 @@ Some details of these rules:
 
 - `event` is checked before `type`. Use `event` for new servers; `type` is kept for older ones.
 - If `data` is missing, subscribers receive `{}`.
-- The prefix comes from the `serverEventPrefix` option (default `'server'`). It's added unless the name already starts with it.
+- The prefix comes from the `serverEventPrefix` option (default `'server'`). It's added unless the name already starts with `<prefix>.`: `server.user.login` stays as it is, and `serverless.deploy` becomes `server.serverless.deploy`.
   - With `serverEventPrefix: 'api'`, `{"event":"user.login"}` is published as `api.user.login`.
   - With `serverEventPrefix: ''`, events are published under their own names: `user.login`.
 - Response messages are only routed this way while `enableRequestResponse` is on (the default). Otherwise they go to `ws.message`.

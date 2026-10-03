@@ -134,7 +134,7 @@ Use **one `WebSocketHandler` per `EvEm` instance**. Two handlers on the same emi
 | `ws.message` | the whole parsed message | An incoming message matches no other route (see [Wire format](#wire-format)). |
 | `ws.parse.error` | `{ error, rawData }` | `messageParser` throws on an incoming message. |
 | `ws.error` | `{ error, event }` | The socket reports an error. While reconnecting, it's also published as `{ error }` when a new socket can't be created. In browsers, `error` is a generic `Error('WebSocket error')`, because the browser error event carries no details. |
-| `ws.send.queued` | the queued payload | For each queued message as the queue is flushed, just before it's sent. |
+| `ws.send.queued` | the queued payload | For each queued message as the queue is flushed. Publishing it is what sends it (the handler's own subscriber sends it), so middleware sees it before it's sent and subscribers you add usually after. |
 | `ws.queue.overflow` | `{ maxSize, droppedMessage }` | The queue was full and its oldest message was dropped. |
 | `ws.reconnect.failed` | `{ attempts }` | `maxReconnectAttempts` consecutive attempts failed. The state is now `disconnected`. |
 | `ws.response` / `ws.response.error` | `{ id, result, timestamp }` / `{ id, error, timestamp }` | A `{"type":"response"}` message arrives. Used internally by `request()`. |
@@ -208,7 +208,7 @@ console.log(alice.name, bob.name);
 
 ## Offline queue
 
-While the state isn't `connected`, `ws.send`, `ws.send.*` and request messages go into a FIFO queue instead of the socket. With `autoFlush` (the default), each transition to `connected` sends the queue in order: the first connection and every reconnection. Each flushed message is published as `ws.send.queued` and then sent.
+While the state isn't `connected`, `ws.send`, `ws.send.*` and request messages go into a FIFO queue instead of the socket. With `autoFlush` (the default), each transition to `connected` sends the queue in order: the first connection and every reconnection. Each flushed message is published as `ws.send.queued`, which sends it.
 
 - **Full queue:** when `queueSize` messages are waiting, the oldest is dropped and `ws.queue.overflow` is published with `{ maxSize, droppedMessage }`.
 - **Closed socket:** a message the socket can't take, because it's no longer open, is put back in the queue. This happens when the socket closed before `onclose` updated the state, or when the connection dropped in the middle of a flush.
@@ -322,7 +322,7 @@ process.on('SIGINT', async () => {
 });
 ```
 
-You can also pass a `ws` socket you created yourself: `new WebSocketHandler(socket, evem)`. If you also want reconnection, set `WebSocketConstructor` as well. Reconnections create new sockets from the socket's `url` using that class, or the global `WebSocket` if it isn't set, and Node.js 20 has no global `WebSocket`.
+You can also pass a `ws` socket you created yourself: `new WebSocketHandler(socket, evem)`. If you also want reconnection, set `reconnect: true` and `WebSocketConstructor`. Reconnections create new sockets with `new WebSocketConstructor(socket.url)` (or the global `WebSocket` if it isn't set, and Node.js 20 has no global `WebSocket`), so options you gave your socket, like headers or protocols, aren't reused: use a subclass like `AuthenticatedSocket` above.
 
 ## Example: browser chat
 
@@ -502,6 +502,7 @@ declare class MessageQueue {
   isEnabled(): boolean;
   getQueueSize(): number;
   getMaxSize(): number;
+  wasQueued(data: unknown): boolean; // whether the middleware queued this payload on its latest publish
 }
 ```
 
@@ -555,6 +556,9 @@ let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
 function sendOrQueue(message: unknown, fromQueue: boolean): void {
+  // Queued by the middleware during this publish, because we were offline: the flush sends it,
+  // even if the socket has opened since
+  if (!fromQueue && queue.wasQueued(message)) return;
   if (socket?.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(message));
   } else if (fromQueue || connection.isConnected()) {
