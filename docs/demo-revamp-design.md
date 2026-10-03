@@ -186,6 +186,11 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 | 3b review | The site has no favicon (a 404 in the console) | 4 |
 | Note, 2026-10-03 | The public site builds the library from `src/` on every push to `main`, not from the npm release, so the playground can show unreleased behavior (phase 1's fixes are still under Unreleased) while the showcase says `npm install`: show which code the site runs, and release a version when the playground depends on unreleased behavior | 4 |
 | Phase 2 review | Check narrow layouts below 513 px, with device emulation | 5 |
+| 3c-2 review | A write after *Go silent* vanishes without a note: the silenced stream still counts as open, and the write is dropped quietly | 5 |
+| 3c-2 review | An empty send box writes empty chunks (one, or two with *Write it in two chunks*) and logs blank lines: note that there's nothing to write instead | 5 |
+| 3c-2 review | The fake SSE server logs a request's path only, so an absolute URL in edited code (`https://api.example.com/events`) looks as if it reached that host: log the URL as given, as `LocalSseServer` does | 5 |
+| 3c-2 review | A check whose `action` is `wait:<ms>` runs inside the bounded `settle()`, whose 50 ms slices add to the wait: deterministic today, but fragile across fake-timer upgrades. Await `wait:` steps directly | 5 |
+| 3c-2 review | `Scenario.sse.local` can be set on any SSE scenario, though only one whose simulated server matches what the Python examples serve should have it: say so on the field | 5 |
 
 ## Phase 4: Showcase
 
