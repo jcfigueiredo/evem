@@ -74,17 +74,23 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
   // The editor loads on demand, once, however quickly the Code tab is pressed
   let editor: Promise<CodeEditor> | undefined;
   const showCode = () =>
-    (editor ??= import('../editor').then(({ createEditor }) =>
-      createEditor(codeHost, session.code, () => undefined, {
-        // The ▶ in the code's margin runs that action, and shows its output
-        onRunAction: label => {
-          const action = session.actions.find(candidate => candidate.label === label);
-          if (!action) return;
-          tabs.select('output');
-          void run(action.id);
-        }
-      })
-    ));
+    (editor ??= import('../editor')
+      .then(({ createEditor }) =>
+        createEditor(codeHost, session.code, () => undefined, {
+          // The ▶ in the code's margin runs that action, and shows its output
+          onRunAction: label => {
+            const action = session.actions.find(candidate => candidate.label === label);
+            if (!action) return;
+            tabs.select('output');
+            void run(action.id);
+          }
+        })
+      )
+      .then(view => {
+        // Opened during a run, its ▶ buttons start disabled, like the action buttons
+        view.setRunsEnabled(!gate.busy);
+        return view;
+      }));
   // Output and code take turns in the card, whose height is fixed
   const tabs = tabList(
     [
