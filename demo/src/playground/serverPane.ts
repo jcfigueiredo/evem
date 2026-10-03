@@ -1,6 +1,7 @@
 import { el } from '../dom';
 import type { ScenarioSession, ServerSample } from '../engine/session';
 import { checkLocalServer } from '../fakes/localSseServer';
+import { isAtEnd } from '../timeline';
 import type { FakeServer, WireEntry } from '../fakes/wire';
 
 // Full class names, so Tailwind finds them in the source
@@ -15,6 +16,18 @@ const SHOWN = 200;
 
 /** Statuses the SSE server can answer the next request with */
 const STATUSES = ['401', '403', '404', '408', '429', '500', '503', '204'];
+
+/**
+ * What the card's connection count means: the open connections, or, with none, what the code's handlers are doing
+ * (reconnecting between attempts, or stopped for good)
+ */
+export function connectionStatus(open: number, states: readonly string[]): string {
+  if (open > 0) return `${open} open connection${open === 1 ? '' : 's'}`;
+  if (states.includes('reconnecting')) return 'No open connection: the client is reconnecting.';
+  if (states.includes('connecting')) return 'No open connection yet: the client is connecting.';
+  if (states.length > 0) return 'No open connection: the client has stopped. Reset starts over.';
+  return 'No open connection.';
+}
 
 /** A wire entry's text with its line breaks visible (`↵`), since in an event stream they're the syntax */
 const visible = (text: string): string => text.replace(/\r/g, '␍').replace(/\n/g, '↵\n');
@@ -166,7 +179,7 @@ export function serverPane(
     const server = session.server;
     const wire = server?.wire ?? [];
     if (server !== shown.server || wire.length !== shown.length) {
-      const atEnd = logBox.scrollHeight - logBox.scrollTop - logBox.clientHeight < 24;
+      const atEnd = isAtEnd(logBox);
       log.replaceChildren(
         ...wire.slice(-SHOWN).map(entry => {
           const direction = DIRECTION[entry.direction];
@@ -185,11 +198,7 @@ export function serverPane(
       if (atEnd || server !== shown.server) logBox.scrollTop = logBox.scrollHeight;
       shown = { server, length: wire.length };
     }
-    const open = server?.openConnections ?? 0;
-    status.textContent =
-      open > 0
-        ? `${open} open connection${open === 1 ? '' : 's'}`
-        : 'No open connection. The client connects again only if its code says so; Reset starts over.';
+    status.textContent = connectionStatus(server?.openConnections ?? 0, session.connectionStates());
   };
 
   const element = el('div', { class: 'grid gap-4 md:grid-cols-[minmax(0,1fr)_16rem]' }, [

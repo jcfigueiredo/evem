@@ -140,7 +140,7 @@ export class ScenarioSession {
   localServer = false;
   private program: Record<string, () => Promise<void>> | undefined;
   /** The WebSocket and SSE handlers the code created, disconnected when the scenario starts over */
-  private handlers: Array<{ disconnect(): Promise<void> }> = [];
+  private handlers: Array<{ disconnect(): Promise<void>; getConnectionState(): string }> = [];
 
   constructor(
     readonly scenario: Scenario,
@@ -172,6 +172,11 @@ export class ScenarioSession {
     this.edited = false;
     this.code = renderCode(this.scenario.code, this.values, rawControls(this.scenario));
     return this.reset();
+  }
+
+  /** The connection states of the handlers the code created (`connected`, `reconnecting`, …), oldest first */
+  connectionStates(): string[] {
+    return this.handlers.map(handler => handler.getConnectionState());
   }
 
   /** Switch between the fake SSE server and the local one, and start over */

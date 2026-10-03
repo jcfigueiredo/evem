@@ -366,6 +366,26 @@ describe('ScenarioSession with a fake SSE server', () => {
     expect(session.server?.openConnections).toBe(0);
   });
 
+  it("tells the states of the code's handlers: reconnecting after a drop, or stopped for good", async () => {
+    vi.useFakeTimers();
+    page();
+    const reconnecting = new ScenarioSession(sseScenario('{ reconnectDelay: 1000 }'));
+    await reconnecting.reset();
+    await vi.advanceTimersByTimeAsync(30);
+    expect(reconnecting.connectionStates()).toEqual(['connected']);
+    reconnecting.server?.run('drop');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(reconnecting.connectionStates()).toEqual(['reconnecting']);
+
+    const stopped = new ScenarioSession(sseScenario());
+    await stopped.reset();
+    await vi.advanceTimersByTimeAsync(30);
+    stopped.server?.run('drop');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(stopped.connectionStates()).toEqual(['disconnected']);
+    reconnecting.stop();
+  });
+
   it('leaves a fetch the code passes alone', async () => {
     vi.useFakeTimers();
     page();

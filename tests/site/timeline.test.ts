@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TraceEntry } from '../../demo/src/engine/trace';
-import { announcement, describeEntry, preview, timelineRows } from '../../demo/src/timeline';
+import { announcement, describeEntry, isAtEnd, liveAnnouncement, preview, timelineRows } from '../../demo/src/timeline';
 
 describe('preview', () => {
   it('shows data as JSON, shortened with an ellipsis', () => {
@@ -137,6 +137,26 @@ describe('timelineRows', () => {
       '1 resolved true',
       '0 resolved true'
     ]);
+  });
+});
+
+describe('isAtEnd', () => {
+  it('says whether a scrolled list shows its end, so it keeps following only a reader who was there', () => {
+    expect(isAtEnd({ scrollTop: 600, scrollHeight: 1000, clientHeight: 400 })).toBe(true);
+    expect(isAtEnd({ scrollTop: 590, scrollHeight: 1000, clientHeight: 400 })).toBe(true);
+    expect(isAtEnd({ scrollTop: 0, scrollHeight: 1000, clientHeight: 400 })).toBe(false);
+    // A list too short to scroll
+    expect(isAtEnd({ scrollTop: 0, scrollHeight: 300, clientHeight: 400 })).toBe(true);
+  });
+});
+
+describe('liveAnnouncement', () => {
+  const rows = timelineRows([{ kind: 'log', level: 'log', text: 'tick 7', at: 5, publish: undefined }]);
+
+  it("reads out what the reader's own interaction caused, and stays quiet for a stream that runs by itself", () => {
+    expect(liveAnnouncement(rows, 1200)).toBe('tick 7.');
+    expect(liveAnnouncement(rows, 60_000)).toBeUndefined();
+    expect(liveAnnouncement([], 0)).toBeUndefined();
   });
 });
 
