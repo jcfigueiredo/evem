@@ -20,15 +20,20 @@ export const WIDGET_HEIGHT = 'h-[36rem] sm:h-[32rem]';
 /** How many wire lines an adapter's card keeps */
 const WIRE_SHOWN = 100;
 
+/** How many of its stream's entries an adapter's card shows: a card left open for hours renders as fast as a new one */
+export const OUTPUT_SHOWN = 150;
+
 /** Whether a scenario talks to a server: an adapter's card, with its stream, its wire and the server's controls */
 const isAdapter = (scenario: Scenario) => Boolean(scenario.websocket || scenario.sse);
 
 /**
- * The entries a widget shows: a feature's latest action; an adapter's whole stream after its setup, since a stream
- * doesn't wait for a button
+ * The entries a widget shows: a feature's latest action; an adapter's stream after its setup (its latest
+ * `OUTPUT_SHOWN` entries), since a stream doesn't wait for a button
  */
 export function widgetEntries(scenario: Scenario, entries: readonly TraceEntry[], setupEnd: number): TraceEntry[] {
-  return isAdapter(scenario) ? entries.slice(setupEnd) : sinceLatestAction(entries);
+  return isAdapter(scenario)
+    ? entries.slice(Math.max(setupEnd, entries.length - OUTPUT_SHOWN))
+    : sinceLatestAction(entries);
 }
 
 /** The server's controls an adapter's card offers (a command for its server's `run`); none for a feature */
@@ -103,6 +108,7 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
   let followingWire = true;
 
   let announced = 0;
+  let wireShown: { server: unknown; length: number } = { server: undefined, length: -1 };
   const render = () => {
     const entries = widgetEntries(scenario, session.trace.entries, session.setupEnd);
     const rows = timelineRows(entries);
@@ -121,10 +127,13 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
       }
       if (following) output.scrollTop = output.scrollHeight;
     }
-    if (adapter) {
+    // The wire is rebuilt only when it grew, or the scenario started over with a new server
+    const lines = session.server?.wire ?? [];
+    if (adapter && (session.server !== wireShown.server || lines.length !== wireShown.length)) {
       followingWire = keepsFollowing(wireBox, followingWire);
-      wire.replaceChildren(...(session.server?.wire ?? []).slice(-WIRE_SHOWN).map(wireItem));
+      wire.replaceChildren(...lines.slice(-WIRE_SHOWN).map(wireItem));
       if (followingWire) wireBox.scrollTop = wireBox.scrollHeight;
+      wireShown = { server: session.server, length: lines.length };
     }
     if (rows.length > announced) {
       const text = liveAnnouncement(rows.slice(announced), performance.now() - lastInteraction);

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ScenarioSession } from '../../demo/src/engine/session';
 import type { TraceEntry } from '../../demo/src/engine/trace';
 import { scenarios } from '../../demo/src/scenarios';
-import { serverControls, widgetEntries } from '../../demo/src/showcase/widget';
+import { OUTPUT_SHOWN, serverControls, widgetEntries } from '../../demo/src/showcase/widget';
 
 const scenario = (id: string) => scenarios.find(candidate => candidate.id === id)!;
 const at = { at: 0 };
@@ -19,6 +19,20 @@ describe('widgetEntries', () => {
     expect(widgetEntries(scenario('priorities'), entries, 1)).toEqual(entries.slice(2));
     expect(widgetEntries(scenario('reconnect-resume'), entries, 1)).toEqual(entries.slice(1));
     expect(widgetEntries(scenario('connection-queue'), entries, 1)).toEqual(entries.slice(1));
+  });
+});
+
+describe("an adapter card's stream", () => {
+  it('keeps only its latest entries, so a card left open for hours stays as quick as a new one', () => {
+    const stream: TraceEntry[] = Array.from({ length: OUTPUT_SHOWN * 3 }, (_, n) => ({
+      kind: 'log',
+      level: 'log',
+      text: `tick ${n}`,
+      at: n
+    }));
+    const shown = widgetEntries(scenario('reconnect-resume'), [entries[0]!, ...stream], 1);
+    expect(shown).toHaveLength(OUTPUT_SHOWN);
+    expect(shown.at(-1)).toBe(stream.at(-1));
   });
 });
 
