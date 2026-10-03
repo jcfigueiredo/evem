@@ -1,10 +1,60 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="signal">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>EvEm</title>
+    <title>EvEm: events, with intent</title>
+    <meta
+      name="description"
+      content="A small TypeScript event emitter with wildcards, priorities, middleware, flow control, history, and WebSocket and SSE adapters. No dependencies."
+    />
+    <meta property="og:title" content="EvEm: events, with intent" />
+    <meta
+      property="og:description"
+      content="A small TypeScript event emitter with wildcards, priorities, middleware, flow control, history, and WebSocket and SSE adapters."
+    />
+    <script>
+      // Apply the saved theme before the page paints (same rules as resolveTheme in src/theme.ts)
+      (function () {
+        var choice = null;
+        try {
+          choice = localStorage.getItem('evem-theme');
+        } catch (error) {}
+        var light = window.matchMedia('(prefers-color-scheme: light)').matches;
+        var theme = choice === 'signal-light' || (choice === 'system' && light) ? 'signal-light' : 'signal';
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
     <script type="module" src="./src/showcase/main.ts"></script>
   </head>
-  <body></body>
+  <body class="min-h-screen bg-base-200">
+    <header class="navbar mx-auto max-w-6xl px-4">
+      <div class="navbar-start">
+        <a href="./" class="flex items-center gap-2 font-mono text-lg font-bold">
+          <span class="inline-block size-3.5 rounded bg-primary" aria-hidden="true"></span>evem
+        </a>
+      </div>
+      <div class="navbar-end gap-1">
+        <a class="btn btn-ghost btn-sm" href="./playground/">Playground</a>
+        <a class="btn btn-ghost btn-sm" href="https://github.com/jcfigueiredo/evem">GitHub</a>
+        <div id="theme-picker" class="w-44"></div>
+      </div>
+    </header>
+    <main class="hero min-h-[70vh]">
+      <div class="hero-content max-w-3xl flex-col text-center">
+        <h1 class="font-mono text-4xl font-bold tracking-tight sm:text-6xl">Events, with intent.</h1>
+        <p class="max-w-xl text-lg text-base-content/70">
+          A small TypeScript event emitter with wildcards, priorities, middleware, flow control and history, plus
+          WebSocket and Server-Sent Events adapters. No dependencies.
+        </p>
+        <code class="rounded-box bg-neutral px-4 py-2 font-mono text-sm text-neutral-content"
+          >npm install @jcfigueiredo/evem</code
+        >
+        <div class="flex flex-wrap justify-center gap-2">
+          <a class="btn btn-primary" href="./playground/">Open the playground</a>
+          <a class="btn" href="https://github.com/jcfigueiredo/evem#readme">Read the docs</a>
+        </div>
+      </div>
+    </main>
+  </body>
 </html>

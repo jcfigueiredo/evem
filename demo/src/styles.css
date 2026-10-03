@@ -1,0 +1,105 @@
+@import 'tailwindcss' source(none);
+@source "./";
+@source "../index.html";
+@source "../playground/index.html";
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+@plugin "daisyui" {
+  themes: false;
+}
+@plugin "daisyui/theme" {
+  name: 'signal';
+  default: true;
+  prefersdark: false;
+  color-scheme: dark;
+  --color-base-100: #11151d;
+  --color-base-200: #0d1016;
+  --color-base-300: #0a0c10;
+  --color-base-content: #e6e9f2;
+  --color-primary: #22d3ee;
+  --color-primary-content: #04161b;
+  --color-secondary: #a78bfa;
+  --color-secondary-content: #12082e;
+  --color-accent: #a3e635;
+  --color-accent-content: #0b1400;
+  --color-neutral: #07090c;
+  --color-neutral-content: #c9d1e6;
+  --color-info: #38bdf8;
+  --color-info-content: #031722;
+  --color-success: #a3e635;
+  --color-success-content: #0b1400;
+  --color-warning: #fbbf24;
+  --color-warning-content: #1f1400;
+  --color-error: #fb7185;
+  --color-error-content: #2a0510;
+  --radius-selector: 0.5rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+@plugin "daisyui/theme" {
+  name: 'signal-light';
+  default: false;
+  prefersdark: false;
+  color-scheme: light;
+  --color-base-100: #ffffff;
+  --color-base-200: #f5f7fa;
+  --color-base-300: #eceff4;
+  --color-base-content: #0d1320;
+  --color-primary: #0e7490;
+  --color-primary-content: #ffffff;
+  --color-secondary: #6d28d9;
+  --color-secondary-content: #ffffff;
+  --color-accent: #4d7c0f;
+  --color-accent-content: #ffffff;
+  --color-neutral: #0d1117;
+  --color-neutral-content: #d6dceb;
+  --color-info: #0369a1;
+  --color-info-content: #ffffff;
+  --color-success: #4d7c0f;
+  --color-success-content: #ffffff;
+  --color-warning: #b45309;
+  --color-warning-content: #ffffff;
+  --color-error: #be123c;
+  --color-error-content: #ffffff;
+  --radius-selector: 0.5rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Code panels use daisyUI's neutral, dark in both themes, so the syntax colors are shared */
+:root {
+  --code-keyword: #22d3ee;
+  --code-string: #a3e635;
+  --code-number: #fbbf24;
+  --code-property: #7dd3fc;
+  --code-function: #c4b5fd;
+  --code-comment: #8b93a7;
+}
+
+/* Signal's glowing timeline dots */
+[data-theme='signal'] .signal-glow {
+  box-shadow: 0 0 8px currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

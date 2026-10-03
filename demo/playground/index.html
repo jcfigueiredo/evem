@@ -1,10 +1,47 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="signal">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>EvEm Playground</title>
+    <meta name="description" content="Try every EvEm feature against the real library, and see what it did and why." />
+    <script>
+      // Apply the saved theme before the page paints (same rules as resolveTheme in src/theme.ts)
+      (function () {
+        var choice = null;
+        try {
+          choice = localStorage.getItem('evem-theme');
+        } catch (error) {}
+        var light = window.matchMedia('(prefers-color-scheme: light)').matches;
+        var theme = choice === 'signal-light' || (choice === 'system' && light) ? 'signal-light' : 'signal';
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
     <script type="module" src="../src/playground/main.ts"></script>
   </head>
-  <body></body>
+  <body>
+    <div class="drawer lg:drawer-open">
+      <input id="sidebar" type="checkbox" class="drawer-toggle" />
+      <div class="drawer-content min-h-screen bg-base-200">
+        <header class="navbar bg-base-300 border-b border-base-300 lg:hidden">
+          <label for="sidebar" class="btn btn-ghost btn-square drawer-button" aria-label="Open the feature list"
+            >☰</label
+          >
+          <span class="font-mono font-bold">evem playground</span>
+        </header>
+        <main id="workbench" class="mx-auto max-w-6xl p-4 lg:p-8"></main>
+      </div>
+      <div class="drawer-side z-20">
+        <label for="sidebar" aria-label="Close the feature list" class="drawer-overlay"></label>
+        <nav class="flex min-h-full w-64 flex-col bg-base-300" aria-label="Features">
+          <a href="../" class="flex items-center gap-2 px-5 pt-5 pb-2 font-mono text-lg font-bold">
+            <span class="inline-block size-3.5 rounded bg-primary" aria-hidden="true"></span>evem
+            <span class="text-xs font-normal text-base-content/50">playground</span>
+          </a>
+          <ul id="scenario-menu" class="menu w-full grow"></ul>
+          <div id="theme-picker" class="p-3"></div>
+        </nav>
+      </div>
+    </div>
+  </body>
 </html>

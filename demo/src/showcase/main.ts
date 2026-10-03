@@ -1,6 +1,7 @@
+import '../styles.css';
 import { EvEm } from '@jcfigueiredo/evem';
+import { mountThemePicker } from '../theme';
 
-// The page's own events go through EvEm (a later task replaces this file)
+// The showcase's own events go through EvEm, like the playground's
 const bus = new EvEm();
-bus.subscribe<string>('page.ready', title => console.info(`${title} is ready`));
-void bus.publish('page.ready', document.title);
+mountThemePicker(document.getElementById('theme-picker')!, bus, 'dropdown-end');
