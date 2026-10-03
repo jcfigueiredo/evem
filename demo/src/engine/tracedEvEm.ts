@@ -7,6 +7,7 @@ import {
   type SubscriptionOptions
 } from '@jcfigueiredo/evem';
 import type { SkipReason, Trace } from './trace';
+import { explainMatch } from './wildcards';
 
 /**
  * EvEm's own wildcard matching (private: the timeline must decide "this subscription matched" exactly as EvEm
@@ -87,7 +88,17 @@ function describeOptions(options: SubscriptionOptions<any, any> | undefined): st
  * An EvEm that records what it does in `trace`, for the timeline. It only observes: every method calls the real
  * one with wrappers that record calls, verdicts and results and pass everything through unchanged.
  */
-export function createTracedEvEm(trace: Trace, names: ReadonlyMap<Function, string> = new Map()): typeof EvEm {
+/** What else the traced EvEm records */
+export interface TraceOptions {
+  /** For every publish, whether each subscription's pattern matched the event, and why (the Wildcards scenario) */
+  explainMatches?: boolean;
+}
+
+export function createTracedEvEm(
+  trace: Trace,
+  names: ReadonlyMap<Function, string> = new Map(),
+  { explainMatches = false }: TraceOptions = {}
+): typeof EvEm {
   /** A function's display name: the scenario's name for it, else its own (only code the reader wrote keeps one) */
   const nameOf = (fn: Function, fallback: string) => names.get(fn) ?? (fn.name || fallback);
 
@@ -101,6 +112,14 @@ export function createTracedEvEm(trace: Trace, names: ReadonlyMap<Function, stri
     private readonly chains = new WeakMap<Map<string, number>, number>();
     /** The publish being started, until EvEm has created its chain */
     private starting: number | undefined;
+    /** How deep we are in subscribe(): a call that happens there, outside any publish, is a history replay */
+    private subscribing = 0;
+    /** Once subscriptions EvEm just removed, which say so after their call (EvEm removes them just before it) */
+    private readonly leaving = new Map<string, Subscription>();
+    /** Subscriptions removed before subscribe() returned: a once subscription a replay used up */
+    private readonly removedWhileSubscribing = new Set<string>();
+    /** Numbers the subscribers that have no name */
+    private anonymous = 0;
 
     constructor(...args: ConstructorParameters<typeof EvEm>) {
       super(...args);
@@ -143,13 +162,22 @@ export function createTracedEvEm(trace: Trace, names: ReadonlyMap<Function, stri
       callback: EventCallback<T>,
       options?: SubscriptionOptions<T, R>
     ): string {
-      const name = nameOf(callback, `subscriber ${this.subscriptions.size + 1}`);
+      const name = names.get(callback) ?? (callback.name || `subscriber ${++this.anonymous}`);
       let id = '';
       const wrapped: EventCallback<T> = data => {
         const state = this.current();
         state?.called.add(id);
-        const publish = state?.id ?? this.latestFor(event);
-        trace.record({ kind: 'call', subscription: name, data, publish, ...(state ? {} : { later: true }) });
+        // Outside any publish: a replay from history while subscribing, or a call that comes later (debounce)
+        const replayed = !state && this.subscribing > 0;
+        const publish = state?.id ?? (replayed ? undefined : this.latestFor(event));
+        trace.record({
+          kind: 'call',
+          subscription: name,
+          data,
+          publish,
+          ...(replayed ? { replayed: true } : state ? {} : { later: true })
+        });
+        if (this.leaving.delete(id)) trace.record({ kind: 'unsubscribe', subscription: name, once: true, publish });
         const wasCanceled = isCanceled(data);
         const afterCall = () => {
           if (!wasCanceled && isCanceled(data)) {
@@ -181,9 +209,19 @@ export function createTracedEvEm(trace: Trace, names: ReadonlyMap<Function, stri
         }
       };
       const traced = options ? this.traceOptions(options, name, () => id) : undefined;
-      id = super.subscribe(event, wrapped, traced);
-      this.subscriptions.set(id, { id, name, pattern: event, options, original: callback, wrapped });
+      // Recorded first, so a history replay (which runs inside subscribe) comes after it
       trace.record({ kind: 'subscribe', subscription: name, pattern: event, options: describeOptions(options) });
+      this.subscribing++;
+      try {
+        id = super.subscribe(event, wrapped, traced);
+      } finally {
+        this.subscribing--;
+      }
+      if (this.removedWhileSubscribing.delete(id)) {
+        trace.record({ kind: 'unsubscribe', subscription: name, once: true });
+      } else {
+        this.subscriptions.set(id, { id, name, pattern: event, options, original: callback, wrapped });
+      }
       return id;
     }
 
@@ -247,7 +285,21 @@ export function createTracedEvEm(trace: Trace, names: ReadonlyMap<Function, stri
     override unsubscribeById(id: string): void {
       super.unsubscribeById(id);
       const subscription = this.subscriptions.get(id);
-      if (subscription) this.forget(subscription);
+      if (!subscription) {
+        if (this.subscribing > 0) this.removedWhileSubscribing.add(id);
+        return;
+      }
+      if (subscription.options?.once) {
+        // EvEm removes a once subscription just before calling it: its wrapped callback says so after the call, and
+        // if no call follows (an explicit unsubscribe), this does
+        this.subscriptions.delete(id);
+        this.leaving.set(id, subscription);
+        queueMicrotask(() => {
+          if (this.leaving.delete(id)) trace.record({ kind: 'unsubscribe', subscription: subscription.name });
+        });
+        return;
+      }
+      this.forget(subscription);
     }
 
     private forget(subscription: Subscription): void {
@@ -266,9 +318,16 @@ export function createTracedEvEm(trace: Trace, names: ReadonlyMap<Function, stri
             trace.record({ kind: 'middleware', name, outcome: 'cancel', publish });
           } else if (result !== data && isReroute(this, result)) {
             if (state) state.event = result.event;
-            trace.record({ kind: 'middleware', name, outcome: 'reroute', to: result.event, publish });
+            trace.record({
+              kind: 'middleware',
+              name,
+              outcome: 'reroute',
+              to: result.event,
+              data: result.data,
+              publish
+            });
           } else {
-            trace.record({ kind: 'middleware', name, outcome: 'continue', publish });
+            trace.record({ kind: 'middleware', name, outcome: 'continue', data: result, publish });
           }
         });
       };
@@ -296,6 +355,21 @@ export function createTracedEvEm(trace: Trace, names: ReadonlyMap<Function, stri
         canceled: false
       };
       this.publishes.set(id, state);
+      if (explainMatches) {
+        for (const subscription of state.live) {
+          const { matched, reason } = explainMatch(event, subscription.pattern);
+          const pattern = subscription.pattern;
+          trace.record({
+            kind: 'match',
+            subscription: subscription.name,
+            pattern,
+            event,
+            matched,
+            reason,
+            publish: id
+          });
+        }
+      }
       this.history.push({ id, event });
       if (this.history.length > 50) this.history.shift();
       // EvEm creates this publish's chain before its first await, so this is set while it does

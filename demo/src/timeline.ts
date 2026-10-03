@@ -45,19 +45,36 @@ export function describeEntry(entry: TraceEntry): Omit<TimelineRow, 'depth' | 'a
         tone: 'neutral'
       };
     case 'unsubscribe':
-      return { text: `${entry.subscription} unsubscribed`, tone: 'neutral' };
+      return {
+        text: entry.once
+          ? `${entry.subscription} unsubscribed after its one run (once)`
+          : `${entry.subscription} unsubscribed`,
+        tone: 'neutral'
+      };
     case 'publish':
-      return { text: `publish ${entry.event}`, detail: preview(entry.data), tone: 'primary' };
+      return {
+        text: `publish ${entry.event}`,
+        ...(entry.data === undefined ? {} : { detail: preview(entry.data) }),
+        tone: 'primary'
+      };
     case 'result':
       return { text: `resolved ${entry.result}`, tone: entry.result ? 'success' : 'warning' };
     case 'rejected':
       return { text: `rejected: ${entry.error}`, tone: 'error' };
-    case 'middleware':
+    case 'middleware': {
+      const detail = entry.data === undefined ? {} : { detail: preview(entry.data) };
       return entry.outcome === 'reroute'
-        ? { text: `middleware ${entry.name} rerouted it to ${entry.to}`, tone: 'info' }
+        ? { text: `middleware ${entry.name} rerouted it to ${entry.to}`, ...detail, tone: 'info' }
         : entry.outcome === 'cancel'
           ? { text: `middleware ${entry.name} canceled it`, tone: 'warning' }
-          : { text: `middleware ${entry.name} passed it on`, tone: 'info' };
+          : { text: `middleware ${entry.name} passed it on`, ...detail, tone: 'info' };
+    }
+    case 'match':
+      return {
+        text: `${entry.subscription}: "${entry.pattern}" ${entry.matched ? 'matches' : "doesn't match"} "${entry.event}"`,
+        detail: entry.reason,
+        tone: entry.matched ? 'info' : 'neutral'
+      };
     case 'schema':
       return {
         text: `${entry.subscription}: data ${entry.valid ? 'valid' : 'invalid'}`,
@@ -70,7 +87,7 @@ export function describeEntry(entry: TraceEntry): Omit<TimelineRow, 'depth' | 'a
       };
     case 'call':
       return {
-        text: `${entry.subscription} ran${entry.later ? ' (later)' : ''}`,
+        text: `${entry.subscription} ran${entry.replayed ? ' (replayed from history)' : entry.later ? ' (later)' : ''}`,
         detail: preview(entry.data),
         tone: 'success'
       };

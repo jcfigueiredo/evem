@@ -32,6 +32,34 @@ describe('describeEntry', () => {
       'neutral'
     ],
     [
+      { kind: 'unsubscribe', subscription: 'save', once: true, at: 0 },
+      'save unsubscribed after its one run (once)',
+      'neutral'
+    ],
+    [
+      { kind: 'call', subscription: 'latest', data: 1, replayed: true, at: 0 },
+      'latest ran (replayed from history)',
+      'success'
+    ],
+    [
+      {
+        kind: 'match',
+        subscription: 'users',
+        pattern: 'user.*',
+        event: 'user.login',
+        matched: true,
+        reason: '',
+        at: 0
+      },
+      'users: "user.*" matches "user.login"',
+      'info'
+    ],
+    [
+      { kind: 'match', subscription: 'users', pattern: 'user.*', event: 'user', matched: false, reason: '', at: 0 },
+      'users: "user.*" doesn\'t match "user"',
+      'neutral'
+    ],
+    [
       { kind: 'skip', subscription: 'after', reason: 'stopped', at: 0 },
       'after skipped: the publish stopped on an error first',
       'neutral'
@@ -40,6 +68,26 @@ describe('describeEntry', () => {
     [{ kind: 'log', level: 'warn', text: 'careful', at: 0 }, 'careful', 'warning']
   ] as Array<[TraceEntry, string, string]>)('%o reads "%s"', (entry, text, tone) => {
     expect(describeEntry(entry)).toMatchObject({ text, tone });
+  });
+});
+
+describe('describeEntry details', () => {
+  it('shows no data for a publish without any', () => {
+    expect(describeEntry({ kind: 'publish', id: 1, event: 'tick', data: undefined, at: 0 })).toEqual({
+      text: 'publish tick',
+      tone: 'primary'
+    });
+  });
+
+  it('shows the data a middleware passed on, and the reason a pattern matched or not', () => {
+    expect(describeEntry({ kind: 'middleware', name: 'stamp', outcome: 'continue', data: { a: 1 }, at: 0 })).toEqual({
+      text: 'middleware stamp passed it on',
+      detail: '{"a":1}',
+      tone: 'info'
+    });
+    expect(
+      describeEntry({ kind: 'match', subscription: 's', pattern: '*', event: 'e', matched: true, reason: 'why', at: 0 })
+    ).toMatchObject({ detail: 'why' });
   });
 });
 

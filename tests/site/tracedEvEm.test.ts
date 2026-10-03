@@ -53,13 +53,19 @@ describe('createTracedEvEm', () => {
     ]);
   });
 
-  it("names functions by the scenario's names first, then their own names, then by position", () => {
+  it("names functions by the scenario's names first, then their own names, then by number", () => {
     const helper = function minified() {};
     const { trace, evem } = traced({ audit: helper });
     evem.subscribe('a', helper);
     evem.subscribe('a', function own() {});
+    evem.unsubscribeById(evem.subscribe('a', () => {}));
     evem.subscribe('a', () => {});
-    expect(lines(trace)).toEqual(['subscribe audit @-', 'subscribe own @-', 'subscribe subscriber 3 @-']);
+    expect(lines(trace, ['subscribe'])).toEqual([
+      'subscribe audit @-',
+      'subscribe own @-',
+      'subscribe subscriber 1 @-',
+      'subscribe subscriber 2 @-'
+    ]);
   });
 
   it('records why a subscription that matched the event did not run, and debounced calls later', async () => {
@@ -172,12 +178,74 @@ describe('createTracedEvEm', () => {
     ]);
   });
 
-  it('records a once subscription leaving, and does not count it afterwards', async () => {
+  it('records a once subscription leaving after its call, and does not count it afterwards', async () => {
     const { trace, evem } = traced();
     evem.subscribeOnce('a', function first() {});
     await evem.publish('a', 1);
     await evem.publish('a', 2);
-    expect(lines(trace, ['unsubscribe', 'call', 'skip'])).toEqual(['unsubscribe first @1', 'call first @1']);
+    expect(lines(trace, ['unsubscribe', 'call', 'skip'])).toEqual(['call first @1', 'unsubscribe first @1']);
+    expect(trace.entries.find(entry => entry.kind === 'unsubscribe')).toMatchObject({ once: true });
+  });
+
+  it('records unsubscribing a once subscription that never ran as a plain unsubscribe', async () => {
+    const { trace, evem } = traced();
+    evem.unsubscribeById(evem.subscribe('a', function first() {}, { once: true }));
+    await Promise.resolve();
+    expect(trace.entries.filter(entry => entry.kind === 'unsubscribe')).toEqual([
+      expect.not.objectContaining({ once: true })
+    ]);
+    expect(lines(trace, ['unsubscribe'])).toEqual(['unsubscribe first @-']);
+  });
+
+  it('records history replays after the subscription, as replayed calls outside any publish', async () => {
+    const { trace, evem } = traced();
+    evem.enableHistory();
+    await evem.publish('login', 'ada');
+    await evem.publish('login', 'bo');
+    evem.subscribe('login', function latest() {}, { replayLastEvent: true });
+    evem.subscribe('login', function onlyOnce() {}, { replayHistory: true, once: true });
+
+    expect(lines(trace, ['subscribe', 'call', 'unsubscribe'])).toEqual([
+      'subscribe latest @-',
+      'call latest @-',
+      'subscribe onlyOnce @-',
+      'call onlyOnce @-',
+      'unsubscribe onlyOnce @-'
+    ]);
+    expect(trace.entries.filter(entry => entry.kind === 'call')).toEqual([
+      expect.objectContaining({ data: 'bo', replayed: true }),
+      expect.objectContaining({ data: 'ada', replayed: true })
+    ]);
+
+    await evem.publish('login', 'cy');
+    expect(lines(trace, ['call', 'skip']).slice(2)).toEqual(['call latest @3']);
+  });
+
+  it('records the data each middleware passes on', async () => {
+    const { trace, evem } = traced();
+    evem.use(function stamp(_event: string, data: any) {
+      return { ...data, stamped: true };
+    });
+    evem.use(function route(_event: string, data: any) {
+      return { event: 'b', data };
+    });
+    await evem.publish('a', { id: 1 });
+    expect(trace.entries.flatMap(entry => (entry.kind === 'middleware' ? [entry.data] : []))).toEqual([
+      { id: 1, stamped: true },
+      { id: 1, stamped: true }
+    ]);
+  });
+
+  it('explains, when asked, whether each subscription matched the event, and why', async () => {
+    const trace = new Trace();
+    const TracedEvEm = createTracedEvEm(trace, new Map(), { explainMatches: true });
+    const evem = new TracedEvEm();
+    evem.subscribe('user.*', function users() {});
+    evem.subscribe('*.created', function creations() {});
+    await evem.publish('user.profile.updated');
+    expect(
+      trace.entries.flatMap(entry => (entry.kind === 'match' ? [`${entry.subscription} ${entry.matched}`] : []))
+    ).toEqual(['users true', 'creations false']);
   });
 
   it('unsubscribes and removes middleware by the original functions', async () => {
