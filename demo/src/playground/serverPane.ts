@@ -1,6 +1,6 @@
 import { el } from '../dom';
 import type { ScenarioSession } from '../engine/session';
-import type { WireEntry } from '../fakes/webSocketServer';
+import type { WireEntry } from '../fakes/wire';
 
 // Full class names, so Tailwind finds them in the source
 const DIRECTION: Record<WireEntry['direction'], { mark: string; label: string; className: string }> = {

@@ -139,6 +139,31 @@ describe('FakeWebSocketServer', () => {
     expect(lines.filter(line => line.startsWith('server:'))).toEqual([]);
   });
 
+  it("notes a client frame it can't read, instead of ignoring it", async () => {
+    const { evem, wire } = setup({}, { messageFormatter: data => `not json: ${String(data)}` });
+    await vi.advanceTimersByTimeAsync(20);
+    await evem.publish('ws.send', 'hello');
+    await vi.advanceTimersByTimeAsync(20);
+    expect(wire().slice(-2)).toEqual([
+      'client: not json: hello',
+      "note: could not read connection 1's frame: it isn't JSON"
+    ]);
+  });
+
+  it('runs the Server card controls by name, and refuses one it lacks', async () => {
+    const { server, wire } = setup();
+    await vi.advanceTimersByTimeAsync(20);
+    server.run('refuse');
+    server.run('send', '{"event":"news"}');
+    server.run('drop');
+    expect(wire().slice(-3)).toEqual([
+      'note: will refuse the next connection',
+      'server: {"event":"news"}',
+      'note: connection 1 dropped (1006)'
+    ]);
+    expect(() => server.run('split')).toThrow('The WebSocket server has no command split');
+  });
+
   it('notes a send or a drop when no connection is open, instead of doing nothing', async () => {
     const { server, wire } = setup({}, { reconnect: false });
     await vi.advanceTimersByTimeAsync(20);
