@@ -20,6 +20,7 @@ const SKIP_TEXT: Record<SkipReason, string> = {
   throttled: 'throttled',
   debounced: 'debounced (runs later if nothing else arrives)',
   canceled: 'the event was canceled first',
+  stopped: 'the publish stopped on an error first',
   'not-called': 'not called'
 };
 

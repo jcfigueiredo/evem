@@ -31,6 +31,11 @@ describe('describeEntry', () => {
       'save skipped: debounced (runs later if nothing else arrives)',
       'neutral'
     ],
+    [
+      { kind: 'skip', subscription: 'after', reason: 'stopped', at: 0 },
+      'after skipped: the publish stopped on an error first',
+      'neutral'
+    ],
     [{ kind: 'error', subscription: 'save', message: 'boom', at: 0 }, 'save threw: boom', 'error'],
     [{ kind: 'log', level: 'warn', text: 'careful', at: 0 }, 'careful', 'warning']
   ] as Array<[TraceEntry, string, string]>)('%o reads "%s"', (entry, text, tone) => {

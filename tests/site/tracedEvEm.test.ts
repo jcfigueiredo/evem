@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EvEm } from '../../src/index';
+import { ErrorPolicy, EvEm } from '../../src/index';
 import { Trace, type TraceEntry } from '../../demo/src/engine/trace';
 import { createTracedEvEm, matchesPattern } from '../../demo/src/engine/tracedEvEm';
 
@@ -192,6 +192,76 @@ describe('createTracedEvEm', () => {
     await evem.publish('a', {});
 
     expect(lines(trace, ['unsubscribe', 'call', 'middleware'])).toEqual(['unsubscribe handler @-']);
+  });
+
+  it('keeps publishes that overlap apart: each call, skip and result belongs to its own publish', async () => {
+    const first = async () => {
+      await Promise.resolve();
+    };
+    const second = () => {};
+    const { trace, evem } = traced({ first, second });
+    evem.subscribe('a', first);
+    evem.subscribe('a', second);
+
+    await Promise.all([evem.publish('a', 1), evem.publish('a', 2)]);
+
+    const calls = trace.entries.flatMap(entry =>
+      entry.kind === 'call' ? [`${entry.subscription} ${String(entry.data)} @${entry.publish}`] : []
+    );
+    expect(calls.sort()).toEqual(['first 1 @1', 'first 2 @2', 'second 1 @1', 'second 2 @2']);
+    expect(lines(trace, ['publish', 'result', 'skip']).sort()).toEqual([
+      'publish a @-',
+      'publish a @-',
+      'result true @-',
+      'result true @-'
+    ]);
+  });
+
+  it('attributes async filter verdicts to their own publish when publishes overlap', async () => {
+    const isEven = async (n: number) => n % 2 === 0;
+    const handler = () => {};
+    const { trace, evem } = traced({ isEven, handler });
+    evem.subscribe('n', handler, { filter: isEven });
+
+    await Promise.all([evem.publish('n', 1), evem.publish('n', 2)]);
+
+    expect(lines(trace, ['filter', 'call', 'skip']).sort()).toEqual([
+      'call handler @2',
+      'filter handler @1',
+      'filter handler @2',
+      'skip handler filtered @1'
+    ]);
+  });
+
+  it('puts entries recorded outside a handler under the running publish, but only when there is no doubt which', async () => {
+    const { trace, evem } = traced();
+    const logAfterAwait = async (text: string) => {
+      await Promise.resolve();
+      trace.record({ kind: 'log', level: 'log', text });
+    };
+    evem.subscribe('a', logAfterAwait);
+
+    await evem.publish('a', 'alone');
+    await Promise.all([evem.publish('a', 'overlap 1'), evem.publish('a', 'overlap 2')]);
+
+    const logs = trace.entries.flatMap(entry =>
+      entry.kind === 'log' ? [`${entry.text} @${entry.publish ?? '-'}`] : []
+    );
+    expect(logs).toEqual(['alone @1', 'overlap 1 @-', 'overlap 2 @-']);
+  });
+
+  it('says a publish stopped by an error stopped, not that it was canceled', async () => {
+    const fails = () => {
+      throw new Error('boom');
+    };
+    const after = () => {};
+    const { trace, evem } = traced({ fails, after });
+    evem.subscribe('a', fails);
+    evem.subscribe('a', after);
+
+    await expect(evem.publish('a', 1, { errorPolicy: ErrorPolicy.THROW })).rejects.toThrow('boom');
+
+    expect(lines(trace, ['skip', 'rejected'])).toEqual(['skip after stopped @1', 'rejected  @-']);
   });
 
   it('attributes a publish started by a handler to the publish it happened in', async () => {

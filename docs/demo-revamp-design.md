@@ -210,7 +210,7 @@ A scroll tour at the site root:
 
 ## Risks
 
-- **`isEventMatch` is private.** The engine depends on it in one place, pinned by a test; if it's renamed, that test fails rather than the timeline silently lying.
+- **The engine reaches private `EvEm` methods**: `isEventMatch` and `isMiddlewareReroute` (matching and reroutes, decided as EvEm decides them) and `enterPublishChain` / `runInPublishChain` (each publish has its own chain and EvEm runs every handler in it, which tells the trace which publish a handler belongs to when publishes overlap). Tests pin each; if one is renamed or changes, they fail rather than the timeline silently lying.
 - **Two Vite versions** (8 for the demo, 5 inside Vitest 1.0). Harmless, but upgrading Vitest later removes the duplicate.
 - **Streaming through Vite's proxy** (Python mode): if the proxy buffers the stream, the fallback is to add CORS headers to the Python examples behind a `--cors` flag.
 - **Doc samples as tests** can make documentation edits fail CI. That's the point, and the fragment marker keeps intentional fragments cheap.

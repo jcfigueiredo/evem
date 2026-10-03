@@ -21,6 +21,16 @@ function isReroute(evem: EvEm, result: unknown): result is { event: string; data
   return (evem as unknown as { isMiddlewareReroute(result: unknown): boolean }).isMiddlewareReroute(result);
 }
 
+/**
+ * EvEm's private publish-chain methods (private, like isEventMatch). Every publish creates its own chain, before
+ * its first await, and EvEm runs each of its handlers inside that chain, so the chain says which publish a handler
+ * belongs to.
+ */
+interface PublishChains {
+  enterPublishChain(event: string): Map<string, number>;
+  runInPublishChain<R>(chain: Map<string, number> | null, fn: () => R): R;
+}
+
 /** Call `onValue` with a value, or with what a promise resolves to; returns the value or promise unchanged */
 function settle<V>(value: V, onValue: (resolved: Awaited<V>) => void): V {
   if (value instanceof Promise) {
@@ -87,6 +97,32 @@ export function createTracedEvEm(trace: Trace, names: ReadonlyMap<Function, stri
     /** Recent publishes, newest last, to attribute calls that happen after their publish (debounce) */
     private readonly history: Array<{ id: number; event: string }> = [];
     private readonly middlewares = new Map<MiddlewareFunction<any>, MiddlewareFunction<any>>();
+    /** The publish each publish chain belongs to */
+    private readonly chains = new WeakMap<Map<string, number>, number>();
+    /** The publish being started, until EvEm has created its chain */
+    private starting: number | undefined;
+
+    constructor(...args: ConstructorParameters<typeof EvEm>) {
+      super(...args);
+      // Follow EvEm's own publish chains: while EvEm runs a handler in a publish's chain, that's the current publish
+      const own = this as unknown as PublishChains;
+      const enterPublishChain = own.enterPublishChain.bind(this);
+      const runInPublishChain = own.runInPublishChain.bind(this);
+      own.enterPublishChain = event => {
+        const chain = enterPublishChain(event);
+        if (this.starting !== undefined) this.chains.set(chain, this.starting);
+        return chain;
+      };
+      own.runInPublishChain = <R>(chain: Map<string, number> | null, fn: () => R): R => {
+        const previous = trace.currentPublish;
+        trace.currentPublish = chain ? this.chains.get(chain) : undefined;
+        try {
+          return runInPublishChain(chain, fn);
+        } finally {
+          trace.currentPublish = previous;
+        }
+      };
+    }
 
     private current(): PublishState | undefined {
       const id = trace.currentPublish;
@@ -161,28 +197,37 @@ export function createTracedEvEm(trace: Trace, names: ReadonlyMap<Function, stri
         const filters = Array.isArray(options.filter) ? options.filter : [options.filter];
         const wrappedFilters = filters.map((filter, index) => {
           const filterName = nameOf(filter, filters.length > 1 ? `filter ${index + 1}` : 'filter');
-          return (data: T) =>
-            settle(filter(data), passed => {
-              const state = this.current();
+          return (data: T) => {
+            const state = this.current();
+            const publish = trace.currentPublish;
+            return settle(filter(data), passed => {
               if (!passed) state?.filtered.add(id());
-              trace.record({ kind: 'filter', subscription: name, name: filterName, passed: Boolean(passed) });
+              trace.record({ kind: 'filter', subscription: name, name: filterName, passed: Boolean(passed), publish });
             });
+          };
         });
         traced.filter = Array.isArray(options.filter) ? wrappedFilters : wrappedFilters[0];
       }
       if (options.schema) {
         const schema = options.schema;
-        traced.schema = ((data: T) =>
-          settle(schema(data), result => {
+        traced.schema = ((data: T) => {
+          const state = this.current();
+          const publish = trace.currentPublish;
+          return settle(schema(data), result => {
             const valid = typeof result === 'boolean' ? result : Boolean(result?.valid);
-            if (!valid) this.current()?.invalid.add(id());
-            trace.record({ kind: 'schema', subscription: name, valid });
-          })) as typeof schema;
+            if (!valid) state?.invalid.add(id());
+            trace.record({ kind: 'schema', subscription: name, valid, publish });
+          });
+        }) as typeof schema;
       }
       if (options.transform) {
         const transform = options.transform;
-        traced.transform = (data: T) =>
-          settle(transform(data), result => trace.record({ kind: 'transform', subscription: name, data: result }));
+        traced.transform = (data: T) => {
+          const publish = trace.currentPublish;
+          return settle(transform(data), result =>
+            trace.record({ kind: 'transform', subscription: name, data: result, publish })
+          );
+        };
       }
       return traced;
     }
@@ -213,18 +258,20 @@ export function createTracedEvEm(trace: Trace, names: ReadonlyMap<Function, stri
     override use<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void {
       const handler = typeof middleware === 'function' ? middleware : middleware.handler;
       const name = nameOf(handler, `middleware ${this.middlewares.size + 1}`);
-      const traced: MiddlewareFunction<T> = (event, data) =>
-        settle(handler(event, data), result => {
-          const state = this.current();
+      const traced: MiddlewareFunction<T> = (event, data) => {
+        const state = this.current();
+        const publish = trace.currentPublish;
+        return settle(handler(event, data), result => {
           if (result === null) {
-            trace.record({ kind: 'middleware', name, outcome: 'cancel' });
+            trace.record({ kind: 'middleware', name, outcome: 'cancel', publish });
           } else if (result !== data && isReroute(this, result)) {
             if (state) state.event = result.event;
-            trace.record({ kind: 'middleware', name, outcome: 'reroute', to: result.event });
+            trace.record({ kind: 'middleware', name, outcome: 'reroute', to: result.event, publish });
           } else {
-            trace.record({ kind: 'middleware', name, outcome: 'continue' });
+            trace.record({ kind: 'middleware', name, outcome: 'continue', publish });
           }
         });
+      };
       this.middlewares.set(handler, traced);
       super.use(typeof middleware === 'function' ? traced : { ...middleware, handler: traced });
     }
@@ -237,7 +284,7 @@ export function createTracedEvEm(trace: Trace, names: ReadonlyMap<Function, stri
 
     override async publish<T = unknown>(event: string, args?: T, options?: PublishOptions | number): Promise<boolean> {
       const parent = trace.currentPublish;
-      const id = trace.openPublish();
+      const id = trace.startPublish(parent);
       trace.record({ kind: 'publish', id, event, data: args, publish: parent });
       const state: PublishState = {
         id,
@@ -251,23 +298,32 @@ export function createTracedEvEm(trace: Trace, names: ReadonlyMap<Function, stri
       this.publishes.set(id, state);
       this.history.push({ id, event });
       if (this.history.length > 50) this.history.shift();
+      // EvEm creates this publish's chain before its first await, so this is set while it does
+      const starting = this.starting;
+      this.starting = id;
+      let pending: Promise<boolean>;
       try {
-        const result = await super.publish(event, args, options);
+        pending = super.publish(event, args, options);
+      } finally {
+        this.starting = starting;
+      }
+      try {
+        const result = await pending;
         this.recordSkips(state, result);
         trace.record({ kind: 'result', id, result, publish: parent });
         return result;
       } catch (error) {
-        this.recordSkips(state, false);
+        this.recordSkips(state, 'rejected');
         trace.record({ kind: 'rejected', id, error: messageOf(error), publish: parent });
         throw error;
       } finally {
-        trace.closePublish(id);
+        trace.endPublish(id);
         this.publishes.delete(id);
       }
     }
 
     /** For every subscription that matched the (final) event but didn't run, say why */
-    private recordSkips(state: PublishState, result: boolean): void {
+    private recordSkips(state: PublishState, result: boolean | 'rejected'): void {
       for (const subscription of state.live) {
         if (state.called.has(subscription.id) || !matchesPattern(this, state.event, subscription.pattern)) continue;
         const options = subscription.options;
@@ -279,9 +335,11 @@ export function createTracedEvEm(trace: Trace, names: ReadonlyMap<Function, stri
               ? 'debounced'
               : options?.throttleTime !== undefined
                 ? 'throttled'
-                : state.canceled || !result
-                  ? 'canceled'
-                  : 'not-called';
+                : result === 'rejected'
+                  ? 'stopped'
+                  : state.canceled || !result
+                    ? 'canceled'
+                    : 'not-called';
         trace.record({ kind: 'skip', subscription: subscription.name, reason, publish: state.id });
       }
     }

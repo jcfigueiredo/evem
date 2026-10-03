@@ -1,7 +1,7 @@
 import type { EvEm } from '@jcfigueiredo/evem';
 
 /** Why a subscription that matched an event didn't run */
-export type SkipReason = 'filtered' | 'schema' | 'throttled' | 'debounced' | 'canceled' | 'not-called';
+export type SkipReason = 'filtered' | 'schema' | 'throttled' | 'debounced' | 'canceled' | 'stopped' | 'not-called';
 
 /** One thing EvEm did, as the timeline shows it. `publish` is the id of the publish it happened in, if any */
 export type TraceEntry = { at: number; publish?: number } & (
@@ -34,34 +34,46 @@ export type TraceRecord = TraceEntry extends infer Entry
  */
 export class Trace {
   readonly entries: TraceEntry[] = [];
+  /**
+   * The publish whose handler (middleware, callback, filter, schema or transform) is running right now, if any.
+   * The traced EvEm sets it while EvEm runs one, so entries recorded meanwhile belong to that publish, even when
+   * publishes overlap.
+   */
+  currentPublish: number | undefined;
   private readonly started = performance.now();
   private nextPublishId = 1;
-  private readonly open: number[] = [];
+  /** Publishes still running, oldest first, each with the publish it was started in */
+  private readonly running = new Map<number, number | undefined>();
 
   constructor(private readonly bus?: EvEm) {}
 
-  /** The innermost publish still running, if any */
-  get currentPublish(): number | undefined {
-    return this.open[this.open.length - 1];
-  }
-
-  /** Start a publish: returns its id, which entries recorded until `closePublish` are attributed to */
-  openPublish(): number {
+  /** Start a publish (in `parent`, if a handler started it): returns its id */
+  startPublish(parent: number | undefined): number {
     const id = this.nextPublishId++;
-    this.open.push(id);
+    this.running.set(id, parent);
     return id;
   }
 
-  closePublish(id: number): void {
-    const index = this.open.lastIndexOf(id);
-    if (index !== -1) this.open.splice(index, 1);
+  endPublish(id: number): void {
+    this.running.delete(id);
+  }
+
+  /**
+   * The publish an entry recorded outside any handler belongs to (a log after a callback's await, EvEm's own error
+   * log): the innermost running publish, if every running publish is nested in it, so there's no doubt
+   */
+  private soleRunningPublish(): number | undefined {
+    const newest = [...this.running.keys()].at(-1);
+    let nested = 0;
+    for (let id = newest; id !== undefined && this.running.has(id); id = this.running.get(id)) nested++;
+    return nested === this.running.size ? newest : undefined;
   }
 
   record(record: TraceRecord): TraceEntry {
     const entry = {
       ...record,
       at: Math.round(performance.now() - this.started),
-      publish: 'publish' in record ? record.publish : this.currentPublish
+      publish: 'publish' in record ? record.publish : (this.currentPublish ?? this.soleRunningPublish())
     } as TraceEntry;
     this.entries.push(entry);
     void this.bus?.publish('trace.entry', entry);
