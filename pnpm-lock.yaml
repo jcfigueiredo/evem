@@ -11,6 +11,9 @@ importers:
       '@types/node':
         specifier: ^18.17.0
         version: 18.18.13
+      '@types/ws':
+        specifier: ^8.18.0
+        version: 8.18.2
       '@vitest/coverage-v8':
         specifier: ^1.0.4
         version: 1.0.4(vitest@1.0.4(@types/node@18.18.13))
@@ -279,6 +282,9 @@ packages:
 
   '@types/node@18.18.13':
     resolution: {integrity: sha512-vXYZGRrSCreZmq1rEjMRLXJhiy8MrIeVasx+PCVlP414N7CJLHnMf+juVvjdprHyH+XRy3zKZLHeNueOpJCn0g==}
+
+  '@types/ws@8.18.2':
+    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
 
   '@vitest/coverage-v8@1.0.4':
     resolution: {integrity: sha512-xD6Yuql6RW0Ir/JJIs6rVrmnG2/KOWJF+IRX1oJQk5wGKGxbtdrYPbl+WTUn/4ICCQ2G20zbE1e8/nPNyAG5Vg==}
@@ -873,6 +879,10 @@ snapshots:
   '@types/node@18.18.13':
     dependencies:
       undici-types: 5.26.5
+
+  '@types/ws@8.18.2':
+    dependencies:
+      '@types/node': 18.18.13
 
   '@vitest/coverage-v8@1.0.4(vitest@1.0.4(@types/node@18.18.13))':
     dependencies:
