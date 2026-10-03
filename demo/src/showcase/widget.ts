@@ -3,24 +3,53 @@ import { ActionGate } from '../actionGate';
 import { el } from '../dom';
 import type { CodeEditor } from '../editor';
 import { ScenarioSession, type Scenario } from '../engine/session';
+import type { TraceEntry } from '../engine/trace';
 import { laneChart } from '../lanes';
 import { renderLaneChart } from '../playground/laneChart';
-import { BUTTON, controlField, tabList, timelineItem } from '../playground/views';
+import { BUTTON, controlField, tabList, timelineItem, wireItem, type Tab } from '../playground/views';
 import { scenarioPath } from '../routing';
 import { keepsFollowing, liveAnnouncement, sinceLatestAction, timelineRows } from '../timeline';
 
 /**
  * The height of a widget, which its slot in index.html reserves (as a card of the same size) until it mounts: a
- * widget coming in, or its output growing, never moves the page
+ * widget coming in, or its output growing, never moves the page. Taller on phones, where the controls and the
+ * buttons wrap onto more lines and would leave the output little room.
  */
-export const WIDGET_HEIGHT = 'h-[32rem]';
+export const WIDGET_HEIGHT = 'h-[36rem] sm:h-[32rem]';
+
+/** How many wire lines an adapter's card keeps */
+const WIRE_SHOWN = 100;
+
+/** How many of its stream's entries an adapter's card shows: a card left open for hours renders as fast as a new one */
+export const OUTPUT_SHOWN = 150;
+
+/** Whether a scenario talks to a server: an adapter's card, with its stream, its wire and the server's controls */
+const isAdapter = (scenario: Scenario) => Boolean(scenario.websocket || scenario.sse);
+
+/**
+ * The entries a widget shows: a feature's latest action; an adapter's stream after its setup (its latest
+ * `OUTPUT_SHOWN` entries), since a stream doesn't wait for a button
+ */
+export function widgetEntries(scenario: Scenario, entries: readonly TraceEntry[], setupEnd: number): TraceEntry[] {
+  return isAdapter(scenario)
+    ? entries.slice(Math.max(setupEnd, entries.length - OUTPUT_SHOWN))
+    : sinceLatestAction(entries);
+}
+
+/** The server's controls an adapter's card offers (a command for its server's `run`); none for a feature */
+export function serverControls(scenario: Scenario): Array<{ label: string; command: string }> {
+  if (scenario.websocket) return [{ label: 'Drop the connection', command: 'drop' }];
+  if (scenario.sse) return [{ label: 'Drop the stream', command: 'drop' }];
+  return [];
+}
 
 /**
  * A scenario in the showcase, compact: its controls, its actions, and Output and Code tabs: what EvEm did in the
  * latest action (or, for flow control, the lane chart), and the code it runs (loaded the first time it's shown), with
  * a link to the scenario in the playground. It fills its slot, whose height is fixed; the output scrolls inside. It's
  * the playground's own session, so the two pages can't disagree. It runs its first action at the start, and again
- * when a control changes, so the output always matches the controls.
+ * when a control changes, so the output always matches the controls. An adapter's card (a scenario with a server)
+ * shows its stream from the start instead, with the server's controls (drop the connection) and a Wire tab.
  */
 export async function mountWidget(host: HTMLElement, scenario: Scenario): Promise<void> {
   const bus = new EvEm();
@@ -30,7 +59,8 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
   const gate = new ActionGate();
   let lastInteraction = Number.NEGATIVE_INFINITY;
 
-  const controls = el('div', { class: 'grid gap-x-3 sm:grid-cols-2' });
+  // Two columns even on phones, where stacked controls would leave the output little room
+  const controls = el('div', { class: 'grid grid-cols-2 gap-x-3' });
   const actions = el('div', { class: 'flex flex-wrap gap-2' });
   const timeline = el('ol', { class: 'relative ms-2 space-y-1.5 border-s border-base-300' });
   const output = scenario.lanes
@@ -38,6 +68,9 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
     : el('div', { class: 'min-h-0 flex-1 overflow-y-auto pe-2' }, [timeline]);
   const announcer = el('p', { class: 'sr-only', 'aria-live': 'polite' });
   const codeHost = el('div', { class: 'min-h-0 flex-1' });
+  const adapter = isAdapter(scenario);
+  const wire = el('ol', { class: 'space-y-1 font-mono text-xs' });
+  const wireBox = el('div', { class: 'min-h-0 flex-1 overflow-y-auto pe-2' }, [wire]);
   // The editor loads on demand, once, however quickly the Code tab is pressed
   let editor: Promise<CodeEditor> | undefined;
   const showCode = () =>
@@ -56,6 +89,7 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
   const tabs = tabList(
     [
       { id: 'output', label: 'Output', panel: output },
+      ...(adapter ? [{ id: 'wire', label: 'Wire', panel: wireBox } satisfies Tab] : []),
       { id: 'code', label: 'Code', panel: codeHost }
     ],
     {
@@ -63,17 +97,20 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
       idPrefix: prefix,
       onSelect: id => {
         if (id === 'code') void showCode();
-        // Rows that came while the code was shown couldn't scroll the hidden output: it follows its end now
-        else if (following) output.scrollTop = output.scrollHeight;
+        // Rows that came while another tab was shown couldn't scroll the hidden panel: it follows its end now
+        else if (id === 'wire' && followingWire) wireBox.scrollTop = wireBox.scrollHeight;
+        else if (id === 'output' && following) output.scrollTop = output.scrollHeight;
       }
     }
   );
-  // Whether the output follows its end (see keepsFollowing)
+  // Whether the output and the wire follow their end (see keepsFollowing)
   let following = true;
+  let followingWire = true;
 
   let announced = 0;
+  let wireShown: { server: unknown; length: number } = { server: undefined, length: -1 };
   const render = () => {
-    const entries = sinceLatestAction(session.trace.entries);
+    const entries = widgetEntries(scenario, session.trace.entries, session.setupEnd);
     const rows = timelineRows(entries);
     if (scenario.lanes) {
       renderLaneChart(output, laneChart(session.trace.entries));
@@ -90,32 +127,47 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
       }
       if (following) output.scrollTop = output.scrollHeight;
     }
+    // The wire is rebuilt only when it grew, or the scenario started over with a new server
+    const lines = session.server?.wire ?? [];
+    if (adapter && (session.server !== wireShown.server || lines.length !== wireShown.length)) {
+      followingWire = keepsFollowing(wireBox, followingWire);
+      wire.replaceChildren(...lines.slice(-WIRE_SHOWN).map(wireItem));
+      if (followingWire) wireBox.scrollTop = wireBox.scrollHeight;
+      wireShown = { server: session.server, length: lines.length };
+    }
     if (rows.length > announced) {
       const text = liveAnnouncement(rows.slice(announced), performance.now() - lastInteraction);
       if (text !== undefined) announcer.textContent = text;
     }
     announced = rows.length;
   };
+  // One render per frame, however many entries, wire lines or resizes came in it
   let pending = false;
-  bus.subscribe('trace.entry', () => {
+  const scheduleRender = () => {
     if (pending) return;
     pending = true;
     requestAnimationFrame(() => {
       pending = false;
       render();
     });
-  });
-  if (scenario.lanes) new ResizeObserver(() => render()).observe(output);
+  };
+  bus.subscribe('trace.entry', scheduleRender);
+  if (adapter) bus.subscribe('wire.entry', scheduleRender);
+  if (scenario.lanes) new ResizeObserver(scheduleRender).observe(output);
 
   const run = async (id: string) => {
     const token = gate.start();
     if (token === undefined) return;
-    for (const button of actions.querySelectorAll('button')) button.disabled = true;
-    announced = 0;
+    for (const button of actions.querySelectorAll<HTMLButtonElement>('button:not([data-server-control])'))
+      button.disabled = true;
+    if (!adapter) announced = 0;
     try {
       await session.run(id);
     } finally {
-      if (gate.end(token)) for (const button of actions.querySelectorAll('button')) button.disabled = false;
+      if (gate.end(token)) {
+        for (const button of actions.querySelectorAll<HTMLButtonElement>('button:not([data-server-control])'))
+          button.disabled = false;
+      }
     }
   };
   const renderActions = () => {
@@ -125,6 +177,12 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
           action.label
         ]);
         button.addEventListener('click', () => void run(action.id));
+        return button;
+      }),
+      // The server's own controls act on whichever server the session has now, outside the action buttons' gate
+      ...serverControls(scenario).map(({ label, command }) => {
+        const button = el('button', { type: 'button', class: BUTTON.other, 'data-server-control': '' }, [label]);
+        button.addEventListener('click', () => session.server?.run(command));
         return button;
       })
     );
@@ -141,10 +199,12 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
             await session.setValue(name, value);
             void editor?.then(view => view.setCode(session.code));
             renderActions();
+            announced = 0;
             render();
-            // The output always matches the controls: run the first action again
+            // The output always matches the controls: a feature runs its first action again (an adapter's stream
+            // starts over by itself)
             const first = session.actions[0];
-            if (first) await run(first.id);
+            if (first && !adapter) await run(first.id);
           },
           prefix
         )
@@ -165,11 +225,15 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
       actions,
       el('div', { class: 'flex flex-wrap items-center justify-between gap-2' }, [
         tabs.element,
+        // Short on phones, so the link stays on the tabs' row
         el('a', { class: 'link link-primary text-sm', href: `./playground/${scenarioPath(scenario)}` }, [
-          'Explore in the playground →'
+          el('span', { class: 'hidden sm:inline' }, ['Explore in the playground →']),
+          el('span', { class: 'sm:hidden' }, ['Playground →'])
         ])
       ]),
       output,
+      // Only an adapter's card has a Wire tab; elsewhere its panel would be an empty box taking half the room
+      ...(adapter ? [wireBox] : []),
       codeHost,
       announcer
     ])
@@ -179,7 +243,7 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
   renderControls();
   renderActions();
   render();
-  // Something to see from the start: the first action, once
+  // Something to see from the start: a feature's first action, once (an adapter's stream is already running)
   const first = session.actions[0];
-  if (first) await run(first.id);
+  if (first && !adapter) await run(first.id);
 }

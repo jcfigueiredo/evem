@@ -1,15 +1,22 @@
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
+import { siteBuild, stampHtml } from './src/siteStamp';
 
 /** A path relative to this file */
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
+
+/** The library version and commit this build runs, stamped into the pages' footers */
+const build = siteBuild();
 
 export default defineConfig({
   root: here('.'),
   // GitHub Pages serves the site from /evem/ (pages.yml sets DEMO_BASE)
   base: process.env['DEMO_BASE'] ?? '/',
-  plugins: [tailwindcss()],
+  plugins: [
+    tailwindcss(),
+    { name: 'evem-site-stamp', transformIndexHtml: { order: 'pre', handler: html => stampHtml(html, build) } }
+  ],
   resolve: {
     // The library's own sources, under the package's published names, so the demo's code reads like users' code
     alias: [

@@ -43,8 +43,8 @@ export function mountHeroFlow(root: HTMLElement): void {
   };
   pause.addEventListener('click', () => {
     paused = !paused;
+    // The label says what the button does; aria-pressed would make "Play, pressed" of it
     pause.textContent = paused ? 'Play' : 'Pause';
-    pause.setAttribute('aria-pressed', String(paused));
     update();
   });
   new IntersectionObserver(([entry]) => {

@@ -64,11 +64,16 @@ export function renderLaneChart(container: HTMLElement, chart: LaneChart | undef
         el(
           'div',
           { class: 'relative h-5' },
-          ticks.map(tick =>
+          // Labels centered on their tick; the last ends at it, so it never hangs past the chart (on phones, that
+          // would scroll the chart sideways)
+          ticks.map((tick, index) =>
             el(
               'span',
               {
-                class: 'absolute top-1 -translate-x-1/2 whitespace-nowrap text-xs text-base-content/70',
+                class:
+                  index === ticks.length - 1
+                    ? 'absolute top-1 -translate-x-full whitespace-nowrap text-xs text-base-content/70'
+                    : 'absolute top-1 -translate-x-1/2 whitespace-nowrap text-xs text-base-content/70',
                 style: left(chart.start + tick)
               },
               [`${tick} ms`]

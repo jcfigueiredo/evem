@@ -1,6 +1,7 @@
 import { el } from '../dom';
 import type { ControlValue } from '../engine/program';
 import { numberInput, optionLabel, type Control } from '../engine/session';
+import type { WireEntry } from '../fakes/wire';
 import type { TimelineRow, Tone } from '../timeline';
 
 // Full class names, so Tailwind finds them in the source
@@ -241,4 +242,27 @@ export function tabList(
   const element = el('div', { role: 'tablist', class: 'tabs tabs-border', 'aria-label': label }, buttons);
   show(current);
   return { element, select, selected: () => current, setCount };
+}
+
+// Full class names, so Tailwind finds them in the source
+/** How each kind of wire line is marked: what the client sent, what the server sent, and what happened to connections */
+export const WIRE_DIRECTION: Record<WireEntry['direction'], { mark: string; label: string; className: string }> = {
+  client: { mark: '→', label: 'client sent', className: 'text-info' },
+  server: { mark: '←', label: 'server sent', className: 'text-success' },
+  note: { mark: '·', label: 'connection', className: 'text-base-content/70' }
+};
+
+/** A wire entry's text with its line breaks visible (`↵`), since in an event stream they're the syntax */
+const visible = (text: string): string => text.replace(/\r/g, '␍').replace(/\n/g, '↵\n');
+
+/** One line of a server's wire log: its direction's mark, its text, and its time; for the Server tab and the cards */
+export function wireItem(entry: WireEntry): HTMLElement {
+  const direction = WIRE_DIRECTION[entry.direction];
+  return el('li', { class: 'flex gap-2' }, [
+    el('span', { class: `${direction.className} shrink-0`, title: direction.label, 'aria-label': direction.label }, [
+      direction.mark
+    ]),
+    el('span', { class: 'break-all whitespace-pre-wrap' }, [visible(entry.text)]),
+    el('span', { class: 'shrink-0 text-base-content/70' }, [`${entry.at} ms`])
+  ]);
 }

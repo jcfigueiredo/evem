@@ -1,5 +1,6 @@
 import type { EvEm } from '@jcfigueiredo/evem';
 import { el } from './dom';
+import { closeOnLeave } from './dropdown';
 
 /** The themes: Signal (dark, the default) and Signal Light */
 export type Theme = 'signal' | 'signal-light';
@@ -97,6 +98,8 @@ export function mountThemePicker(container: HTMLElement, bus: EvEm, placement = 
   media.addEventListener('change', () => {
     if (choice === 'system') apply();
   });
+  // It closes like the phone menu: on a choice (above), Escape, and a click or the focus elsewhere
+  closeOnLeave(details);
   container.replaceChildren(details);
   apply();
 }
