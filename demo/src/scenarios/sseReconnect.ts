@@ -20,7 +20,7 @@ export const sseReconnect: Scenario = {
   group: 'SSE',
   title: 'Reconnect & resume',
   summary:
-    "The server streams numbered ticks, each with its number as id, and ends the first stream after 5 (like examples/python/server.py --drop-after 5). SseHandler reconnects after the server's retry: delay and sends Last-Event-ID, so the ticks go on where they stopped. Drop or refuse connections from the Server card to see the backoff.",
+    "The server streams numbered ticks, each with its number as id, and ends the first stream after 5 (like examples/python/server.py --drop-after 5). SseHandler reconnects after the server's retry: delay and sends Last-Event-ID, so the ticks go on where they stopped. Drop or refuse connections from the Server tab to see the backoff.",
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/sse-adapter.md#resuming-with-last-event-id',
   controls: {
     backoff: { kind: 'toggle', label: 'backoff', default: true },

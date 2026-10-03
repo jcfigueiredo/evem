@@ -5,7 +5,7 @@ export const connectionQueue: Scenario = {
   group: 'WebSocket',
   title: 'Connection & offline queue',
   summary:
-    'WebSocketHandler connects EvEm to a socket: ws.send messages go out while connected, and wait in a queue while not. Drop the connection or refuse the next one from the Server card to see it reconnect and flush.',
+    'WebSocketHandler connects EvEm to a socket: ws.send messages go out while connected, and wait in a queue while not. Drop the connection or refuse the next one from the Server tab to see it reconnect and flush.',
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/websocket-adapter.md#offline-queue',
   controls: {
     reconnect: { kind: 'toggle', label: 'reconnect', default: true },

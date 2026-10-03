@@ -45,7 +45,7 @@ export interface ScenarioCheck {
   wait?: number;
 }
 
-/** A ready-made message for the Server card's send box */
+/** A ready-made message for the Server tab's send box */
 export interface ServerSample {
   label: string;
   text: string;
@@ -76,7 +76,7 @@ export interface Scenario {
   /**
    * A fake SSE server for the scenario: how it behaves, and samples for the server pane's send box. The code's
    * `SseHandler` reads from it unless the code passes its own `fetch` or another transport. With `local`, the
-   * development server can switch to a real SSE server instead (`/events` is proxied to port 8000), and the Server card
+   * development server can switch to a real SSE server instead (`/events` is proxied to port 8000), and the Server tab
    * shows `local.command` to start one.
    */
   sse?: FakeSseBehavior & { samples?: ServerSample[]; local?: { command: string } };

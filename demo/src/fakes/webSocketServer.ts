@@ -65,7 +65,7 @@ export class FakeWebSocketServer implements FakeServer {
     return this.sockets.size;
   }
 
-  /** The Server card's controls: `send <text>`, `drop`, `refuse` */
+  /** The Server tab's controls: `send <text>`, `drop`, `refuse` */
   run(command: string, argument = ''): void {
     if (command === 'send') this.send(argument);
     else if (command === 'drop') this.drop();

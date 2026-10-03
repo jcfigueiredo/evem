@@ -150,7 +150,7 @@ describe('FakeWebSocketServer', () => {
     ]);
   });
 
-  it('runs the Server card controls by name, and refuses one it lacks', async () => {
+  it('runs the Server tab controls by name, and refuses one it lacks', async () => {
     const { server, wire } = setup();
     await vi.advanceTimersByTimeAsync(20);
     server.run('refuse');
