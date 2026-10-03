@@ -150,21 +150,31 @@ export class WebSocketHandler {
    */
   private autoWireWebSocketEvents(): void {
     const socket = this.ws;
-    // A connection attempt that fails may report only an error (see onerror)
+    // A failed connection attempt is reported as an error and then a close (browsers, ws), as an error only
+    // (Node.js 22's built-in WebSocket), or as a close and then an error (sockets that reconnect by themselves,
+    // like reconnecting-websocket). Whichever comes first counts the attempt as failed, once; an open starts over
     let opened = socket.readyState === socket.OPEN;
+    let endHandled = false;
+    const handleEnd = async () => {
+      if (endHandled || this.isDisconnecting) {
+        return;
+      }
+      endHandled = true;
+      await this.handleUnexpectedClose();
+    };
 
     // Wire onopen
     this.ws.onopen = async event => {
       opened = true;
+      endHandled = false;
       this.reconnectAttempts = 0;
       await this.connectionManager.transitionTo('connected');
     };
 
     // Wire onclose
     this.ws.onclose = async event => {
-      if (!this.isDisconnecting) {
-        await this.handleUnexpectedClose();
-      }
+      opened = false;
+      await handleEnd();
     };
 
     // Wire onerror
@@ -180,14 +190,9 @@ export class WebSocketHandler {
         this.options.onError(error);
       }
 
-      // A failed connection attempt gets an error and then, per the WebSocket standard, a close. Node.js 22's
-      // built-in WebSocket never sends that close, so the attempt counts as failed here, once: this socket's
-      // handlers come off (a close that does follow is ignored) and its further errors are swallowed, since a
-      // `ws` socket without an error listener throws
-      if (!opened && !this.isDisconnecting) {
-        this.detachWebSocketEvents();
-        socket.onerror = () => undefined;
-        void this.handleUnexpectedClose();
+      // An error on an open socket waits for its close
+      if (!opened) {
+        void handleEnd();
       }
     };
 
@@ -203,7 +208,9 @@ export class WebSocketHandler {
   private detachWebSocketEvents(): void {
     this.ws.onopen = null;
     this.ws.onclose = null;
-    this.ws.onerror = null;
+    // Errors from a socket we let go of are swallowed: a ws socket closed while connecting still emits one,
+    // and throws it when nothing listens
+    this.ws.onerror = () => undefined;
     this.ws.onmessage = null;
   }
 

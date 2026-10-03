@@ -52,7 +52,8 @@ First release published to npm, as `@jcfigueiredo/evem`. Version 0.2.0 was never
 
 ### Fixed
 
-- **`WebSocketHandler` with Node.js 22's built-in `WebSocket`**: a refused connection attempt fires only `error` there, never `close`, so with `reconnect: true` the handler didn't retry, stayed in `reconnecting` and never published `ws.reconnect.failed`. An error on a socket that never opened now counts as the failed attempt (once: a `close` that follows it, as in browsers and with `ws`, is ignored).
+- **`WebSocketHandler` with Node.js 22's built-in `WebSocket`**: a refused connection attempt fires only `error` there, never `close`, so with `reconnect: true` the handler didn't retry, stayed in `reconnecting` and never published `ws.reconnect.failed`. An error on a socket that isn't open now counts as the failed attempt: whichever of `error` and `close` comes first counts, once per attempt, and the handler keeps listening, so sockets that reconnect by themselves (`close` then `error`, then `open` again) are still followed.
+- **`WebSocketHandler.disconnect()`** (and replacing a socket while reconnecting) no longer crashes Node.js with a `ws` socket that's still connecting: `ws` emits an error after `close()`, and throws it when nothing listens. Sockets the handler lets go of now keep a no-op error listener.
 - **`ws.connection.state`** is no longer published as `disconnected` → `disconnected` when a socket that never opened closes without `reconnect`.
 - **Memory-leak warning details** list the subscriptions the warning counted (those to that exact event name or pattern). They used to list every subscription whose name matched it, and to count middleware in the total.
 - `unsubscribe(event, callback)` now removes subscriptions created with options (filter, once, throttle, debounce, schema) and cancels their pending timers.

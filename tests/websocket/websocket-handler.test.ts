@@ -970,6 +970,65 @@ describe('WebSocketHandler - regressions', () => {
       expect(prefixedHandler).not.toHaveBeenCalled();
     });
   });
+
+  describe('failed attempts reported in other orders, and sockets it has let go of', () => {
+    /** Like the ws package: an 'error' nobody listens to is thrown */
+    class WsLikeSocket extends MockWebSocket {
+      simulateError(error: Error = new Error('WebSocket was closed before the connection was established')): void {
+        if (!this.onerror) {
+          throw error;
+        }
+        super.simulateError(error);
+      }
+    }
+
+    it('should follow a socket that reconnects by itself: a close and an error from a failed attempt, then an open', async () => {
+      // e.g. reconnecting-websocket or partysocket passed in as the socket: they retry inside the same object
+      const states: string[] = [];
+      evem.subscribe('ws.connection.state', (change: any) => {
+        states.push(`${change.from}->${change.to}`);
+      });
+      const serverHandler = vi.fn();
+      evem.subscribe('server.hello', serverHandler);
+      const socket = new MockWebSocket('wss://test.example.com');
+      socket.autoConnect = false;
+      handler = new WebSocketHandler(socket, evem);
+
+      socket.simulateClose(1006);
+      socket.simulateError();
+      await tick();
+      socket.simulateOpen();
+      await tick();
+      socket.simulateMessage(JSON.stringify({ event: 'hello', data: { n: 1 } }));
+      await tick();
+
+      expect(states).toEqual(['disconnected->connected']);
+      expect(serverHandler).toHaveBeenCalledWith({ n: 1 });
+    });
+
+    it('should leave an error on a socket that was already open when passed in to the close that follows it', async () => {
+      const socket = new MockWebSocket('wss://test.example.com');
+      socket.autoConnect = false;
+      socket.readyState = socket.OPEN;
+      handler = new WebSocketHandler(socket, evem, { reconnect: true });
+      await tick();
+
+      socket.simulateError();
+      await tick();
+
+      expect(handler.getConnectionState()).toBe('connected');
+    });
+
+    it('should swallow errors from a socket it has let go of, like the one ws emits after closing a connecting socket', async () => {
+      const socket = new WsLikeSocket('wss://test.example.com');
+      socket.autoConnect = false;
+      handler = new WebSocketHandler(socket, evem);
+
+      await handler.disconnect();
+
+      expect(() => socket.simulateError()).not.toThrow();
+    });
+  });
 });
 
 describe('WebSocketHandler - reconnect', () => {
