@@ -17,5 +17,14 @@ describe('the site stamp', () => {
   it('reads the version from package.json and the commit from GitHub Actions, else from git', () => {
     expect(siteBuild({ GITHUB_SHA: 'feedface' })).toEqual({ version, commit: 'feedface' });
     expect(siteBuild({}).commit).toMatch(/^[0-9a-f]{40}$/);
+    expect(siteBuild({ GITHUB_SHA: '' }).commit).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  it('builds without git (a source download, or git not installed): the commit is unknown, and links to the repository', () => {
+    const build = siteBuild({}, () => undefined);
+    expect(build).toEqual({ version, commit: '' });
+    expect(stampHtml('<a href="%EVEM_COMMIT_URL%">%EVEM_COMMIT%</a>', build)).toBe(
+      '<a href="https://github.com/jcfigueiredo/evem">unknown</a>'
+    );
   });
 });
