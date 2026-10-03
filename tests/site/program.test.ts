@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { compileProgram, renderCode, slug, splitActions, toLiteral } from '../../demo/src/engine/program';
+import { actionLabel, compileProgram, renderCode, slug, splitActions, toLiteral } from '../../demo/src/engine/program';
+import { defaultValues, rawControls } from '../../demo/src/engine/session';
+import { scenarios } from '../../demo/src/scenarios';
 
 describe('toLiteral', () => {
   it('writes strings in single quotes, escaped, and numbers and booleans as they are', () => {
@@ -35,6 +37,23 @@ describe('renderCode', () => {
 describe('slug', () => {
   it('makes lowercase words joined by dashes', () => {
     expect(slug('Publish order.created!')).toBe('publish-order-created');
+  });
+});
+
+describe('actionLabel', () => {
+  it("reads an action's label from its `// ▶ Label` line, indented or not, and nothing from other lines", () => {
+    expect(actionLabel('// ▶ Show the last event id')).toBe('Show the last event id');
+    expect(actionLabel('   // ▶  Type "hello world"  ')).toBe('Type "hello world"');
+    expect(actionLabel('// Show the last event id')).toBeUndefined();
+    expect(actionLabel("console.log('// ▶ not a marker')")).toBeUndefined();
+  });
+
+  it("finds exactly the actions compileProgram finds, in every scenario: the code's ▶ buttons and its action buttons agree", () => {
+    for (const scenario of scenarios) {
+      const code = renderCode(scenario.code, defaultValues(scenario), rawControls(scenario));
+      const labels = code.split('\n').flatMap(line => actionLabel(line) ?? []);
+      expect(labels, scenario.id).toEqual(compileProgram(code).actions.map(action => action.label));
+    }
   });
 });
 

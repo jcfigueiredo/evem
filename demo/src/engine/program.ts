@@ -38,15 +38,19 @@ export function slug(label: string): string {
     .replace(/^-|-$/g, '');
 }
 
+/** The label of an action's `// ▶ Label` line, or undefined for any other line */
+export function actionLabel(line: string): string | undefined {
+  return ACTION_MARKER.exec(line.trim())?.[1]?.trim();
+}
+
 /** The setup code (before the first marker) and the action blocks of a scenario's code */
 export function splitActions(code: string): { setup: string; actions: Array<Action & { code: string }> } {
   const lines = code.split('\n');
   const setup: string[] = [];
   const actions: Array<Action & { code: string[] }> = [];
   for (const line of lines) {
-    const marker = ACTION_MARKER.exec(line.trim());
-    if (marker) {
-      const label = marker[1]!.trim();
+    const label = actionLabel(line);
+    if (label !== undefined) {
       actions.push({ id: slug(label), label, code: [] });
     } else if (actions.length > 0) {
       actions[actions.length - 1]!.code.push(line);
