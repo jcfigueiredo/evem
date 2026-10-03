@@ -24,7 +24,11 @@
     /* Path Aliases */
     "baseUrl": ".",
     "paths": {
-      "~/*": ["./src/*"]
+      "~/*": ["./src/*"],
+      "@jcfigueiredo/evem": ["./src/index.ts"],
+      "@jcfigueiredo/evem/websocket": ["./src/websocket/index.ts"],
+      "@jcfigueiredo/evem/sse": ["./src/sse/index.ts"],
+      "@jcfigueiredo/evem/sse/server": ["./src/sse/server.ts"]
     }
   },
   "include": ["**/*.ts"],

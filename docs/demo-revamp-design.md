@@ -1,6 +1,6 @@
 # Demo Revamp Design
 
-> **Status: phase 1 (examples audit) implemented; phases 2–5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
+> **Status: phases 1 (examples audit) and 2 (foundation) implemented; phases 3–5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
 
 ## Summary
 
@@ -92,7 +92,7 @@ demo/
 - **Coexisting with the old demo until phase 5:** phase 2 replaces the old `demo/index.html` (the card index) with the showcase, a minimal hero linking to the playground until phase 4 fills it in, and removes `tests/demo/demoIndex.test.ts`, which only checked that index. The old feature pages in `demo/examples/` and their tests stay, and can still be opened directly, until phase 5 deletes them; they aren't part of the Vite build.
 - **The real library, imported like users do:** Vite aliases `@jcfigueiredo/evem`, `@jcfigueiredo/evem/websocket`, `@jcfigueiredo/evem/sse` and `@jcfigueiredo/evem/sse/server` to the matching files in `src/`. Code samples use the published package name, and library edits show up in the playground at once.
 - **Scripts:** `pnpm demo` (dev server), `pnpm demo:build` (static site into `demo/dist/`, also part of `pnpm check` and CI). Prettier's `format` / `format:check` cover `demo/src`, `demo/*.html`, `demo/playground` and `demo/vite.config.ts`, not the old pages in `demo/examples/` (deleted in phase 5).
-- **Dependencies (dev only):** `vite` 7, `tailwindcss` 4, `@tailwindcss/vite`, `daisyui` 5, CodeMirror 6 (`@codemirror/*`), `@fontsource-variable/inter`, `@fontsource-variable/jetbrains-mono`. Vitest 1.0 keeps its own Vite 5; upgrading Vitest is a separate change.
+- **Dependencies (dev only):** `vite` 8, `tailwindcss` 4, `@tailwindcss/vite`, `daisyui` 5, CodeMirror 6 (`@codemirror/*`), `@fontsource-variable/inter`, `@fontsource-variable/jetbrains-mono`. Vitest 1.0 keeps its own Vite 5; upgrading Vitest is a separate change.
 - **TypeScript:** `tsconfig.json` already includes `**/*.ts`, so `pnpm typecheck` covers the demo; `vite/client` types are added for `?raw` imports.
 
 ### Themes
@@ -210,8 +210,8 @@ A scroll tour at the site root:
 
 ## Risks
 
-- **`isEventMatch` is private.** The engine depends on it in one place, pinned by a test; if it's renamed, that test fails rather than the timeline silently lying.
-- **Two Vite versions** (7 for the demo, 5 inside Vitest 1.0). Harmless, but upgrading Vitest later removes the duplicate.
+- **The engine reaches private `EvEm` methods**: `isEventMatch` and `isMiddlewareReroute` (matching and reroutes, decided as EvEm decides them) and `enterPublishChain` / `runInPublishChain` (each publish has its own chain and EvEm runs every handler in it, which tells the trace which publish a handler belongs to when publishes overlap). Tests pin each; if one is renamed or changes, they fail rather than the timeline silently lying.
+- **Two Vite versions** (8 for the demo, 5 inside Vitest 1.0). Harmless, but upgrading Vitest later removes the duplicate.
 - **Streaming through Vite's proxy** (Python mode): if the proxy buffers the stream, the fallback is to add CORS headers to the Python examples behind a `--cors` flag.
 - **Doc samples as tests** can make documentation edits fail CI. That's the point, and the fragment marker keeps intentional fragments cheap.
 - **Bundle size** of CodeMirror on the showcase: loaded lazily, only when "Show code" is opened.

@@ -1594,7 +1594,11 @@ pnpm test:coverage   # With a coverage report
 pnpm typecheck       # TypeScript check
 pnpm format          # Format the code with Prettier (pnpm format:check only checks)
 pnpm check           # Everything CI runs: format check, type check, tests and package check
+pnpm demo            # The demo site (showcase and playground) on a local dev server
+pnpm demo:build      # Build the demo site into demo/dist/
 ```
+
+Developing needs Node.js 20.19+ or 22.12+ (the demo site is built with Vite 8, and the tests build it); the package itself runs on Node.js 20+.
 
 Maintainers release new versions with `pnpm release <version>`; see [Releasing](docs/releasing.md).
 
