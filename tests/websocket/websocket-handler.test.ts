@@ -1,3 +1,4 @@
+import { createServer, type AddressInfo } from 'node:net';
 import { describe, it, expect, beforeEach, vi, afterEach, type Mock } from 'vitest';
 import { EvEm } from '../../src/eventEmitter';
 import { WebSocketHandler } from '../../src/websocket/WebSocketHandler';
@@ -1150,6 +1151,55 @@ describe('WebSocketHandler - reconnect', () => {
     expect(instances).toHaveLength(1);
     expect(states).toEqual(['connected', 'disconnected']);
   });
+
+  it("should count an error on a socket that never opened as a failed attempt, even without a close (Node.js 22's WebSocket)", async () => {
+    handler = createHandler(url, { maxReconnectAttempts: 2 });
+
+    socket(0).simulateError(new Error('connect ECONNREFUSED'));
+    await advance(0);
+    expect(handler.getConnectionState()).toBe('reconnecting');
+
+    await advance(100);
+    expect(instances).toHaveLength(2);
+    socket(1).simulateError();
+    await advance(100);
+    expect(instances).toHaveLength(3);
+    socket(2).simulateError();
+    await advance(1000);
+
+    expect(instances).toHaveLength(3);
+    expect(states).toEqual(['reconnecting', 'disconnected']);
+    expect(reconnectFailedHandler).toHaveBeenCalledWith({ attempts: 2 });
+  });
+
+  it('should count an error followed by a close (browsers, ws) as one failed attempt', async () => {
+    handler = createHandler(url, { maxReconnectAttempts: 1 });
+
+    socket(0).simulateError();
+    socket(0).simulateClose(1006);
+    await advance(100);
+    expect(instances).toHaveLength(2);
+
+    socket(1).simulateError();
+    socket(1).simulateClose(1006);
+    await advance(1000);
+
+    expect(instances).toHaveLength(2);
+    expect(states).toEqual(['reconnecting', 'disconnected']);
+    expect(reconnectFailedHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('should leave an error on an open socket to the close that follows it', async () => {
+    handler = createHandler(url);
+    socket(0).simulateOpen();
+    await advance(0);
+
+    socket(0).simulateError();
+    await advance(1000);
+
+    expect(handler.getConnectionState()).toBe('connected');
+    expect(instances).toHaveLength(1);
+  });
 });
 
 describe('WebSocketHandler - request() and ws.send.* events', () => {
@@ -1400,4 +1450,31 @@ describe('WebSocketHandler - edge cases found while documenting', () => {
     expect(messages).toEqual([null]);
     expect(parseErrors).not.toHaveBeenCalled();
   });
+});
+
+describe.skipIf(typeof WebSocket === 'undefined')("WebSocketHandler with Node.js's built-in WebSocket", () => {
+  it('should retry and give up when nothing listens on the port', async () => {
+    // A port nothing listens on: open one, note it, close it
+    const probe = createServer();
+    await new Promise<void>(resolve => probe.listen(0, '127.0.0.1', resolve));
+    const { port } = probe.address() as AddressInfo;
+    await new Promise(resolve => probe.close(resolve));
+
+    const evem = new EvEm();
+    const states: string[] = [];
+    evem.subscribe('ws.connection.state', (change: any) => {
+      states.push(change.to);
+    });
+    const failed = new Promise(resolve => evem.subscribe('ws.reconnect.failed', resolve));
+    const handler = new WebSocketHandler(`ws://127.0.0.1:${port}`, evem, {
+      reconnect: true,
+      reconnectDelay: 10,
+      maxReconnectAttempts: 2,
+      onError: () => {}
+    });
+
+    await expect(failed).resolves.toEqual({ attempts: 2 });
+    expect(states).toEqual(['reconnecting', 'disconnected']);
+    await handler.disconnect();
+  }, 10_000);
 });

@@ -149,8 +149,13 @@ export class WebSocketHandler {
    * Auto-wire WebSocket lifecycle events to EvEm and ConnectionManager
    */
   private autoWireWebSocketEvents(): void {
+    const socket = this.ws;
+    // A connection attempt that fails may report only an error (see onerror)
+    let opened = socket.readyState === socket.OPEN;
+
     // Wire onopen
     this.ws.onopen = async event => {
+      opened = true;
       this.reconnectAttempts = 0;
       await this.connectionManager.transitionTo('connected');
     };
@@ -173,6 +178,16 @@ export class WebSocketHandler {
       // Call custom error handler if provided
       if (this.options.onError) {
         this.options.onError(error);
+      }
+
+      // A failed connection attempt gets an error and then, per the WebSocket standard, a close. Node.js 22's
+      // built-in WebSocket never sends that close, so the attempt counts as failed here, once: this socket's
+      // handlers come off (a close that does follow is ignored) and its further errors are swallowed, since a
+      // `ws` socket without an error listener throws
+      if (!opened && !this.isDisconnecting) {
+        this.detachWebSocketEvents();
+        socket.onerror = () => undefined;
+        void this.handleUnexpectedClose();
       }
     };
 
