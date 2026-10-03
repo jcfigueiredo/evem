@@ -146,6 +146,11 @@ export class FakeWebSocketServer {
   /** @internal A frame from the server to one client */
   reply(socket: FakeSocket, message: unknown): void {
     const text = typeof message === 'string' ? message : JSON.stringify(message);
+    // An answer that comes after its connection closed (a slow method, then a drop) never reaches the wire
+    if (!this.sockets.has(socket)) {
+      this.note(`not sent (connection ${socket.number} is closed): ${text}`);
+      return;
+    }
     this.log('server', text);
     setTimeout(() => socket.deliver(text), this.latency);
   }

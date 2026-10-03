@@ -120,6 +120,25 @@ describe('FakeWebSocketServer', () => {
     ]);
   });
 
+  it('notes an answer that comes after its connection closed as not sent, rather than as a frame the server sent', async () => {
+    const { server, handler, wire } = setup({
+      methods: { 'reports.build': () => new Promise(resolve => setTimeout(() => resolve({ rows: 120 }), 3000)) }
+    });
+    await vi.advanceTimersByTimeAsync(20);
+    // Still pending when the test ends: the answer is lost, and the timeout is 5 s away
+    void handler.request('reports.build', {}, { timeout: 5000 }).catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(400);
+    server.drop();
+    await vi.advanceTimersByTimeAsync(3000);
+
+    const lines = wire();
+    expect(lines.at(-2)).toBe('note: connection 1 dropped (1006)');
+    expect(lines.at(-1)).toMatch(
+      /^note: not sent \(connection 1 is closed\): \{"type":"response","id":"[^"]+","result":\{"rows":120\}\}$/
+    );
+    expect(lines.filter(line => line.startsWith('server:'))).toEqual([]);
+  });
+
   it('notes a send or a drop when no connection is open, instead of doing nothing', async () => {
     const { server, wire } = setup({}, { reconnect: false });
     await vi.advanceTimersByTimeAsync(20);
