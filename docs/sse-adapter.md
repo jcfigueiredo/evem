@@ -160,7 +160,7 @@ The `eventTypes`, `EventSourceConstructor` and `lastEventIdParam` options apply 
 | `lastEventId` | none | Event id to resume from on the first connection, e.g. one saved with `getLastEventId()` before a page reload. |
 | `reconnect` | `true` | Reconnect when a connection ends, as `shouldReconnect` decides. With `false`, the first end is final. |
 | `reconnectDelay` | `3000` | Base delay before reconnecting, in ms. A `retry:` from the server replaces it. |
-| `maxReconnectDelay` | `30000` | Upper limit for the backed-off delay, in ms. |
+| `maxReconnectDelay` | `30000` | Cap for the backed-off delay, in ms, before jitter: with `backoff`, the actual delay can be up to 20% longer. |
 | `backoff` | `true` | Double the delay after each failed attempt, with ±20% jitter. With `false`, the delay is fixed and has no jitter. |
 | `maxReconnectAttempts` | `Infinity` | Reconnection attempts without a successful connection before giving up and publishing `sse.reconnect.failed`. |
 | `shouldReconnect` | [the defaults](#how-a-connection-ends) | `(info: SseReconnectInfo) => boolean`. Replaces the default decision of whether to reconnect. |
@@ -197,7 +197,7 @@ With your own transport, the transport makes the request, so passing `headers`, 
 | `sse.error` | `{ error, reason, status?, contentType? }` | A connection failed or ended badly. `reason` says why (see [How a connection ends](#how-a-connection-ends)); `status` is set for HTTP errors, `contentType` for a wrong content type. |
 | `sse.reconnect.failed` | `{ attempts }` | `maxReconnectAttempts` was reached. The state is now `disconnected`. |
 
-Subscriber errors are handled by EvEm's default error policy: they're logged, and the next subscriber runs. A publish that rejects (e.g. because of a `schemaErrorPolicy: THROW` subscriber) is logged with `console.error` rather than left as an unhandled rejection.
+Subscriber errors are handled by EvEm's default error policy: they're logged, and the next subscriber runs. A publish that rejects (e.g. because of a `schemaErrorPolicy: THROW` subscriber) is logged with `console.error` rather than left as an unhandled rejection, except for `sse.connection.state`: a rejected state-change publish is ignored silently, and the state change still happens.
 
 `SseEvents` maps each of these event names to its payload type, so you can type subscribers without repeating the shapes:
 
@@ -356,7 +356,7 @@ const evem = new EvEm();
 const sse = new SseHandler('/api/events', evem, { heartbeatTimeout: 45_000 });
 ```
 
-The timer starts with the request and restarts when the response arrives and with every chunk received. It's off by default and isn't available with the EventSource transport. A custom transport supports it if it calls `activity()`.
+The timer starts with the request and restarts when the response arrives and with every chunk received. It's off by default and isn't available with the EventSource transport. A custom transport supports it if it calls `activity()`. With `sequential: true`, the time spent waiting for an event's subscribers counts too, because nothing is read meanwhile: keep the timeout well above how long they can take.
 
 ## Resuming with Last-Event-ID
 
@@ -366,6 +366,8 @@ When the server gives events an `id:`, the handler remembers the id of the last 
 - **EventSource transport:** the browser sends the header on its own retries; an `EventSource` the handler creates gets it as a query parameter (`?lastEventId=42`, see [EventSource](#eventsource-transport-eventsource)).
 
 As in the SSE specification, an id carries over to later events that don't have one, and an empty `id:` line clears it. A message with an `id:` but no `data` isn't dispatched as an event, but the handler still records its id (fetch transport; `EventSource` doesn't report it).
+
+With the EventSource transport, the id carries over only within one browser `EventSource`. In an `EventSource` the handler creates (the first one, with the `lastEventId` option, and each one after the browser gives up), an event without an `id:` clears the last event id, so give every event an id if you rely on resuming.
 
 To resume after a page reload, save `getLastEventId()` and pass it back as `lastEventId`:
 
@@ -605,7 +607,7 @@ export function handleEvents(request: Request): Response {
 
 #### Server checklist
 
-- **Return `204 No Content`** to tell a client to stop for good, and `401`/`403` for auth failures: the handler stops (and reports the status). Clients using the EventSource transport can't see the status and retry instead.
+- **Return `204 No Content`** to tell a client to stop for good, and `401`/`403` for auth failures: the handler stops in both cases, and reports `401`/`403` as `sse.error` with the status (a `204` is a normal end and isn't reported). Clients using the EventSource transport can't see the status and retry instead.
 - **Return `503` with `Retry-After`** to shed load: clients using the fetch transport wait at least that long.
 - **Send a heartbeat comment** every 15–30 seconds, so proxies don't close idle connections and clients can use `heartbeatTimeout`.
 - **Don't compress or buffer the stream.** Compression middleware holds data back until it has enough to compress; skip it for `text/event-stream`, or flush after every write.
@@ -728,7 +730,7 @@ it('parses an event stream from fetch', async () => {
 });
 ```
 
-For a stream that stays open, build the body as a `ReadableStream` and keep its controller to `enqueue()` chunks, `close()` or `error()` it during the test. The repository's own `tests/sse/helpers/` has a `FakeTransport`, a controllable fake `fetch` and a `MockEventSource` built this way.
+For a stream that stays open, build the body as a `ReadableStream` and keep its controller to `enqueue()` chunks, `close()` or `error()` it during the test. Make it honour `init.signal`: when the signal aborts, reject the pending `fetch` and `error()` the body's controller, as a real `fetch` does. Otherwise `disconnect()` and `heartbeatTimeout` can't end the connection. The repository's own `tests/sse/helpers/` has a `FakeTransport`, a controllable fake `fetch` and a `MockEventSource` built this way.
 
 ## Using SSE and WebSocket together
 
