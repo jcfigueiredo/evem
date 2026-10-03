@@ -1,6 +1,6 @@
 # Demo Revamp Design
 
-> **Status: phases 1 (examples audit), 2 (foundation) and 3 (playground: 3a core scenarios, 3b flow control, 3c-1 WebSocket and Recipes, 3c-2 SSE and the local server switch) implemented; 4 and 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
+> **Status: phases 1 (examples audit), 2 (foundation), 3 (playground: 3a core scenarios, 3b flow control, 3c-1 WebSocket and Recipes, 3c-2 SSE and the local server switch) and 4a (showcase: navbar, hero, features) implemented; 4b and 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
 
 ## Summary
 
@@ -193,6 +193,8 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 | 3c-2 review | `Scenario.sse.local` can be set on any SSE scenario, though only one whose simulated server matches what the Python examples serve should have it: say so on the field | 5 |
 
 ## Phase 4: Showcase
+
+Phase 4 ships in two parts, each with its own plan and pull request: **4a**, the navbar, the hero and the feature sections; **4b**, the adapter cards, Why EvEm, the footer, the metadata and the follow-ups for phase 4.
 
 A scroll tour at the site root:
 
