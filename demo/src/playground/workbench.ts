@@ -125,8 +125,16 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
 
   // Flow control scenarios show the latest action over time too
   const lanesHost = scenario.lanes ? el('div', {}) : undefined;
-  // Adapter scenarios show their fake server: the wire log, and controls
-  const server = scenario.websocket ? serverPane(session, scenario.websocket.sample ?? '') : undefined;
+  // Adapter scenarios show their server: the wire log, and controls
+  const server =
+    scenario.websocket || scenario.sse
+      ? serverPane(session, async local => {
+          startOver();
+          await session.useLocalServer(local);
+          renderActions();
+          renderTimeline();
+        })
+      : undefined;
 
   const renderTimeline = () => {
     const rows = timelineRows(session.trace.entries);
