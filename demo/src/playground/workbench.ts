@@ -2,7 +2,7 @@ import type { EvEm } from '@jcfigueiredo/evem';
 import { el } from '../dom';
 import type { ControlValue } from '../engine/program';
 import { ScenarioSession, type Control, type Scenario } from '../engine/session';
-import { timelineRows, type Tone } from '../timeline';
+import { announcement, timelineRows, type Tone } from '../timeline';
 
 // Full class names, so Tailwind finds them in the source
 const TONE_CLASS: Record<Tone, string> = {
@@ -73,7 +73,11 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     busy = false;
   };
 
-  const timeline = el('ol', { class: 'relative ms-2 border-s border-base-300 space-y-1.5', 'aria-live': 'polite' });
+  const timeline = el('ol', { class: 'relative ms-2 border-s border-base-300 space-y-1.5' });
+  // The list is rebuilt on every render, so screen readers hear only what's new, from this status line
+  const announcer = el('p', { class: 'sr-only', 'aria-live': 'polite' });
+  let announcedTrace = session.trace;
+  let announcedRows = 0;
   const timelineBox = el('div', { class: 'max-h-[26rem] overflow-y-auto pe-2' }, [timeline]);
   const controls = el('fieldset', { class: 'space-y-1' });
   const actions = el('div', { class: 'flex flex-wrap gap-2 pt-2' });
@@ -107,6 +111,13 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
       timeline.append(el('li', { class: 'ps-4 text-sm text-base-content/60' }, ['Nothing yet: run an action.']));
     }
     timelineBox.scrollTop = timelineBox.scrollHeight;
+    // A new trace means the reader started over (a control, Reset, edited code): its setup isn't announced
+    if (session.trace !== announcedTrace) {
+      announcedTrace = session.trace;
+    } else if (rows.length > announcedRows) {
+      announcer.textContent = announcement(rows.slice(announcedRows));
+    }
+    announcedRows = rows.length;
   };
   let pending = false;
   const scheduleRender = () => {
@@ -211,7 +222,8 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
       el('section', { class: 'card bg-base-100 border border-base-300', 'aria-label': 'What EvEm did' }, [
         el('div', { class: 'card-body p-4 gap-3' }, [
           el('h2', { class: 'text-xs uppercase tracking-widest text-base-content/70' }, ['What EvEm did']),
-          timelineBox
+          timelineBox,
+          announcer
         ])
       ])
     ]),

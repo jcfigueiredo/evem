@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TraceEntry } from '../../demo/src/engine/trace';
-import { describeEntry, preview, timelineRows } from '../../demo/src/timeline';
+import { announcement, describeEntry, preview, timelineRows } from '../../demo/src/timeline';
 
 describe('preview', () => {
   it('shows data as JSON, shortened with an ellipsis', () => {
@@ -63,5 +63,17 @@ describe('timelineRows', () => {
       '1 resolved true',
       '0 resolved true'
     ]);
+  });
+});
+
+describe('announcement', () => {
+  it('reads rows as one short sentence each, for a screen reader, and nothing for no rows', () => {
+    const rows = timelineRows([
+      { kind: 'publish', id: 1, event: 'order.created', data: { id: 42 }, at: 0 },
+      { kind: 'call', subscription: 'audit', data: { id: 42 }, publish: 1, at: 1 },
+      { kind: 'result', id: 1, result: true, at: 2 }
+    ]);
+    expect(announcement(rows)).toBe('publish order.created. audit ran. resolved true.');
+    expect(announcement([])).toBe('');
   });
 });

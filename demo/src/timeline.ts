@@ -102,3 +102,8 @@ export function timelineRows(entries: readonly TraceEntry[]): TimelineRow[] {
     return { ...describeEntry(entry), depth, at: entry.at };
   });
 }
+
+/** Rows as a screen reader hears them: one short sentence each */
+export function announcement(rows: readonly TimelineRow[]): string {
+  return rows.map(row => `${row.text}.`).join(' ');
+}
