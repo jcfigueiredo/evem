@@ -12,6 +12,10 @@ export interface TimelineRow {
   depth: number;
   /** Milliseconds since the scenario started */
   at: number;
+  /** Milliseconds since the latest action started (none before the first action) */
+  since?: number;
+  /** The kind of trace entry the line shows (what the code logged reads differently from EvEm's own steps) */
+  kind: TraceEntry['kind'];
 }
 
 const SKIP_TEXT: Record<SkipReason, string> = {
@@ -40,7 +44,7 @@ export function preview(value: unknown, max = 72): string {
 }
 
 /** What a trace entry says, in words */
-export function describeEntry(entry: TraceEntry): Omit<TimelineRow, 'depth' | 'at'> {
+export function describeEntry(entry: TraceEntry): Omit<TimelineRow, 'depth' | 'at' | 'since' | 'kind'> {
   switch (entry.kind) {
     case 'subscribe':
       return {
@@ -119,21 +123,43 @@ export function describeEntry(entry: TraceEntry): Omit<TimelineRow, 'depth' | 'a
 /** The trace as timeline rows, in order; what happened during a publish is indented under it */
 export function timelineRows(entries: readonly TraceEntry[]): TimelineRow[] {
   const publishDepth = new Map<number, number>();
-  const publishedAt = new Map<number, number>();
+  const publishedAt = new Map<number, string>();
+  let actionAt: number | undefined;
+  /** A time as the timeline shows it: since the latest action (`+N ms`), or since the start before any action */
+  const shown = (at: number) => (actionAt === undefined ? `${at} ms` : `+${at - actionAt} ms`);
   return entries.map(entry => {
+    if (entry.kind === 'action') actionAt = entry.at;
+    const since = actionAt === undefined ? {} : { since: entry.at - actionAt };
     if (entry.kind === 'call' && entry.later) {
       // A call that comes after its publish ended (debounce) stands on its own, and says which publish it came from
       const at = entry.publish === undefined ? undefined : publishedAt.get(entry.publish);
-      const text = `${entry.subscription} ran later${at === undefined ? '' : `, with the data published at ${at} ms`}`;
-      return { ...describeEntry(entry), text, depth: 0, at: entry.at };
+      const text = `${entry.subscription} ran later${at === undefined ? '' : `, with the data published at ${at}`}`;
+      return { ...describeEntry(entry), text, depth: 0, at: entry.at, ...since, kind: entry.kind };
     }
     const depth = entry.publish === undefined ? 0 : (publishDepth.get(entry.publish) ?? 0) + 1;
     if (entry.kind === 'publish') {
       publishDepth.set(entry.id, depth);
-      publishedAt.set(entry.id, entry.at);
+      publishedAt.set(entry.id, shown(entry.at));
     }
-    return { ...describeEntry(entry), depth, at: entry.at };
+    return { ...describeEntry(entry), depth, at: entry.at, ...since, kind: entry.kind };
   });
+}
+
+/** One line about a setup the timeline folds away: how many subscriptions, publishes, logs and errors it made */
+export function setupSummary(entries: readonly TraceEntry[]): string {
+  const count = (kind: TraceEntry['kind']) => entries.filter(entry => entry.kind === kind).length;
+  const parts = (
+    [
+      ['subscribe', 'subscription', 'subscriptions'],
+      ['publish', 'publish', 'publishes'],
+      ['log', 'log', 'logs'],
+      ['error', 'error', 'errors']
+    ] as const
+  ).flatMap(([kind, one, many]) => {
+    const n = count(kind);
+    return n === 0 ? [] : [`${n} ${n === 1 ? one : many}`];
+  });
+  return `Setup · ${parts.length > 0 ? parts.join(', ') : `${entries.length} steps`}`;
 }
 
 /** Rows as a screen reader hears them: one short sentence each */
@@ -169,4 +195,16 @@ export function liveAnnouncement(rows: readonly TimelineRow[], msSinceInteractio
  */
 export function isAtEnd(box: { scrollTop: number; scrollHeight: number; clientHeight: number }): boolean {
   return box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+}
+
+/**
+ * Whether a list that grew should keep following its end. A box on screen is followed while its reader is at its
+ * end; a hidden one (a tab that isn't shown) measures 0 all round, so it keeps what it was doing, and its tab scrolls
+ * it to the end when it's shown again.
+ */
+export function keepsFollowing(
+  box: { scrollTop: number; scrollHeight: number; clientHeight: number },
+  wasFollowing: boolean
+): boolean {
+  return box.clientHeight === 0 ? wasFollowing : isAtEnd(box);
 }

@@ -64,7 +64,7 @@ function wait(ms: number, signal: AbortSignal | null | undefined): Promise<void>
 /**
  * An in-page SSE server for the playground: its `fetch` answers like a real server, with a `text/event-stream`
  * response whose body it writes with the library's `formatSseMessage` / `formatSseComment`, or with the status the
- * Server card asked for. It sends text whole or split mid-character, sends heartbeats, ends or drops its streams,
+ * Server tab asked for. It sends text whole or split mid-character, sends heartbeats, ends or drops its streams,
  * refuses connections or goes silent, and logs the requests, every chunk and what happened to each connection.
  */
 export class FakeSseServer implements FakeServer {
@@ -96,7 +96,7 @@ export class FakeSseServer implements FakeServer {
   }
 
   /**
-   * The Server card's controls: `send <text>`, `split <text>` (in two chunks, mid-character if it can), `ping`,
+   * The Server tab's controls: `send <text>`, `split <text>` (in two chunks, mid-character if it can), `ping`,
    * `end`, `drop`, `refuse`, `silent`, and `restart <status> [<Retry-After seconds>]`
    */
   run(command: string, argument = ''): void {

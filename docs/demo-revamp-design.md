@@ -1,6 +1,6 @@
 # Demo Revamp Design
 
-> **Status: phases 1 (examples audit), 2 (foundation), 3 (playground: 3a core scenarios, 3b flow control, 3c-1 WebSocket and Recipes, 3c-2 SSE and the local server switch) and 4a (showcase: navbar, hero, features) implemented; 4b and 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
+> **Status: phases 1 (examples audit), 2 (foundation), 3 (playground: 3a core scenarios, 3b flow control, 3c-1 WebSocket and Recipes, 3c-2 SSE and the local server switch), 4a (showcase: navbar, hero, features) and the UX pass after 4a implemented; 4b and 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
 
 ## Summary
 
@@ -184,12 +184,22 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 |---|---|---|
 | 3b review | The lane chart has no legend: filled (ran) and hollow (held back) are explained only in tooltips | 4 |
 | 3b review | The site has no favicon (a 404 in the console) | 4 |
-| 4a review | Quick Show code clicks before the editor has loaded create two editors in a widget: reuse the pending import | 4 |
 | 4a review | The hero's Pause button reads Play while `aria-pressed` is true (a screen reader hears "Play, pressed"): keep the label fixed, or drop `aria-pressed` | 4 |
 | 4a review | The copy button's "Copied" isn't announced (its `aria-label` stays "Copy the install command") | 4 |
 | 4a review | A lanes widget redraws on every resize without the rAF batching the workbench uses | 4 |
 | 4a review | The still diagram (reduced motion, no JavaScript) shows `order.created` with `welcome` lit, which wouldn't run; and no test pins the diagram's first event to `FLOW_EVENTS[0]` | 4 |
-| 4a | On phones, the theme picker's "Theme: Signal" wraps onto two lines in the navbar | 4 |
+| Layout-shift fixes' review | The phone menu closes on any `focusout` leaving it, including one with no `relatedTarget`: in Safari, where a click doesn't focus buttons or links, a menu opened from the keyboard could close before the link's click lands. Close only when `relatedTarget` is outside the menu (outside clicks are handled already); check in Safari | 4 |
+| Layout-shift fixes' review | The navbar's two dropdowns close differently: the phone menu on an outside click, the theme picker not. Share the close rules | 4 |
+| Layout-shift fixes' review | On phones the lanes widget scrolls sideways by 10 px: the chart's last tick label overhangs its track. Reserve half a label at the end of the track, or right-align the last label | 4 |
+| Layout-shift fixes' review | On phones a widget's output is short (168 px with three controls) and kept at its end, so a run's first rows are out of view with no visible scrollbar: a taller card below `sm`, two control columns, or a fade at the top | 4 |
+| Layout-shift fixes' review | `ActionGate.end` checks the token against both the holder and the generation, and the second check never decides: drop it, or say why both are there | 4 |
+| UX pass review | The tab counts start from the row count at a new trace's first render, which is right only because every scenario's setup is synchronous: a setup that awaits would show its rows unfolded, then folded, and leave a hidden tab's count off. Count from an entry index (against `setupEnd` and `clearedFrom`) instead | 4 |
+| UX pass review | Three buttons don't use `BUTTON`: Clear (`btn-xs btn-ghost`), the Server tab's send button (`btn-xs btn-primary`) and the development-only Simulated / Local server switch, whose inactive half is a plain `btn`, the variant this pass found reads as text in Signal. Add `BUTTON` entries for them | 4 |
+| UX pass review | After Clear, the empty timeline still says "Nothing yet: press …", which reads oddly once the reader has run something; and CLAUDE.md's `tests/site/` list doesn't name the `views` and `layout` tests | 4 |
+| UX pass review | `tabList` moves focus with `document.getElementById` though it holds the buttons: while the next scenario's workbench awaits the editor, two tab lists share the `output-` ids for a moment. Focus the button itself | 4 |
+| UX pass review | The output's tab panels aren't focusable (`tabindex="0"`), so a keyboard user can't scroll the timeline or the lane chart after leaving the tab row | 4 |
+| UX pass review | Rows after Clear (and in the folded setup) are timed since the reset, not `+N ms` since their action: `timelineRows` runs on the slice, which drops the action `since` counts from. Compute the rows over the whole trace and slice them afterwards | 4 |
+| UX pass review | The ▶ buttons in the code give no cue while a run holds the actions (a press is dropped quietly): disable them with the action buttons | 4 |
 | Note, 2026-10-03 | The public site builds the library from `src/` on every push to `main`, not from the npm release, so the playground can show unreleased behavior (phase 1's fixes are still under Unreleased) while the showcase says `npm install`: show which code the site runs, and release a version when the playground depends on unreleased behavior | 4 |
 | Phase 2 review | Check narrow layouts below 513 px, with device emulation | 5 |
 | 3c-2 review | A write after *Go silent* vanishes without a note: the silenced stream still counts as open, and the write is dropped quietly | 5 |
@@ -197,6 +207,17 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 | 3c-2 review | The fake SSE server logs a request's path only, so an absolute URL in edited code (`https://api.example.com/events`) looks as if it reached that host: log the URL as given, as `LocalSseServer` does | 5 |
 | 3c-2 review | A check whose `action` is `wait:<ms>` runs inside the bounded `settle()`, whose 50 ms slices add to the wait: deterministic today, but fragile across fake-timer upgrades. Await `wait:` steps directly | 5 |
 | 3c-2 review | `Scenario.sse.local` can be set on any SSE scenario, though only one whose simulated server matches what the Python examples serve should have it: say so on the field | 5 |
+
+## UX pass (after 4a)
+
+From the user's review of the playground on 2026-10-03: the Server card (and the lane chart) pushed the code down, the code was out of reach of the controls, and buttons didn't read as buttons. Choices made with the user:
+
+- **Code beside output.** On wide screens the workbench is the viewport's height, in two columns that scroll inside: on the left, the scenario's summary, controls and actions, with the code right under them; on the right, the output in tabs: *What EvEm did*, *Over time* (scenarios with lanes, which open on it) and *Server* (scenarios with a server). A tab that isn't shown counts its new entries. On phones the columns stack: the scenario, the output, then the code.
+- **Room for the code** (the user's follow-up: the code was compressed). The code's row never gets less than 20rem; on a short screen the scenario's card scrolls instead. *Expand*, in the code's header, gives the code the wide column at its full height, with the scenario and the output stacked beside it (the ▶ buttons still run every action); *Shrink* puts it back, and the choice is remembered (`evem-code-layout` in `localStorage`). On phones, *Expand* makes the code taller.
+- **Run buttons in the code.** Each `// ▶` line of the code has a ▶ button in its margin that runs that action, like the action buttons (not while the code is being edited, when they could run something else than what's on screen).
+- **Visible button styles.** Every button uses a daisyUI variant that reads as a button in both themes: `btn-primary` for the main action, `btn-soft` for the others, `btn-ghost` only for minor ones such as Reset. The Server tab's controls are one compact row above its log.
+- **A calmer timeline.** The setup (what the code does at every reset, before any action) folds into one *Setup · N subscriptions, …* line that opens on click; what the code logged reads as console output, set apart from EvEm's own steps; rows after an action are timed from it (`+N ms`); a Clear button empties the timeline (the scenario keeps running).
+- **Showcase widgets.** Each widget has *Output* and *Code* tabs (the code with its ▶ buttons, which show the output), and runs its first action again when a control changes, so the output always matches the controls.
 
 ## Phase 4: Showcase
 

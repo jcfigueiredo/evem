@@ -5,7 +5,7 @@ export const serverEvents: Scenario = {
   group: 'WebSocket',
   title: 'Server events & routing',
   summary:
-    "Incoming messages are routed by their fields: an event (or the older type field) is published under a prefix, anything else as ws.message, and what doesn't parse as ws.parse.error. Send your own from the Server card.",
+    "Incoming messages are routed by their fields: an event (or the older type field) is published under a prefix, anything else as ws.message, and what doesn't parse as ws.parse.error. Send your own from the Server tab.",
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/websocket-server-events.md',
   controls: {
     prefix: { kind: 'select', label: 'serverEventPrefix', options: ['server', 'app', ''], default: 'server' }
@@ -47,14 +47,14 @@ export const serverEvents: Scenario = {
       calls: ['WebSocketHandler', 'news', 'news', 'other', 'unreadable']
     },
     {
-      action: 'server:send {"event":"news.item","data":{"title":"From the Server card"}}',
+      action: 'server:send {"event":"news.item","data":{"title":"From the Server tab"}}',
       calls: ['news'],
-      logs: ['news: From the Server card']
+      logs: ['news: From the Server tab']
     }
   ],
   websocket: {
     latency: 30,
-    sample: '{"event":"news.item","data":{"title":"From the Server card"}}',
+    sample: '{"event":"news.item","data":{"title":"From the Server tab"}}',
     onMessage: (message, server) => {
       if ((message as { event?: string }).event !== 'news.subscribe') return;
       server.send({ event: 'news.item', data: { title: 'EvEm adds a WebSocket adapter' } });

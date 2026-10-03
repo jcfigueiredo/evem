@@ -5,7 +5,7 @@ export const sseStream: Scenario = {
   group: 'SSE',
   title: 'Stream & routing',
   summary:
-    "SseHandler reads a text/event-stream and publishes each event: a named one as server.<name>, an unnamed { event, data } envelope the same way, anything else as sse.message, and data that doesn't parse as sse.parse.error. Write events to the stream from the Server card.",
+    "SseHandler reads a text/event-stream and publishes each event: a named one as server.<name>, an unnamed { event, data } envelope the same way, anything else as sse.message, and data that doesn't parse as sse.parse.error. Write events to the stream from the Server tab.",
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/sse-adapter.md#routing',
   controls: {
     unwrapEnvelope: { kind: 'toggle', label: 'unwrapEnvelope', default: true },

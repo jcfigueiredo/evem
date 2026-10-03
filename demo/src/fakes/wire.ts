@@ -6,14 +6,14 @@ export interface WireEntry {
   text: string;
 }
 
-/** What the Server card and the scenario checks need from a scenario's server */
+/** What the Server tab and the scenario checks need from a scenario's server */
 export interface FakeServer {
   /** Everything sent each way, and what happened to connections, oldest first */
   readonly wire: WireEntry[];
   /** Connections open now */
   readonly openConnections: number;
   /**
-   * Do what one of the Server card's controls does: `send` a text, `drop` the connections, … (each server has its
+   * Do what one of the Server tab's controls does: `send` a text, `drop` the connections, … (each server has its
    * own). A check's `server:<command> <argument>` step calls it too.
    */
   run(command: string, argument?: string): void;

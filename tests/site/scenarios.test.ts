@@ -39,7 +39,7 @@ function variants(scenario: Scenario): string[] {
 }
 
 /**
- * Run an action; a command to the scenario's server, `server:<command> <argument>` (what the Server card's controls
+ * Run an action; a command to the scenario's server, `server:<command> <argument>` (what the Server tab's controls
  * do: `server:drop`, `server:send <text>`, …); or `wait:<ms>`, which lets that much time pass
  */
 async function step(session: ScenarioSession, action: string): Promise<void> {

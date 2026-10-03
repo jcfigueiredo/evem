@@ -1,28 +1,38 @@
 import type { EvEm } from '@jcfigueiredo/evem';
+import { ActionGate } from '../actionGate';
 import { el } from '../dom';
 import { ScenarioSession, type Scenario } from '../engine/session';
 import { laneChart } from '../lanes';
-import { isAtEnd, liveAnnouncement, timelineRows } from '../timeline';
+import { browserStorage } from '../theme';
+import { keepsFollowing, liveAnnouncement, setupSummary, timelineRows } from '../timeline';
 import { renderLaneChart } from './laneChart';
+import { GRID_ROWS, LAYOUTS, readCodeLayout, saveCodeLayout, type CodeLayout } from './layout';
 import { serverPane } from './serverPane';
-import { controlField, timelineItem } from './views';
+import { BUTTON, controlField, tabList, timelineItem, type Tab } from './views';
+
+const CARD = 'card bg-base-100 border border-base-300';
+const HEADING = 'text-xs uppercase tracking-widest text-base-content/70';
 
 /**
- * Show a scenario in `root`: its controls and actions, the timeline of what EvEm did, and the code that runs.
- * Returns a function that tears it down (subscriptions and editor).
+ * Show a scenario in `root`, code beside output: on the left, the scenario's summary, controls and actions, with the
+ * code right under them (its `// ▶` lines have run buttons); on the right, the output in tabs: what EvEm did (the
+ * setup folded into one line), and for some scenarios the lane chart or the server. On wide screens both columns fill
+ * the screen and scroll inside, so nothing pushes the code away from its controls. Expand gives the code the wide
+ * column instead (remembered, see `layout.ts`). Returns a function that tears it down (subscriptions, editor,
+ * connections).
  */
 export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus: EvEm): Promise<() => void> {
   const session = new ScenarioSession(scenario, bus);
-  let busy = false;
-  // Bumped whenever the scenario starts over, so an action from before (one that never finishes, say) can't leave
-  // the new action buttons disabled
-  let generation = 0;
-  const startOver = () => {
-    generation++;
-    busy = false;
-  };
+  // One action at a time; starting over (a control, Reset, edited code) frees the buttons from earlier runs
+  const gate = new ActionGate();
 
-  const timeline = el('ol', { class: 'relative ms-2 border-s border-base-300 space-y-1.5' });
+  // What EvEm did: the setup folded away, then everything after it (from where the reader last cleared it)
+  const setupList = el('ol', { class: 'relative ms-2 mt-2 space-y-1.5 border-s border-base-300' });
+  const setupSummaryLine = el('summary', { class: 'cursor-pointer text-sm text-base-content/70' });
+  const setupFold = el('details', { class: 'mb-3' }, [setupSummaryLine, setupList]);
+  const timeline = el('ol', { class: 'relative ms-2 space-y-1.5 border-s border-base-300' });
+  const timelineBox = el('div', { class: 'min-h-0 flex-1 overflow-y-auto pe-2' }, [setupFold, timeline]);
+  const clearButton = el('button', { type: 'button', class: 'btn btn-xs btn-ghost' }, ['Clear']);
   // The list is rebuilt on every render, so screen readers hear only what's new, from this status line
   const announcer = el('p', { class: 'sr-only', 'aria-live': 'polite' });
   let announcedTrace = session.trace;
@@ -35,45 +45,114 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   for (const type of ['click', 'change', 'keydown']) root.addEventListener(type, interacted);
   // The timeline follows new rows only for a reader at its end (and on a new trace, which starts at the top)
   let shownTrace = session.trace;
-  const timelineBox = el('div', { class: 'max-h-[26rem] overflow-y-auto pe-2' }, [timeline]);
-  const controls = el('fieldset', { class: 'space-y-1' });
-  const actions = el('div', { class: 'flex flex-wrap gap-2 pt-2' });
+  // The first entry the timeline shows: after the setup, or after the reader cleared it
+  let clearedFrom = 0;
+  // Whether the timeline follows its end (see keepsFollowing)
+  let followTimeline = true;
+
+  const summary = el('p', { class: 'text-sm text-base-content/70' }, [
+    scenario.summary,
+    ' ',
+    el('a', { class: 'link link-primary', href: scenario.docs, target: '_blank', rel: 'noopener' }, ['Docs ↗'])
+  ]);
+  const controls = el('fieldset', { class: 'grid gap-x-3 sm:grid-cols-2' });
+  const actions = el('div', { class: 'flex flex-wrap gap-2' });
   const editedBadge = el('span', { class: 'badge badge-warning badge-sm hidden' }, ['edited']);
-  const codeHost = el('div', { class: 'min-h-24' });
-  const editButton = el('button', { type: 'button', class: 'btn btn-sm' }, ['Edit']);
-  const runEditedButton = el('button', { type: 'button', class: 'btn btn-sm hidden' }, ['Run edited code']);
-  const resetButton = el('button', { type: 'button', class: 'btn btn-sm btn-ghost' }, ['Reset']);
-  const editingNote = el('p', { class: 'text-sm text-warning hidden' }, [
+  const codeHost = el('div', { class: 'min-h-0 flex-1' });
+  const editButton = el('button', { type: 'button', class: BUTTON.other }, ['Edit']);
+  const runEditedButton = el('button', { type: 'button', class: `${BUTTON.main} hidden` }, ['Run edited code']);
+  const resetButton = el('button', { type: 'button', class: BUTTON.minor }, ['Reset']);
+  const layoutButton = el('button', { type: 'button', class: BUTTON.minor });
+  const editingNote = el('p', { class: 'grow-0 text-sm text-warning hidden' }, [
     'The code is edited, so the controls are off. Run it with ⌘/Ctrl+Enter; Reset goes back to the controls.'
   ]);
 
-  // Flow control scenarios show the latest action over time too
+  const restart = async (change: () => Promise<void>) => {
+    gate.reset();
+    clearedFrom = 0;
+    await change();
+    editor.setCode(session.code);
+    renderActions();
+    renderTimeline();
+  };
+
+  // The output's tabs: what EvEm did; the lane chart (flow control); the server (adapters)
   const lanesHost = scenario.lanes ? el('div', {}) : undefined;
-  // Adapter scenarios show their server: the wire log, and controls
   const server =
     scenario.websocket || scenario.sse
-      ? serverPane(session, async local => {
-          startOver();
-          await session.useLocalServer(local);
-          renderActions();
-          renderTimeline();
-        })
+      ? serverPane(session, local => restart(() => session.useLocalServer(local)))
       : undefined;
+  const timelinePanel = el('div', { class: 'flex min-h-0 flex-1 flex-col' }, [timelineBox]);
+  const outputTabs: Tab[] = [
+    { id: 'timeline', label: 'What EvEm did', panel: timelinePanel },
+    ...(lanesHost
+      ? [{ id: 'lanes', label: 'Over time', panel: el('div', { class: 'min-h-0 flex-1 overflow-auto' }, [lanesHost]) }]
+      : []),
+    ...(server
+      ? [
+          {
+            id: 'server',
+            label: 'Server',
+            panel: el('div', { class: 'flex min-h-0 flex-1 flex-col' }, [server.element])
+          }
+        ]
+      : [])
+  ];
+  // What each tab had the last time the reader looked at it, for the counts on the others
+  const seen = { timeline: 0, server: 0 };
+  const tabs = tabList(outputTabs, {
+    label: 'Output',
+    idPrefix: 'output',
+    initial: scenario.lanes ? 'lanes' : 'timeline',
+    onSelect: id => {
+      clearButton.classList.toggle('invisible', id !== 'timeline');
+      // A panel that grew while hidden couldn't scroll: one that was following its end goes there now it's shown
+      if (id === 'timeline' && followTimeline) timelineBox.scrollTop = timelineBox.scrollHeight;
+      if (id === 'server') server?.reveal();
+      scheduleRender();
+    }
+  });
+
+  // Clear empties the timeline, so it's there only on that tab
+  clearButton.classList.toggle('invisible', tabs.selected() !== 'timeline');
 
   const renderTimeline = () => {
-    const rows = timelineRows(session.trace.entries);
-    const follow = session.trace !== shownTrace || isAtEnd(timelineBox);
+    const entries = session.trace.entries;
+    const setupEnd = session.setupEnd;
+    const from = Math.max(setupEnd, clearedFrom);
+    const setupEntries = clearedFrom === 0 ? entries.slice(0, setupEnd) : [];
+    const rows = timelineRows(entries.slice(from));
+    followTimeline = session.trace !== shownTrace || keepsFollowing(timelineBox, followTimeline);
     shownTrace = session.trace;
+
+    setupFold.hidden = setupEntries.length === 0;
+    setupSummaryLine.textContent = setupSummary(setupEntries);
+    setupList.replaceChildren(...timelineRows(setupEntries).map(timelineItem));
     timeline.replaceChildren(...rows.map(timelineItem));
     if (rows.length === 0) {
-      timeline.append(el('li', { class: 'ps-4 text-sm text-base-content/60' }, ['Nothing yet: run an action.']));
+      const first = session.actions[0];
+      timeline.append(
+        el('li', { class: 'ps-4 text-sm text-base-content/60' }, [
+          first ? `Nothing yet: press “${first.label}”, or ▶ in the code.` : 'Nothing yet.'
+        ])
+      );
     }
-    if (follow) timelineBox.scrollTop = timelineBox.scrollHeight;
-    if (lanesHost) renderLaneChart(lanesHost, laneChart(session.trace.entries));
+    if (followTimeline) timelineBox.scrollTop = timelineBox.scrollHeight;
+    if (lanesHost) renderLaneChart(lanesHost, laneChart(entries));
     server?.render();
+
+    // Counts on the tabs the reader isn't looking at
+    const wire = server ? (session.server?.wire.length ?? 0) : 0;
+    if (tabs.selected() === 'timeline') seen.timeline = rows.length;
+    if (tabs.selected() === 'server') seen.server = wire;
+    tabs.setCount('timeline', rows.length - seen.timeline);
+    if (server) tabs.setCount('server', wire - seen.server);
+
     // A new trace means the reader started over (a control, Reset, edited code): its setup isn't announced
     if (session.trace !== announcedTrace) {
       announcedTrace = session.trace;
+      seen.timeline = rows.length;
+      seen.server = wire;
     } else if (rows.length > announcedRows) {
       const text = liveAnnouncement(rows.slice(announcedRows), performance.now() - lastInteraction);
       if (text !== undefined) announcer.textContent = text;
@@ -95,25 +174,28 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   const resizes = lanesHost ? new ResizeObserver(() => scheduleRender()) : undefined;
   if (lanesHost) resizes?.observe(lanesHost);
 
+  clearButton.addEventListener('click', () => {
+    clearedFrom = session.trace.entries.length;
+    announcedRows = 0;
+    seen.timeline = 0;
+    renderTimeline();
+  });
+
   const runAction = async (id: string) => {
-    if (busy) return;
-    const started = generation;
-    busy = true;
+    const token = gate.start();
+    if (token === undefined) return;
     for (const button of actions.querySelectorAll('button')) button.disabled = true;
     try {
       await session.run(id);
     } finally {
-      if (generation === started) {
-        busy = false;
-        for (const button of actions.querySelectorAll('button')) button.disabled = false;
-      }
+      if (gate.end(token)) for (const button of actions.querySelectorAll('button')) button.disabled = false;
     }
   };
 
   const renderActions = () => {
     actions.replaceChildren(
       ...session.actions.map((action, index) => {
-        const button = el('button', { type: 'button', class: index === 0 ? 'btn btn-sm btn-primary' : 'btn btn-sm' }, [
+        const button = el('button', { type: 'button', class: index === 0 ? BUTTON.main : BUTTON.other }, [
           action.label
         ]);
         button.addEventListener('click', () => void runAction(action.id));
@@ -125,26 +207,21 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   const renderControls = () => {
     controls.replaceChildren(
       ...Object.entries(scenario.controls).map(([name, control]) =>
-        controlField(name, control, session.values[name]!, async value => {
-          startOver();
-          await session.setValue(name, value);
-          editor.setCode(session.code);
-          renderActions();
-          renderTimeline();
-        })
+        controlField(name, control, session.values[name]!, value => restart(() => session.setValue(name, value)))
       )
     );
     controls.disabled = session.edited;
   };
 
   const { createEditor } = await import('../editor');
-  const runEdited = async () => {
-    startOver();
-    await session.edit(editor.getCode());
-    renderActions();
-    renderTimeline();
-  };
-  const editor = createEditor(codeHost, session.code, () => void runEdited());
+  const runEdited = () => restart(() => session.edit(editor.getCode()));
+  // The ▶ in the code's margin runs the action with that line's label, like its button
+  const editor = createEditor(codeHost, session.code, () => void runEdited(), {
+    onRunAction: label => {
+      const action = session.actions.find(candidate => candidate.label === label);
+      if (action) void runAction(action.id);
+    }
+  });
 
   const setEditing = (editing: boolean) => {
     editor.setEditable(editing);
@@ -157,76 +234,71 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   };
   editButton.addEventListener('click', () => setEditing(true));
   runEditedButton.addEventListener('click', () => void runEdited());
-  resetButton.addEventListener('click', async () => {
+  resetButton.addEventListener('click', () => {
     setEditing(false);
-    startOver();
-    await session.restoreTemplate();
-    editor.setCode(session.code);
-    renderActions();
-    renderTimeline();
+    void restart(() => session.restoreTemplate());
+  });
+
+  const scenarioCard = el('section', { 'aria-label': 'Scenario' }, [
+    el('div', { class: 'card-body gap-3 p-4' }, [summary, controls, actions])
+  ]);
+  const outputCard = el('section', { 'aria-label': 'Output' }, [
+    el('div', { class: 'card-body min-h-0 flex-1 gap-3 p-4' }, [
+      el('div', { class: 'flex items-center justify-between gap-2' }, [tabs.element, clearButton]),
+      ...outputTabs.map(tab => tab.panel),
+      announcer
+    ])
+  ]);
+  const codeCard = el('section', { 'aria-label': 'Code' }, [
+    el('div', { class: 'card-body min-h-0 flex-1 gap-3 p-4' }, [
+      el('div', { class: 'flex flex-wrap items-center gap-2' }, [
+        // "Code", and on wider columns "Code that runs": the header stays on one line beside its buttons
+        el('h2', { class: `${HEADING} me-auto` }, [
+          'Code',
+          el('span', { class: 'hidden xl:inline' }, [' that runs']),
+          ' ',
+          editedBadge
+        ]),
+        editButton,
+        runEditedButton,
+        resetButton,
+        layoutButton
+      ]),
+      editingNote,
+      codeHost
+    ])
+  ]);
+  const grid = el('div', {}, [scenarioCard, outputCard, codeCard]);
+  // The cards' places come from the layout; the code's own buttons say which one it is and switch to the other
+  const applyLayout = (layout: CodeLayout) => {
+    const classes = LAYOUTS[layout];
+    grid.className = `grid min-h-0 flex-1 grid-cols-1 gap-4 ${GRID_ROWS} ${classes.grid}`;
+    scenarioCard.className = `${CARD} ${classes.scenario}`;
+    outputCard.className = `${CARD} ${classes.output}`;
+    codeCard.className = `${CARD} ${classes.code}`;
+    const wide = layout === 'wide';
+    layoutButton.replaceChildren(
+      el('span', { 'aria-hidden': 'true' }, [wide ? '⤡' : '⤢']),
+      wide ? ' Shrink' : ' Expand'
+    );
+    layoutButton.title = wide
+      ? 'Put the code back under the controls'
+      : 'Give the code the wide column; the controls and the output move beside it';
+  };
+  let layout = readCodeLayout(browserStorage());
+  applyLayout(layout);
+  layoutButton.addEventListener('click', () => {
+    layout = layout === 'wide' ? 'normal' : 'wide';
+    saveCodeLayout(browserStorage(), layout);
+    applyLayout(layout);
   });
 
   root.replaceChildren(
-    el('header', { class: 'mb-6' }, [
-      el('p', { class: 'text-xs uppercase tracking-widest text-base-content/70' }, [scenario.group]),
-      el('h1', { class: 'font-mono text-3xl font-bold tracking-tight' }, [scenario.title]),
-      el('p', { class: 'mt-2 text-base-content/70 max-w-prose' }, [
-        scenario.summary,
-        ' ',
-        el('a', { class: 'link link-primary', href: scenario.docs, target: '_blank', rel: 'noopener' }, ['Docs ↗'])
-      ])
+    el('header', { class: 'flex shrink-0 flex-wrap items-baseline gap-x-3' }, [
+      el('p', { class: HEADING }, [scenario.group]),
+      el('h1', { class: 'font-mono text-2xl font-bold tracking-tight' }, [scenario.title])
     ]),
-    el('div', { class: 'grid gap-4 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]' }, [
-      el('section', { class: 'card bg-base-100 border border-base-300', 'aria-label': 'Scenario' }, [
-        el('div', { class: 'card-body p-4 gap-2' }, [
-          el('h2', { class: 'text-xs uppercase tracking-widest text-base-content/70' }, ['Scenario']),
-          controls,
-          actions
-        ])
-      ]),
-      el('section', { class: 'card bg-base-100 border border-base-300', 'aria-label': 'What EvEm did' }, [
-        el('div', { class: 'card-body p-4 gap-3' }, [
-          el('h2', { class: 'text-xs uppercase tracking-widest text-base-content/70' }, ['What EvEm did']),
-          timelineBox,
-          announcer
-        ])
-      ])
-    ]),
-    ...(lanesHost
-      ? [
-          el('section', { class: 'card bg-base-100 border border-base-300 mt-4', 'aria-label': 'Over time' }, [
-            el('div', { class: 'card-body p-4 gap-3' }, [
-              el('h2', { class: 'text-xs uppercase tracking-widest text-base-content/70' }, ['Over time']),
-              lanesHost
-            ])
-          ])
-        ]
-      : []),
-    ...(server
-      ? [
-          el('section', { class: 'card bg-base-100 border border-base-300 mt-4', 'aria-label': 'Server' }, [
-            el('div', { class: 'card-body p-4 gap-3' }, [
-              el('h2', { class: 'text-xs uppercase tracking-widest text-base-content/70' }, ['Server']),
-              server.element
-            ])
-          ])
-        ]
-      : []),
-    el('section', { class: 'card bg-base-100 border border-base-300 mt-4', 'aria-label': 'Code' }, [
-      el('div', { class: 'card-body p-4 gap-3' }, [
-        el('div', { class: 'flex flex-wrap items-center gap-2' }, [
-          el('h2', { class: 'text-xs uppercase tracking-widest text-base-content/70 me-auto' }, [
-            'Code that runs ',
-            editedBadge
-          ]),
-          editButton,
-          runEditedButton,
-          resetButton
-        ]),
-        editingNote,
-        codeHost
-      ])
-    ])
+    grid
   );
 
   await session.reset();

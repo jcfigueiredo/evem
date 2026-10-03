@@ -45,7 +45,7 @@ export interface ScenarioCheck {
   wait?: number;
 }
 
-/** A ready-made message for the Server card's send box */
+/** A ready-made message for the Server tab's send box */
 export interface ServerSample {
   label: string;
   text: string;
@@ -76,7 +76,7 @@ export interface Scenario {
   /**
    * A fake SSE server for the scenario: how it behaves, and samples for the server pane's send box. The code's
    * `SseHandler` reads from it unless the code passes its own `fetch` or another transport. With `local`, the
-   * development server can switch to a real SSE server instead (`/events` is proxied to port 8000), and the Server card
+   * development server can switch to a real SSE server instead (`/events` is proxied to port 8000), and the Server tab
    * shows `local.command` to start one.
    */
   sse?: FakeSseBehavior & { samples?: ServerSample[]; local?: { command: string } };
@@ -134,6 +134,11 @@ export class ScenarioSession {
   edited = false;
   actions: Action[] = [];
   trace: Trace;
+  /**
+   * How many of the trace's entries the setup made (the code before its first action, run at every reset): the
+   * timeline folds them away. 0 until the setup has run, and when it failed.
+   */
+  setupEnd = 0;
   /** The scenario's server (scenarios with `websocket` or `sse`), new at every reset */
   server: FakeServer | undefined;
   /** Use the local SSE server instead of the fake one (scenarios with `sse.local`, in development) */
@@ -199,6 +204,7 @@ export class ScenarioSession {
     const trace = new Trace(this.bus);
     this.trace = trace;
     this.program = undefined;
+    this.setupEnd = 0;
     this.stop();
     const clock = () => trace.now();
     const onWire = (entry: WireEntry) => void this.bus?.publish('wire.entry', entry);
@@ -231,7 +237,10 @@ export class ScenarioSession {
       const run = new AsyncFunction('__modules', 'console', ...helperNames, body);
       const helpers = helperNames.map(name => this.scenario.helpers[name]);
       const program = await this.capturingLogs(trace, () => run(modules, this.consoleForCode(trace), ...helpers));
-      if (this.trace === trace) this.program = program as Record<string, () => Promise<void>>;
+      if (this.trace === trace) {
+        this.program = program as Record<string, () => Promise<void>>;
+        this.setupEnd = trace.entries.length;
+      }
     } catch (error) {
       // No program, so no action can run: no buttons (unless a newer reset has taken over)
       if (this.trace === trace) this.actions = [];

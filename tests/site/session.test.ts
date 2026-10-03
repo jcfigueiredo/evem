@@ -59,6 +59,19 @@ describe('ScenarioSession', () => {
     expect(session.code).toContain("await evem.publish('greet', 'hello');");
   });
 
+  it('marks where the setup ends, so the timeline can fold it away, and what came after stays after it', async () => {
+    const session = new ScenarioSession(scenario);
+    expect(session.setupEnd).toBe(0);
+    await session.reset();
+    expect(session.setupEnd).toBe(1);
+    await session.run('greet');
+    expect(session.trace.entries.length).toBeGreaterThan(session.setupEnd);
+    expect(session.trace.entries[session.setupEnd]).toMatchObject({ kind: 'action' });
+
+    await session.edit('throw new Error("broken setup")');
+    expect(session.setupEnd).toBe(0);
+  });
+
   it('runs the setup on reset and an action on run, recording both and the code’s own logs', async () => {
     const session = new ScenarioSession(scenario);
     await session.reset();

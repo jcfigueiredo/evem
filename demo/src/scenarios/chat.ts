@@ -5,7 +5,7 @@ export const chat: Scenario = {
   group: 'Recipes',
   title: 'Chat over WebSocket',
   summary:
-    'A chat client: history by request, messages filtered to one room, and sends that wait in the queue while offline. Bo answers you; send messages from other rooms from the Server card.',
+    'A chat client: history by request, messages filtered to one room, and sends that wait in the queue while offline. Bo answers you; send messages from other rooms from the Server tab.',
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/websocket-adapter.md#example-browser-chat',
   controls: { room: { kind: 'select', label: 'room', options: ['lobby', 'random'], default: 'lobby' } },
   helpers: {},
