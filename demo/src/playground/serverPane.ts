@@ -2,6 +2,7 @@ import { el } from '../dom';
 import type { ScenarioSession, ServerSample } from '../engine/session';
 import { checkLocalServer } from '../fakes/localSseServer';
 import { isAtEnd } from '../timeline';
+import { BUTTON } from './views';
 import type { FakeServer, WireEntry } from '../fakes/wire';
 
 // Full class names, so Tailwind finds them in the source
@@ -49,7 +50,7 @@ export function serverPane(
   const local = import.meta.env.DEV && sse?.local ? sse.local : undefined;
 
   const log = el('ol', { class: 'space-y-0.5 font-mono text-xs' });
-  const logBox = el('div', { class: 'max-h-64 overflow-y-auto pe-2' }, [log]);
+  const logBox = el('div', { class: 'min-h-0 flex-1 overflow-y-auto pe-2' }, [log]);
   const status = el('p', { class: 'text-sm text-base-content/70' });
   const button = (label: string, className: string, onClick: () => void) => {
     const element = el('button', { type: 'button', class: className }, [label]);
@@ -61,7 +62,7 @@ export function serverPane(
   // The send box, with the scenario's samples to start from
   const frame = el('textarea', {
     class: 'textarea textarea-sm w-full font-mono text-xs',
-    rows: '4',
+    rows: '2',
     spellcheck: 'false',
     'aria-label': sse ? 'Text to write to the stream' : 'Frame to send to the client'
   });
@@ -70,7 +71,7 @@ export function serverPane(
     samples.length > 1
       ? el(
           'select',
-          { class: 'select select-sm w-full', 'aria-label': 'Sample' },
+          { class: 'select select-xs w-auto max-w-60', 'aria-label': 'Sample' },
           samples.map((sample, index) => el('option', { value: String(index) }, [sample.label]))
         )
       : undefined;
@@ -81,7 +82,7 @@ export function serverPane(
   // SSE: end the stream and answer the next request with a status
   const statusSelect = el(
     'select',
-    { class: 'select select-sm join-item w-20 shrink-0', 'aria-label': 'Status' },
+    { class: 'select select-xs join-item w-16 shrink-0', 'aria-label': 'Status' },
     STATUSES.map(code => el('option', { value: code }, [code]))
   );
   statusSelect.value = '503';
@@ -90,41 +91,51 @@ export function serverPane(
     min: '0',
     max: '60',
     placeholder: 'Retry-After',
-    class: 'input input-sm join-item min-w-0 flex-1',
+    class: 'input input-xs join-item w-24',
     'aria-label': 'Retry-After, in seconds (optional)'
   });
 
+  // The server's controls: a send row, the text to send, then one wrapping row of compact buttons
   const simulated = el('div', { class: 'flex flex-col gap-2' }, [
-    ...(sampleSelect ? [sampleSelect] : []),
+    el('div', { class: 'flex flex-wrap items-center gap-1.5' }, [
+      ...(sampleSelect ? [sampleSelect] : []),
+      button(sse ? 'Write to the stream' : 'Send to the client', 'btn btn-xs btn-primary', () =>
+        run('send', frame.value)
+      ),
+      ...(sse ? [button('Write it in two chunks', BUTTON.server, () => run('split', frame.value))] : [])
+    ]),
     frame,
-    button(sse ? 'Write to the stream' : 'Send to the client', 'btn btn-sm btn-primary', () =>
-      run('send', frame.value)
-    ),
-    ...(sse
-      ? [
-          button('Write it in two chunks', 'btn btn-sm', () => run('split', frame.value)),
-          el('div', { class: 'grid grid-cols-2 gap-2' }, [
-            button('Heartbeat', 'btn btn-sm', () => run('ping')),
-            button('Go silent', 'btn btn-sm', () => run('silent')),
-            button('End the stream', 'btn btn-sm', () => run('end')),
-            button('Drop it', 'btn btn-sm', () => run('drop'))
-          ]),
-          button('Refuse the next connection', 'btn btn-sm', () => run('refuse')),
-          el('div', { class: 'join w-full' }, [
-            statusSelect,
-            retryAfter,
-            button('Restart', 'btn btn-sm join-item shrink-0', () =>
-              run('restart', `${statusSelect.value} ${retryAfter.value}`)
+    el(
+      'div',
+      { class: 'flex flex-wrap items-center gap-1.5' },
+      sse
+        ? [
+            button('Heartbeat', BUTTON.server, () => run('ping')),
+            button('Go silent', BUTTON.server, () => run('silent')),
+            button('End the stream', BUTTON.server, () => run('end')),
+            button('Drop it', BUTTON.server, () => run('drop')),
+            button('Refuse the next connection', BUTTON.server, () => run('refuse')),
+            el(
+              'div',
+              {
+                class: 'join',
+                title:
+                  'Restart ends the stream and answers the next request with that status (and Retry-After, in seconds)'
+              },
+              [
+                statusSelect,
+                retryAfter,
+                button('Restart', `${BUTTON.server} join-item`, () =>
+                  run('restart', `${statusSelect.value} ${retryAfter.value}`)
+                )
+              ]
             )
-          ]),
-          el('p', { class: 'text-xs text-base-content/70' }, [
-            'Restart ends the stream and answers the next request with that status (and Retry-After, in seconds).'
-          ])
-        ]
-      : [
-          button('Drop the connection', 'btn btn-sm', () => run('drop')),
-          button('Refuse the next connection', 'btn btn-sm', () => run('refuse'))
-        ])
+          ]
+        : [
+            button('Drop the connection', BUTTON.server, () => run('drop')),
+            button('Refuse the next connection', BUTTON.server, () => run('refuse'))
+          ]
+    )
   ]);
 
   // Development only: the local server, the command that starts it, and whether it answers
@@ -139,7 +150,7 @@ export function serverPane(
         el('p', { class: 'text-sm text-base-content/70' }, ['Start it from the repository, then Reset:']),
         el('code', { class: 'font-mono text-xs break-all rounded bg-base-200 p-2' }, [local.command]),
         localStatus,
-        button('Check again', 'btn btn-sm', () => void checkLocal())
+        button('Check again', BUTTON.server, () => void checkLocal())
       ])
     : undefined;
   const showMode = () => {
@@ -158,13 +169,14 @@ export function serverPane(
   };
   const modeButtons = local
     ? ['Simulated', 'Local server'].map((label, index) =>
-        button(label, 'btn btn-sm join-item flex-1', () => void switchServer(index === 1))
+        button(label, 'btn btn-xs join-item', () => void switchServer(index === 1))
       )
     : [];
 
+  // A div, not a p: daisyUI's card-body makes every p inside it grow, which would split the log's space with it
   const legend = el(
-    'p',
-    { class: 'mb-2 flex flex-wrap gap-x-4 text-xs text-base-content/70' },
+    'div',
+    { class: 'flex flex-wrap gap-x-4 text-xs text-base-content/70' },
     (['client', 'server', 'note'] as const).map(direction =>
       el('span', {}, [
         el('span', { class: DIRECTION[direction].className }, [DIRECTION[direction].mark]),
@@ -201,14 +213,16 @@ export function serverPane(
     status.textContent = connectionStatus(server?.openConnections ?? 0, session.connectionStates());
   };
 
-  const element = el('div', { class: 'grid gap-4 md:grid-cols-[minmax(0,1fr)_16rem]' }, [
-    el('div', { class: 'min-w-0' }, [legend, logBox]),
-    el('div', { class: 'flex flex-col gap-2' }, [
-      ...(local ? [el('div', { class: 'join w-full', role: 'group', 'aria-label': 'Which server' }, modeButtons)] : []),
-      status,
-      simulated,
-      ...(localPanel ? [localPanel] : [])
-    ])
+  // Top to bottom: which server and its connections, its controls, then the log, which takes the rest and scrolls
+  const element = el('div', { class: 'flex min-h-0 flex-1 flex-col gap-3' }, [
+    el('div', { class: 'flex flex-wrap items-center justify-between gap-2' }, [
+      ...(local ? [el('div', { class: 'join', role: 'group', 'aria-label': 'Which server' }, modeButtons)] : []),
+      status
+    ]),
+    simulated,
+    ...(localPanel ? [localPanel] : []),
+    legend,
+    logBox
   ]);
   showMode();
   render();

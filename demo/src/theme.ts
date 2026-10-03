@@ -39,7 +39,8 @@ export function saveChoice(storage: Pick<Storage, 'setItem'> | undefined, choice
   }
 }
 
-function storage(): Storage | undefined {
+/** The browser's localStorage, or undefined where it can't be reached (blocked, sandboxed) */
+export function browserStorage(): Storage | undefined {
   try {
     return window.localStorage;
   } catch {
@@ -54,7 +55,7 @@ function storage(): Storage | undefined {
  */
 export function mountThemePicker(container: HTMLElement, bus: EvEm, placement = 'dropdown-top'): void {
   const media = window.matchMedia('(prefers-color-scheme: light)');
-  let choice = readChoice(storage());
+  let choice = readChoice(browserStorage());
   const label = el('span', {}, []);
   const summary = el('summary', { class: 'btn btn-sm btn-ghost w-full justify-between font-normal' }, [
     label,
@@ -79,7 +80,7 @@ export function mountThemePicker(container: HTMLElement, bus: EvEm, placement = 
     const button = el('button', { type: 'button', 'data-choice': option.choice }, [option.label]);
     button.addEventListener('click', () => {
       choice = option.choice;
-      saveChoice(storage(), choice);
+      saveChoice(browserStorage(), choice);
       apply();
       details.removeAttribute('open');
     });
