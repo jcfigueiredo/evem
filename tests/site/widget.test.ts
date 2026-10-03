@@ -51,8 +51,8 @@ describe('serverControls', () => {
     expect(controls.map(control => control.command)).toEqual(['drop']);
     const session = new ScenarioSession(scenario(id));
     await session.reset();
-    await new Promise(resolve => setTimeout(resolve, 150));
-    expect(session.server!.openConnections).toBe(1);
+    // The fake connection opens after its latency: wait for it, however loaded the machine
+    await vi.waitFor(() => expect(session.server!.openConnections).toBe(1));
     for (const { command } of controls) session.server!.run(command);
     expect(session.server!.wire.at(-1)?.text).toMatch(/connection 1 dropped/);
     session.stop();

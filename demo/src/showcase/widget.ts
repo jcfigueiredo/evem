@@ -93,7 +93,7 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
       { id: 'code', label: 'Code', panel: codeHost }
     ],
     {
-      label: `${scenario.title}: output or code`,
+      label: `${scenario.title}: ${adapter ? 'output, wire or code' : 'output or code'}`,
       idPrefix: prefix,
       onSelect: id => {
         if (id === 'code') void showCode();
@@ -137,7 +137,11 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
     }
     if (rows.length > announced) {
       const text = liveAnnouncement(rows.slice(announced), performance.now() - lastInteraction);
-      if (text !== undefined) announcer.textContent = text;
+      if (text !== undefined) {
+        announcer.textContent = text;
+        // A stream never stops: an adapter's card says once what followed the reader's click, not every tick after
+        if (adapter) lastInteraction = Number.NEGATIVE_INFINITY;
+      }
     }
     announced = rows.length;
   };
