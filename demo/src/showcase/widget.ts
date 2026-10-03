@@ -12,9 +12,10 @@ import { keepsFollowing, liveAnnouncement, sinceLatestAction, timelineRows } fro
 
 /**
  * The height of a widget, which its slot in index.html reserves (as a card of the same size) until it mounts: a
- * widget coming in, or its output growing, never moves the page
+ * widget coming in, or its output growing, never moves the page. Taller on phones, where the controls and the
+ * buttons wrap onto more lines and would leave the output little room.
  */
-export const WIDGET_HEIGHT = 'h-[32rem]';
+export const WIDGET_HEIGHT = 'h-[36rem] sm:h-[32rem]';
 
 /** How many wire lines an adapter's card keeps */
 const WIRE_SHOWN = 100;

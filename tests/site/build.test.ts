@@ -26,8 +26,12 @@ it('builds the showcase and the playground for GitHub Pages, with the real libra
       { cwd: repo, env: { ...process.env, DEMO_BASE: '/evem/' }, stdio: 'pipe' }
     );
     for (const page of ['index.html', 'playground/index.html']) {
-      expect(readFileSync(join(outDir, page), 'utf8')).toMatch(/src="\/evem\/assets\/[^"]+\.js"/);
+      const html = readFileSync(join(outDir, page), 'utf8');
+      expect(html).toMatch(/src="\/evem\/assets\/[^"]+\.js"/);
+      // The footer says which library code the site runs (siteStamp.ts)
+      expect(html, page).not.toContain('%EVEM_');
     }
+    expect(readFileSync(join(outDir, 'index.html'), 'utf8')).toMatch(/commit\/[0-9a-f]{40}">[0-9a-f]{7}</);
     const scripts = readdirSync(join(outDir, 'assets'))
       .filter(file => file.endsWith('.js'))
       .map(file => readFileSync(join(outDir, 'assets', file), 'utf8'))

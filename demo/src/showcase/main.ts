@@ -1,4 +1,6 @@
 import { EvEm } from '@jcfigueiredo/evem';
+import { el } from '../dom';
+import { closeOnLeave } from '../dropdown';
 import { scenarios } from '../scenarios';
 import { mountThemePicker } from '../theme';
 import { mountHeroFlow } from './heroFlow';
@@ -10,23 +12,12 @@ mountThemePicker(document.getElementById('theme-picker')!, bus, 'dropdown-end');
 mountHeroFlow(document.getElementById('flow')!);
 
 // The phone menu closes once a link is chosen, on Escape, and when a click or the focus goes elsewhere
-for (const menu of document.querySelectorAll<HTMLDetailsElement>('details[data-menu]')) {
-  const close = () => menu.removeAttribute('open');
-  for (const link of menu.querySelectorAll('a')) link.addEventListener('click', close);
-  menu.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || !menu.open) return;
-    close();
-    menu.querySelector('summary')?.focus();
-  });
-  menu.addEventListener('focusout', event => {
-    if (!menu.contains(event.relatedTarget as Node | null)) close();
-  });
-  document.addEventListener('click', event => {
-    if (!menu.contains(event.target as Node)) close();
-  });
-}
+for (const menu of document.querySelectorAll<HTMLDetailsElement>('details[data-menu]')) closeOnLeave(menu);
 
-// Copy buttons: the text in data-copy, and a moment of "Copied"
+// Copy buttons: the text in data-copy, and a moment of "Copied", which screen readers hear too (the button's own
+// name stays what it does)
+const copyStatus = el('p', { class: 'sr-only', 'aria-live': 'polite' });
+document.body.append(copyStatus);
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy]')) {
   button.addEventListener('click', async () => {
     try {
@@ -35,7 +26,11 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy]')
     } catch {
       button.textContent = 'Copy failed';
     }
-    setTimeout(() => (button.textContent = 'Copy'), 1500);
+    copyStatus.textContent = button.textContent;
+    setTimeout(() => {
+      button.textContent = 'Copy';
+      copyStatus.textContent = '';
+    }, 1500);
   });
 }
 

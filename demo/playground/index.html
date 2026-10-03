@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>EvEm Playground</title>
     <meta name="description" content="Try every EvEm feature against the real library, and see what it did and why." />
+    <meta property="og:title" content="EvEm Playground" />
+    <meta
+      property="og:description"
+      content="Try every EvEm feature against the real library, and see what it did and why."
+    />
     <script>
       // Apply the saved theme before the page paints (same rules as resolveTheme in src/theme.ts)
       (function () {
@@ -17,6 +22,7 @@
         document.documentElement.setAttribute('data-theme', theme);
       })();
     </script>
+    <link rel="icon" href="../src/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="../src/styles.css" />
     <script type="module" src="../src/playground/main.ts"></script>
   </head>
@@ -41,6 +47,10 @@
           </a>
           <ul id="scenario-menu" class="menu w-full grow"></ul>
           <div id="theme-picker" class="p-3"></div>
+          <p class="px-5 pb-4 text-xs text-base-content/70">
+            Runs the library from source: version %EVEM_VERSION%, commit
+            <a class="link" href="%EVEM_COMMIT_URL%">%EVEM_COMMIT%</a>.
+          </p>
         </nav>
       </div>
     </div>
