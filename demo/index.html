@@ -25,36 +25,235 @@
         document.documentElement.setAttribute('data-theme', theme);
       })();
     </script>
+    <link rel="stylesheet" href="./src/styles.css" />
     <script type="module" src="./src/showcase/main.ts"></script>
   </head>
   <body class="min-h-screen bg-base-200">
-    <header class="navbar mx-auto max-w-6xl px-4">
-      <div class="navbar-start">
-        <a href="./" class="flex items-center gap-2 font-mono text-lg font-bold">
-          <span class="inline-block size-3.5 rounded bg-primary" aria-hidden="true"></span>evem
-        </a>
-      </div>
-      <div class="navbar-end gap-1">
-        <a class="btn btn-ghost btn-sm" href="./playground/">Playground</a>
-        <a class="btn btn-ghost btn-sm" href="https://github.com/jcfigueiredo/evem">GitHub</a>
-        <div id="theme-picker" class="w-44"></div>
-      </div>
-    </header>
-    <main class="hero min-h-[70vh]">
-      <div class="hero-content max-w-3xl flex-col text-center">
-        <h1 class="font-mono text-4xl font-bold tracking-tight sm:text-6xl">Events, with intent.</h1>
-        <p class="max-w-xl text-lg text-base-content/70">
-          A small TypeScript event emitter with wildcards, priorities, middleware, flow control and history, plus
-          WebSocket and Server-Sent Events adapters. No dependencies.
-        </p>
-        <code class="rounded-box bg-neutral px-4 py-2 font-mono text-sm text-neutral-content"
-          >npm install @jcfigueiredo/evem</code
-        >
-        <div class="flex flex-wrap justify-center gap-2">
-          <a class="btn btn-primary" href="./playground/">Open the playground</a>
-          <a class="btn" href="https://github.com/jcfigueiredo/evem#readme">Read the docs</a>
+    <header class="sticky top-0 z-30 border-b border-base-300 bg-base-200/90 backdrop-blur">
+      <nav class="navbar mx-auto max-w-6xl px-4" aria-label="Main">
+        <div class="navbar-start">
+          <a href="./" class="flex items-center gap-2 font-mono text-lg font-bold">
+            <span class="inline-block size-3.5 rounded bg-primary" aria-hidden="true"></span>evem
+          </a>
         </div>
-      </div>
+        <div class="navbar-end gap-1">
+          <a class="btn btn-ghost btn-sm hidden sm:inline-flex" href="#features">Features</a>
+          <a class="btn btn-ghost btn-sm hidden sm:inline-flex" href="./playground/">Playground</a>
+          <a class="btn btn-ghost btn-sm hidden sm:inline-flex" href="https://github.com/jcfigueiredo/evem">GitHub</a>
+          <details class="dropdown dropdown-end sm:hidden" data-menu>
+            <summary class="btn btn-ghost btn-sm" aria-label="Menu">Menu</summary>
+            <ul class="menu dropdown-content z-40 mt-2 w-48 rounded-box border border-base-300 bg-base-100 p-2">
+              <li><a href="#features">Features</a></li>
+              <li><a href="./playground/">Playground</a></li>
+              <li><a href="https://github.com/jcfigueiredo/evem">GitHub</a></li>
+            </ul>
+          </details>
+          <div id="theme-picker" class="w-44"></div>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-content mx-auto w-full max-w-6xl flex-col gap-12 px-4 py-16 lg:flex-row lg:items-center">
+          <div class="max-w-xl text-center lg:flex-1 lg:text-start">
+            <h1 id="hero-title" class="font-mono text-4xl font-bold tracking-tight sm:text-6xl">
+              Events, with intent.
+            </h1>
+            <p class="mt-4 text-lg text-base-content/70">
+              A small TypeScript event emitter with wildcards, priorities, middleware, flow control and history, plus
+              WebSocket and Server-Sent Events adapters.
+            </p>
+            <ul class="mt-4 flex flex-wrap justify-center gap-2 lg:justify-start" aria-label="At a glance">
+              <li class="badge badge-outline">No dependencies</li>
+              <li class="badge badge-outline">TypeScript</li>
+              <li class="badge badge-outline">ESM</li>
+            </ul>
+            <div
+              class="mx-auto mt-6 flex max-w-md items-center gap-2 rounded-box bg-neutral py-1 ps-4 pe-1 text-neutral-content lg:mx-0"
+            >
+              <code class="flex-1 overflow-x-auto py-2 font-mono text-sm whitespace-nowrap"
+                >npm install @jcfigueiredo/evem</code
+              >
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm text-neutral-content hover:border-transparent hover:bg-neutral-content/15"
+                data-copy="npm install @jcfigueiredo/evem"
+                aria-label="Copy the install command"
+              >
+                Copy
+              </button>
+            </div>
+            <div class="mt-6 flex flex-wrap justify-center gap-2 lg:justify-start">
+              <a class="btn btn-primary" href="./playground/">Open the playground</a>
+              <a class="btn" href="https://github.com/jcfigueiredo/evem#readme">GitHub</a>
+            </div>
+          </div>
+
+          <figure id="flow" class="card w-full max-w-lg border border-base-300 bg-base-100 lg:flex-1">
+            <div class="card-body gap-4 p-5">
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-xs tracking-widest text-base-content/70 uppercase" data-flow-label>How an event flows</p>
+                <button type="button" class="btn btn-ghost btn-xs invisible" data-flow-pause aria-pressed="false">
+                  Pause
+                </button>
+              </div>
+              <div
+                class="relative grid grid-cols-1 gap-2 text-center sm:grid-cols-[auto_auto_auto_auto_minmax(0,1fr)] sm:items-center sm:text-start"
+                data-flow
+              >
+                <div
+                  class="rounded-box border border-base-300 px-3 py-2 transition-shadow sm:row-span-3"
+                  data-flow-node="publish"
+                >
+                  <p class="text-xs text-base-content/70">publish</p>
+                  <p class="font-mono text-sm" data-flow-event>order.created</p>
+                </div>
+                <span class="text-base-content/70 sm:row-span-3" aria-hidden="true"
+                  ><span class="sm:hidden">↓</span><span class="hidden sm:inline">→</span></span
+                >
+                <div
+                  class="rounded-box border border-base-300 px-3 py-2 transition-shadow sm:row-span-3"
+                  data-flow-node="middleware"
+                >
+                  <p class="text-xs text-base-content/70">middleware</p>
+                  <p class="font-mono text-sm">drops debug.*</p>
+                  <p class="text-xs text-error" data-flow-status></p>
+                </div>
+                <span class="text-base-content/70 sm:row-span-3" aria-hidden="true"
+                  ><span class="sm:hidden">↓</span><span class="hidden sm:inline">→</span></span
+                >
+                <div
+                  class="rounded-box border border-base-300 px-3 py-2 transition-[opacity,box-shadow]"
+                  data-flow-node="audit"
+                >
+                  <p class="font-mono text-sm">audit</p>
+                  <p class="font-mono text-xs whitespace-nowrap text-base-content/70">*</p>
+                  <p class="font-mono text-xs whitespace-nowrap text-base-content/70">priority 10</p>
+                </div>
+                <div
+                  class="rounded-box border border-base-300 px-3 py-2 transition-[opacity,box-shadow]"
+                  data-flow-node="billing"
+                >
+                  <p class="font-mono text-sm">billing</p>
+                  <p class="font-mono text-xs whitespace-nowrap text-base-content/70">order.*</p>
+                  <p class="font-mono text-xs whitespace-nowrap text-base-content/70">priority 5</p>
+                </div>
+                <div
+                  class="rounded-box border border-base-300 px-3 py-2 transition-[opacity,box-shadow]"
+                  data-flow-node="welcome"
+                >
+                  <p class="font-mono text-sm">welcome</p>
+                  <p class="font-mono text-xs whitespace-nowrap text-base-content/70">user.signup</p>
+                  <p class="font-mono text-xs whitespace-nowrap text-base-content/70">priority 0</p>
+                </div>
+              </div>
+              <figcaption class="text-sm text-base-content/70">
+                A real EvEm: the middleware drops <code>debug.*</code>, and the subscribers whose pattern matches run,
+                highest priority first.
+              </figcaption>
+            </div>
+          </figure>
+        </div>
+      </section>
+
+      <section id="features" class="mx-auto max-w-6xl scroll-mt-16 px-4 pb-24" aria-labelledby="features-title">
+        <h2 id="features-title" class="font-mono text-3xl font-bold tracking-tight">Features</h2>
+        <p class="mt-2 max-w-2xl text-base-content/70">
+          Each example runs the real library: press its button to see what EvEm does, open its code, or take it to the
+          playground to change it.
+        </p>
+
+        <article
+          class="grid grid-cols-1 gap-6 border-t border-base-300 py-12 mt-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
+        >
+          <div>
+            <h3 class="font-mono text-2xl font-bold">Wildcards</h3>
+            <p class="mt-2 text-base-content/70">
+              One subscription for a family of events: <code>user.*</code> for everything about users, <code>*</code>
+              for everything. Type your own pattern and see what it matches, and why.
+            </p>
+          </div>
+          <div class="card h-[32rem] border border-base-300 bg-base-100" data-scenario="wildcards"></div>
+        </article>
+
+        <article
+          class="grid grid-cols-1 gap-6 border-t border-base-300 py-12 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
+        >
+          <div>
+            <h3 class="font-mono text-2xl font-bold">Priorities</h3>
+            <p class="mt-2 text-base-content/70">
+              Subscribers run highest priority first, so an audit log sees each event before any other subscriber does.
+              Change the priorities and publish again.
+            </p>
+          </div>
+          <div class="card h-[32rem] border border-base-300 bg-base-100" data-scenario="priorities"></div>
+        </article>
+
+        <article
+          class="grid grid-cols-1 gap-6 border-t border-base-300 py-12 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
+        >
+          <div>
+            <h3 class="font-mono text-2xl font-bold">Middleware</h3>
+            <p class="mt-2 text-base-content/70">
+              Middleware sees every event before its subscribers do: it can change the data, cancel the event, or send
+              it under another name.
+            </p>
+          </div>
+          <div class="card h-[32rem] border border-base-300 bg-base-100" data-scenario="middleware"></div>
+        </article>
+
+        <article
+          class="grid grid-cols-1 gap-6 border-t border-base-300 py-12 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
+        >
+          <div>
+            <h3 class="font-mono text-2xl font-bold">Throttle &amp; debounce</h3>
+            <p class="mt-2 text-base-content/70">
+              Keep a fast stream from flooding a slow subscriber: throttle runs it at most once per window, debounce
+              waits for a pause, and together they do both. The chart shows a burst of keystrokes over time.
+            </p>
+          </div>
+          <div class="card h-[32rem] border border-base-300 bg-base-100" data-scenario="throttle-debounce"></div>
+        </article>
+
+        <article
+          class="grid grid-cols-1 gap-6 border-t border-base-300 py-12 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
+        >
+          <div>
+            <h3 class="font-mono text-2xl font-bold">Cancelable events</h3>
+            <p class="mt-2 text-base-content/70">
+              Publish an event as cancelable and a subscriber can cancel it: the subscribers after it don't run. A fraud
+              check that stops a payment before it's charged.
+            </p>
+          </div>
+          <div class="card h-[32rem] border border-base-300 bg-base-100" data-scenario="cancelable-events"></div>
+        </article>
+
+        <article
+          class="grid grid-cols-1 gap-6 border-t border-base-300 py-12 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
+        >
+          <div>
+            <h3 class="font-mono text-2xl font-bold">History &amp; replay</h3>
+            <p class="mt-2 text-base-content/70">
+              EvEm can remember events, so a subscriber that arrives late still gets the latest one, or all of them.
+            </p>
+          </div>
+          <div class="card h-[32rem] border border-base-300 bg-base-100" data-scenario="history-replay"></div>
+        </article>
+
+        <article
+          class="grid grid-cols-1 gap-6 border-t border-base-300 py-12 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
+        >
+          <div>
+            <h3 class="font-mono text-2xl font-bold">Schema validation</h3>
+            <p class="mt-2 text-base-content/70">
+              Give a subscriber a schema and EvEm checks the data before calling it. By default, invalid data skips that
+              subscriber and is logged; other policies skip it quietly, run it anyway, or reject the publish.
+            </p>
+          </div>
+          <div class="card h-[32rem] border border-base-300 bg-base-100" data-scenario="schema-validation"></div>
+        </article>
+      </section>
     </main>
   </body>
 </html>

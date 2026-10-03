@@ -141,6 +141,17 @@ export function announcement(rows: readonly TimelineRow[]): string {
   return rows.map(row => `${row.text}.`).join(' ');
 }
 
+/**
+ * The entries of the latest action, from its `action` entry on (none before the first action): what a compact view
+ * shows, with the setup and earlier actions left out
+ */
+export function sinceLatestAction(entries: readonly TraceEntry[]): TraceEntry[] {
+  for (let index = entries.length - 1; index >= 0; index--) {
+    if (entries[index]!.kind === 'action') return entries.slice(index);
+  }
+  return [];
+}
+
 /** How long after the reader's last click, change or key press new rows are still read out */
 const ANNOUNCE_WINDOW = 5000;
 
