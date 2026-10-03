@@ -86,7 +86,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
       : undefined;
   const timelinePanel = el('div', { class: 'flex min-h-0 flex-1 flex-col' }, [timelineBox]);
   const outputTabs: Tab[] = [
-    { id: 'timeline', label: 'What EvEm did', panel: timelinePanel },
+    { id: 'timeline', label: 'What EvEm did', panel: timelinePanel, scroller: timelineBox },
     ...(lanesHost
       ? [{ id: 'lanes', label: 'Over time', panel: el('div', { class: 'min-h-0 flex-1 overflow-auto' }, [lanesHost]) }]
       : []),
@@ -95,7 +95,8 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
           {
             id: 'server',
             label: 'Server',
-            panel: el('div', { class: 'flex min-h-0 flex-1 flex-col' }, [server.element])
+            panel: el('div', { class: 'flex min-h-0 flex-1 flex-col' }, [server.element]),
+            scroller: server.log
           }
         ]
       : [])

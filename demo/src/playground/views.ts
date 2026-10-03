@@ -162,6 +162,8 @@ export interface Tab {
   id: string;
   label: string;
   panel: HTMLElement;
+  /** The element in the panel that scrolls, if not the panel itself: it's the one the keyboard can focus */
+  scroller?: HTMLElement;
 }
 
 /**
@@ -202,8 +204,14 @@ export function tabList(
     tab.panel.id = `${idPrefix}-panel-${tab.id}`;
     tab.panel.setAttribute('role', 'tabpanel');
     tab.panel.setAttribute('aria-labelledby', button.id);
-    // Focusable, so the keyboard can scroll a panel of plain rows after leaving the tab row
-    tab.panel.tabIndex = 0;
+    // Focusable, so the keyboard can scroll a panel of plain rows after leaving the tab row: the element that scrolls,
+    // named for screen readers when it isn't the panel (which its tab names)
+    const scroller = tab.scroller ?? tab.panel;
+    scroller.tabIndex = 0;
+    if (scroller !== tab.panel && !scroller.hasAttribute('aria-label')) {
+      scroller.setAttribute('role', 'group');
+      scroller.setAttribute('aria-label', tab.label);
+    }
     button.addEventListener('click', () => select(tab.id));
     button.addEventListener('keydown', event => {
       const index = tabAfterKey(tabs.length, tabs.indexOf(tab), event.key);

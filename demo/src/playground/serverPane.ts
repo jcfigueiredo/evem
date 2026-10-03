@@ -33,14 +33,16 @@ export function connectionStatus(open: number, states: readonly string[]): strin
 export function serverPane(
   session: ScenarioSession,
   onLocalServer: (local: boolean) => Promise<void>
-): { element: HTMLElement; render: () => void; reveal: () => void } {
+): { element: HTMLElement; render: () => void; reveal: () => void; log: HTMLElement } {
   const { websocket, sse } = session.scenario;
   const samples: ServerSample[] =
     sse?.samples ?? (websocket?.sample ? [{ label: 'Sample', text: websocket.sample }] : []);
   const local = import.meta.env.DEV && sse?.local ? sse.local : undefined;
 
   const log = el('ol', { class: 'space-y-0.5 font-mono text-xs' });
-  const logBox = el('div', { class: 'min-h-0 flex-1 overflow-y-auto pe-2' }, [log]);
+  const logBox = el('div', { class: 'min-h-0 flex-1 overflow-y-auto pe-2', role: 'group', 'aria-label': 'Wire log' }, [
+    log
+  ]);
   const status = el('p', { class: 'text-sm text-base-content/70' });
   const button = (label: string, className: string, onClick: () => void) => {
     const element = el('button', { type: 'button', class: className }, [label]);
@@ -208,5 +210,6 @@ export function serverPane(
   ]);
   showMode();
   render();
-  return { element, render, reveal };
+  // The log is what the keyboard scrolls, so the Server tab makes it focusable
+  return { element, render, reveal, log: logBox };
 }
