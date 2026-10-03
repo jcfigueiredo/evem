@@ -183,6 +183,13 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 | From | Follow-up | Phase |
 |---|---|---|
 | Phase 2, ruling 13 | `vite/client` types, for `import.meta.env` in Python mode | 3c |
+| 3b review | `publishFor` attributes a debounced call by value for primitives too (a `1` could be matched to an unrelated publish of `1`): only objects should match by identity | 3c |
+| 3b review | The lane chart scans the whole trace for subscriber names on every render (fine now; 3c's server scenarios make long traces) | 3c |
+| 3b review | A test pinning that a second burst replaces the first's pending debounced call (one later call) | 3c |
+| 3b review | `timeAxis` tests at the 12-second long-burst case and where span / step is exactly 8 | 3c |
+| 3b review | The spec's Tracing section still says "one card per publish": rows labeled with their publish's time shipped (3b, ruling 2) | 3c |
+| 3b review | The lane chart has no legend: filled (ran) and hollow (held back) are explained only in tooltips | 4 |
+| 3b review | The site has no favicon (a 404 in the console) | 4 |
 | Note, 2026-10-03 | The public site builds the library from `src/` on every push to `main`, not from the npm release, so the playground can show unreleased behavior (phase 1's fixes are still under Unreleased) while the showcase says `npm install`: show which code the site runs, and release a version when the playground depends on unreleased behavior | 4 |
 | Phase 2 review | Check narrow layouts below 513 px, with device emulation | 5 |
 
