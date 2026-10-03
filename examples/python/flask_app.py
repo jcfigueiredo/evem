@@ -1,7 +1,8 @@
 """SSE endpoint for evem clients with Flask.
 
     pip install flask
-    flask --app flask_app run --port 8000    # evem_sse.py next to this file
+    flask --app flask_app run --port 8000                      # here, with evem_sse.py next to this file
+    flask --app examples/python/flask_app.py run --port 8000   # from the repository root
 
 Streams numbered ``tick`` events like ``server.py``: the client publishes them as ``server.tick``
 and resumes after a reconnect from ``Last-Event-ID`` (or the ``lastEventId`` query parameter).

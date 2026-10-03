@@ -1,7 +1,8 @@
-"""SSE endpoint for evem clients with FastAPI (the same code works with plain Starlette).
+"""SSE endpoint for evem clients with FastAPI (with plain Starlette, only the imports and the route change).
 
     pip install fastapi uvicorn
-    uvicorn fastapi_app:app --port 8000      # evem_sse.py next to this file
+    uvicorn fastapi_app:app --port 8000                            # here, with evem_sse.py next to this file
+    uvicorn fastapi_app:app --app-dir examples/python --port 8000   # from the repository root
 
 Streams numbered ``tick`` events like ``server.py``: the client publishes them as ``server.tick``
 and resumes after a reconnect from ``Last-Event-ID`` (or the ``lastEventId`` query parameter).

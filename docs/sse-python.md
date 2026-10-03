@@ -142,7 +142,7 @@ evem.subscribe('server.order.*', (order: { id: number }) => render(order));
 
 ## Examples
 
-All three examples stream numbered `tick` events (`{"n": 1}`, `{"n": 2}`, …) on `/events`. The client receives them as `server.tick`. Each tick's id is its number, so resuming is simply continuing after the id the client sends back.
+All three examples stream numbered `tick` events (`{"n": 1}`, `{"n": 2}`, …) on `/events`. The client receives them as `server.tick`; with the EventSource transport, it needs `eventTypes: ['tick']` (see [Native EventSource clients](#native-eventsource-clients)). Each tick's id is its number, so resuming is simply continuing after the id the client sends back.
 
 ### Standard library: server.py
 
@@ -175,7 +175,7 @@ data: {"n":2}
 | `--retry` | `1000` | The `retry:` sent to clients, in ms. |
 | `--drop-after N` | — | End the first connection after N events, to show the client resuming. |
 
-It resumes from the `Last-Event-ID` header or the `lastEventId` query parameter. It sends heartbeats, and logs when a client disconnects (`BrokenPipeError` / `ConnectionResetError` on the next write).
+It resumes from the `Last-Event-ID` header or the `lastEventId` query parameter. It sends heartbeats, and logs when a client disconnects (`BrokenPipeError` / `ConnectionResetError` on a later write; the first write after the client leaves can still succeed).
 
 ### FastAPI / Starlette
 
@@ -183,7 +183,7 @@ It resumes from the `Last-Event-ID` header or the `lastEventId` query parameter.
 
 ```bash
 pip install fastapi uvicorn
-uvicorn fastapi_app:app --port 8000
+uvicorn fastapi_app:app --app-dir examples/python --port 8000   # from the repository root
 ```
 
 ```python
@@ -239,6 +239,7 @@ async def events(request: Request) -> StreamingResponse:
 
 - **Headers:** `StreamingResponse` keeps the `Content-Type` from `SSE_HEADERS`, so there's no need for `media_type`.
 - **Disconnects:** under uvicorn, Starlette listens for the client's disconnect and cancels the generator right away, even in the middle of a sleep, so `finally` runs. `request.is_disconnected()` covers servers where Starlette doesn't do that (ASGI spec 2.4 and later), where a disconnect otherwise only shows up as a failed write.
+- **Plain Starlette:** `ticks()`, `resume_after()` and `StreamingResponse` work unchanged. Import `Request` from `starlette.requests` and `StreamingResponse` from `starlette.responses`, drop the `@app.get` decorator, and register the endpoint with `app = Starlette(routes=[Route("/events", events)])` (`from starlette.applications import Starlette`, `from starlette.routing import Route`).
 - **Real events:** in a real app the generator waits for events instead of sleeping. Wait on a per-client `asyncio.Queue` with a timeout of `HEARTBEAT_SECONDS`, and send a ping when the wait times out.
 - **Don't block the event loop:** use async I/O in the generator. One blocking call stalls every stream in the process.
 
@@ -248,7 +249,7 @@ async def events(request: Request) -> StreamingResponse:
 
 ```bash
 pip install flask
-flask --app flask_app run --port 8000
+flask --app examples/python/flask_app.py run --port 8000   # from the repository root
 ```
 
 ```python
@@ -302,7 +303,7 @@ def events() -> Response:
 ```
 
 - **Headers:** `Response` keeps the `Content-Type` from `SSE_HEADERS` instead of its `text/html` default.
-- **Disconnects:** WSGI has no disconnect notification. The server finds out when the next write fails, closes the generator, and `finally` runs.
+- **Disconnects:** WSGI has no disconnect notification. The server finds out when a write fails (the first one after the client leaves can still succeed, so it may be the second), closes the generator, and `finally` runs.
 - **Threads:** each open stream holds a worker thread for as long as it's open. The development server (`flask run`) is threaded; for production, see [Workers](#workers-and-processes).
 
 ## Resuming with Last-Event-ID

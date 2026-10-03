@@ -1,4 +1,5 @@
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { connect, createServer, type AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { EvEm } from '../../src/eventEmitter';
@@ -535,3 +536,113 @@ describe.skipIf(!hasPython)('SseHandler against the Python server (examples/pyth
     ]);
   }, 20000);
 });
+
+/** Whether python3 can import all of these modules */
+function canImport(...modules: string[]): boolean {
+  return hasPython && spawnSync(PYTHON, ['-c', modules.map(name => `import ${name}`).join('; ')]).status === 0;
+}
+
+const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
+
+/** A port nothing listens on right now */
+async function freePort(): Promise<number> {
+  const probe = createServer();
+  await new Promise<void>(resolve => probe.listen(0, '127.0.0.1', resolve));
+  const { port } = probe.address() as AddressInfo;
+  await new Promise(resolve => probe.close(resolve));
+  return port;
+}
+
+/** Start a framework example with the command docs/sse-python.md gives, from the repository root */
+async function startFrameworkApp(command: string[]): Promise<PythonServer> {
+  const port = await freePort();
+  // -B: don't leave __pycache__ in examples/python
+  const child = spawn(PYTHON, ['-B', '-m', ...command, '--port', String(port)], { cwd: repositoryRoot });
+  const log: string[] = [];
+  child.stdout.setEncoding('utf8').on('data', (chunk: string) => log.push(chunk));
+  child.stderr.setEncoding('utf8').on('data', (chunk: string) => log.push(chunk));
+
+  const deadline = Date.now() + 15_000;
+  for (;;) {
+    if (child.exitCode !== null) {
+      throw new Error(`${command.join(' ')} exited with ${child.exitCode}:\n${log.join('')}`);
+    }
+    const listening = await new Promise<boolean>(resolve => {
+      const socket = connect(port, '127.0.0.1');
+      socket.once('connect', () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.once('error', () => resolve(false));
+    });
+    if (listening) {
+      return { child, url: `http://127.0.0.1:${port}/events`, log };
+    }
+    if (Date.now() > deadline) {
+      child.kill('SIGKILL');
+      throw new Error(`${command.join(' ')} wasn't listening after 15 s:\n${log.join('')}`);
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+}
+
+const FRAMEWORK_APPS = [
+  {
+    name: 'FastAPI',
+    file: 'fastapi_app.py',
+    modules: ['fastapi', 'uvicorn'],
+    command: ['uvicorn', 'fastapi_app:app', '--app-dir', 'examples/python']
+  },
+  {
+    name: 'Flask',
+    file: 'flask_app.py',
+    modules: ['flask'],
+    command: ['flask', '--app', 'examples/python/flask_app.py', 'run']
+  }
+];
+
+for (const app of FRAMEWORK_APPS) {
+  describe.skipIf(!canImport(...app.modules))(
+    `SseHandler against the ${app.name} example (examples/python/${app.file})`,
+    () => {
+      let server: PythonServer | undefined;
+      let handler: SseHandler | undefined;
+
+      afterEach(async () => {
+        await handler?.disconnect();
+        handler = undefined;
+        const child = server?.child;
+        server = undefined;
+        if (child && child.exitCode === null && child.signalCode === null) {
+          await new Promise(resolve => {
+            child.once('exit', resolve);
+            child.kill('SIGKILL');
+          });
+        }
+      });
+
+      /** The numbers of the first `count` ticks a new handler publishes as server.tick */
+      function receiveTicks(count: number, options: SseHandlerOptions = {}): Promise<number[]> {
+        const evem = new EvEm();
+        const received: number[] = [];
+        return new Promise(resolve => {
+          evem.subscribe<{ n: number }>('server.tick', tick => {
+            received.push(tick.n);
+            if (received.length === count) resolve(received);
+          });
+          handler = new SseHandler(server!.url, evem, options);
+        });
+      }
+
+      it('streams numbered ticks that the handler publishes as server.tick', async () => {
+        server = await startFrameworkApp(app.command);
+        expect(await receiveTicks(2)).toEqual([1, 2]);
+      }, 20_000);
+
+      it('resumes after the id in the lastEventId option (sent as Last-Event-ID)', async () => {
+        server = await startFrameworkApp(app.command);
+        expect(await receiveTicks(1, { lastEventId: '41' })).toEqual([42]);
+      }, 20_000);
+    }
+  );
+}
