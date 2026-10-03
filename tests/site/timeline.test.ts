@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { TraceEntry } from '../../demo/src/engine/trace';
-import { announcement, describeEntry, isAtEnd, liveAnnouncement, preview, timelineRows } from '../../demo/src/timeline';
+import {
+  announcement,
+  describeEntry,
+  isAtEnd,
+  liveAnnouncement,
+  preview,
+  sinceLatestAction,
+  timelineRows
+} from '../../demo/src/timeline';
 
 describe('preview', () => {
   it('shows data as JSON, shortened with an ellipsis', () => {
@@ -137,6 +145,18 @@ describe('timelineRows', () => {
       '1 resolved true',
       '0 resolved true'
     ]);
+  });
+});
+
+describe('sinceLatestAction', () => {
+  it('keeps the latest action and what came after it, and nothing before the first action', () => {
+    const at = { at: 0, publish: undefined };
+    const setup: TraceEntry = { kind: 'log', level: 'log', text: 'setup', ...at };
+    const first: TraceEntry = { kind: 'action', label: 'First', ...at };
+    const second: TraceEntry = { kind: 'action', label: 'Second', ...at };
+    const later: TraceEntry = { kind: 'log', level: 'log', text: 'later', ...at };
+    expect(sinceLatestAction([setup])).toEqual([]);
+    expect(sinceLatestAction([setup, first, later, second, later])).toEqual([second, later]);
   });
 });
 
