@@ -71,6 +71,27 @@ describe('describeEntry', () => {
   });
 });
 
+describe('later calls and actions', () => {
+  it('shows a call that came after its publish ended at the top level, with the time of the publish it came from', () => {
+    const entries: TraceEntry[] = [
+      { kind: 'action', label: 'Type', at: 0 },
+      { kind: 'publish', id: 1, event: 'search', data: { q: 'ev' }, at: 5 },
+      { kind: 'skip', subscription: 'search', reason: 'debounced', publish: 1, at: 6 },
+      { kind: 'result', id: 1, result: true, at: 6 },
+      { kind: 'call', subscription: 'search', data: { q: 'ev' }, later: true, publish: 1, at: 306 },
+      { kind: 'call', subscription: 'search', data: { q: 'ev' }, later: true, at: 400 }
+    ];
+    expect(timelineRows(entries).map(row => `${row.depth} ${row.text}`)).toEqual([
+      '0 ▶ Type',
+      '0 publish search',
+      '1 search skipped: debounced (runs later if nothing else arrives)',
+      '0 resolved true',
+      '0 search ran later, with the data published at 5 ms',
+      '0 search ran later'
+    ]);
+  });
+});
+
 describe('describeEntry details', () => {
   it('shows no data for a publish without any', () => {
     expect(describeEntry({ kind: 'publish', id: 1, event: 'tick', data: undefined, at: 0 })).toEqual({

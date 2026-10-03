@@ -50,7 +50,8 @@ describe('ScenarioSession', () => {
 
     await session.run('greet');
 
-    expect(kinds(session)).toEqual(['subscribe', 'publish', 'call', 'result', 'log']);
+    expect(kinds(session)).toEqual(['subscribe', 'action', 'publish', 'call', 'result', 'log']);
+    expect(session.trace.entries[1]).toMatchObject({ kind: 'action', label: 'Greet' });
     expect(session.trace.entries.at(-1)).toMatchObject({ kind: 'log', level: 'log', text: 'greeted false' });
   });
 
@@ -154,7 +155,10 @@ describe('ScenarioSession', () => {
     await session.run('new');
 
     expect(session.actions).toEqual([{ id: 'new', label: 'New' }]);
-    expect(session.trace.entries).toEqual([expect.objectContaining({ kind: 'log', text: 'new' })]);
+    expect(session.trace.entries).toEqual([
+      expect.objectContaining({ kind: 'action', label: 'New' }),
+      expect.objectContaining({ kind: 'log', text: 'new' })
+    ]);
   });
 
   it('writes raw select values into the code as code, and text values as strings', () => {
@@ -177,6 +181,17 @@ describe('ScenarioSession', () => {
     await session.edit("import WebSocket from 'ws';\n// ▶ Greet\n");
 
     expect(session.actions).toEqual([]);
+  });
+
+  it('clears the action buttons when the setup throws', async () => {
+    const session = new ScenarioSession(scenario);
+    await session.reset();
+    expect(session.actions).toHaveLength(1);
+
+    await session.edit("throw new Error('setup failed');\n// ▶ Greet\n");
+
+    expect(session.actions).toEqual([]);
+    expect(session.trace.entries).toEqual([expect.objectContaining({ kind: 'error', message: 'setup failed' })]);
   });
 
   it("gives the code a console that logs info and debug too, and whose other methods are the page's", async () => {
@@ -221,7 +236,10 @@ describe('ScenarioSession', () => {
     const session = new ScenarioSession({ ...scenario, code: '// ▶ Fail\nthrow new Error("no");' });
     await session.reset();
     await session.run('fail');
-    expect(session.trace.entries).toEqual([expect.objectContaining({ kind: 'error', message: 'no' })]);
+    expect(session.trace.entries).toEqual([
+      expect.objectContaining({ kind: 'action', label: 'Fail' }),
+      expect.objectContaining({ kind: 'error', message: 'no' })
+    ]);
   });
 });
 

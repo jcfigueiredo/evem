@@ -221,6 +221,49 @@ describe('createTracedEvEm', () => {
     expect(lines(trace, ['call', 'skip']).slice(2)).toEqual(['call latest @3']);
   });
 
+  it('attributes a debounced call to the publish whose data it got, not just the latest one', async () => {
+    vi.useFakeTimers();
+    const { trace, evem } = traced();
+    evem.subscribe<{ q: string }>('search', function search() {}, {
+      debounceTime: 100,
+      filter: query => query.q !== 'skip'
+    });
+    await evem.publish('search', { q: 'ev' });
+    // Filtered out, so it doesn't restart the debounce: the call still gets publish 1's data
+    await evem.publish('search', { q: 'skip' });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(lines(trace, ['call'])).toEqual(['call search later @1']);
+  });
+
+  it('records nothing about matches or skips for a publish EvEm refuses (an empty event name)', async () => {
+    const trace = new Trace();
+    const TracedEvEm = createTracedEvEm(trace, new Map(), { explainMatches: true });
+    const evem = new TracedEvEm();
+    evem.subscribe('*', function everything() {});
+
+    await expect(evem.publish('')).rejects.toThrow('Event name cannot be empty.');
+
+    expect(lines(trace)).toEqual(['subscribe everything @-', 'publish  @-', 'rejected  @-']);
+  });
+
+  it('records no subscription when subscribe() refuses an empty pattern', () => {
+    const { trace, evem } = traced();
+    expect(() => evem.subscribe('', function nobody() {})).toThrow('Event name cannot be empty.');
+    expect(trace.entries).toEqual([]);
+  });
+
+  it('records unsubscribing a once subscription by its callback as a plain unsubscribe', async () => {
+    const handler = () => {};
+    const { trace, evem } = traced({ handler });
+    evem.subscribe('a', handler, { once: true });
+    evem.unsubscribe('a', handler);
+    await Promise.resolve();
+    expect(trace.entries.filter(entry => entry.kind === 'unsubscribe')).toEqual([
+      expect.not.objectContaining({ once: true })
+    ]);
+    expect(lines(trace, ['unsubscribe'])).toEqual(['unsubscribe handler @-']);
+  });
+
   it('records the data each middleware passes on', async () => {
     const { trace, evem } = traced();
     evem.use(function stamp(_event: string, data: any) {
