@@ -196,6 +196,27 @@ describe('ScenarioSession', () => {
     expect(logs(session)).toEqual(['{"a":1}', `{\n  "name": "${'x'.repeat(90)}"\n}`]);
   });
 
+  it('records what the library logs with console.log and console.group during a run, indented by group', async () => {
+    const originalLog = console.log;
+    const session = new ScenarioSession({
+      ...scenario,
+      helpers: {
+        libraryLog: () => {
+          console.group('Details:');
+          console.log('inside');
+          console.groupEnd();
+          console.info('after');
+        }
+      },
+      code: '// ▶ Log\nlibraryLog();'
+    });
+    await session.reset();
+    await session.run('log');
+
+    expect(logs(session)).toEqual(['Details:', '  inside', 'after']);
+    expect(console.log).toBe(originalLog);
+  });
+
   it('records an error thrown by an action', async () => {
     const session = new ScenarioSession({ ...scenario, code: '// ▶ Fail\nthrow new Error("no");' });
     await session.reset();

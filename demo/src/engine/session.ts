@@ -56,7 +56,11 @@ const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
 ) => (...args: unknown[]) => Promise<unknown>;
 
 /** The page's own console methods, which every run that replaces them puts back */
-const pageConsole = { warn: console.warn, error: console.error };
+const CAPTURED = ['log', 'info', 'warn', 'error', 'group', 'groupCollapsed', 'groupEnd'] as const;
+type Captured = (typeof CAPTURED)[number];
+const pageConsole: Pick<Console, Captured> = Object.fromEntries(
+  CAPTURED.map(method => [method, console[method]])
+) as Pick<Console, Captured>;
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -198,22 +202,41 @@ export class ScenarioSession {
     });
   }
 
-  /** Run `work`, recording what EvEm itself logs meanwhile (e.g. "Error in event handler …") in `trace` */
+  /**
+   * Run `work`, recording in `trace` what the library logs meanwhile: EvEm's warnings and errors ("Error in event
+   * handler …") and what it prints with console.log and console.group (memory leak details), indented by group
+   */
   private async capturingLogs<V>(trace: Trace, work: () => Promise<V>): Promise<V> {
+    let depth = 0;
     const record =
-      (level: 'warn' | 'error') =>
+      (level: 'log' | 'warn' | 'error') =>
       (...args: unknown[]) =>
-        trace.record({ kind: 'log', level, text: args.map(formatArgument).join(' ') });
-    const capture = { warn: record('warn'), error: record('error') };
-    console.warn = capture.warn;
-    console.error = capture.error;
+        trace.record({ kind: 'log', level, text: '  '.repeat(depth) + args.map(formatArgument).join(' ') });
+    const group = (...args: unknown[]) => {
+      record('log')(...args);
+      depth++;
+    };
+    const capture: Pick<Console, Captured> = {
+      log: record('log'),
+      info: record('log'),
+      warn: record('warn'),
+      error: record('error'),
+      group,
+      groupCollapsed: group,
+      groupEnd: () => {
+        depth = Math.max(0, depth - 1);
+      }
+    };
+    Object.assign(console, capture);
     try {
       return await work();
     } finally {
       // Undo only this capture, back to the page's console: a newer run that replaced it undoes its own, so a run
       // that never finishes (or finishes late) can't keep the console
-      if (console.warn === capture.warn) console.warn = pageConsole.warn;
-      if (console.error === capture.error) console.error = pageConsole.error;
+      const own = console as unknown as Record<Captured, unknown>;
+      for (const method of CAPTURED) {
+        if (own[method] === capture[method]) own[method] = pageConsole[method];
+      }
     }
   }
 }

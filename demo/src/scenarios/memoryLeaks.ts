@@ -35,6 +35,12 @@ export const memoryLeaks: Scenario = {
   ].join('\n'),
   checks: [
     {
+      values: { details: true },
+      action: 'add-click-handlers',
+      calls: [],
+      logs: ['Possible memory leak detected', 'Event subscription details:', '  Subscriptions to "button.click": 4']
+    },
+    {
       action: 'add-click-handlers',
       calls: [],
       logs: ['Possible memory leak detected: 4 handlers added for event "button.click"']
