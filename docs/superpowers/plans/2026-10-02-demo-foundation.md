@@ -40,6 +40,8 @@ Each was checked by a prototype that ran the code in this plan: the 136 tests in
 12. **Scenario checks use real timers for now.** Priorities has no timers; phase 3 switches `tests/site/scenarios.test.ts` to fake timers with its first timed scenario (the spec asks for fake timers).
 13. **No `vite/client` types yet.** Nothing imports `?raw` or reads `import.meta.env` until phase 3's Python mode switch; that phase adds them.
 
+**GitHub Pages** was enabled by the user on 2026-10-02 (Source: GitHub Actions); Task 9 only checks it.
+
 ## Review Focus
 
 1. **An action or setup that never finishes, or finishes late** (edited code that awaits forever, a slow callback): its button stays disabled while it runs, and Reset, a control change or "Run edited code" must give working buttons, the newest code's program and the page's own console back. The workbench's `generation` counter does the buttons (Chrome, Task 8 step 5); the session does the rest (Task 4: `gives the console back on the next reset…`, `keeps the newest code when an earlier setup finishes after it`).
@@ -3340,12 +3342,12 @@ demo:build, and the design marks phase 2 done (on Vite 8).
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 6: Enable GitHub Pages — ask first**
+- [ ] **Step 6: Check that GitHub Pages is enabled**
 
-Pages isn't enabled on the repository yet, and `pages.yml`'s deploy fails on `main` until it is. Enabling it changes a repository setting, so ask the user before running:
+The user enabled Pages on 2026-10-02 (Settings → Pages → Source: GitHub Actions), before this plan ran, so the first push of `pages.yml` to `main` deploys. Check it's still so:
 
 ```bash
-command gh api -X POST repos/jcfigueiredo/evem/pages -f build_type=workflow
+command gh api repos/jcfigueiredo/evem/pages --jq '{build_type, html_url}'
 ```
 
-(`command gh`: the shell's `gh` function is broken in this environment.) Expected: JSON with `"build_type": "workflow"` and `"html_url": "https://jcfigueiredo.github.io/evem/"`. If the user declines, say so in the final report: the Pages workflow will fail on `main` until Pages is enabled (Settings → Pages → Source: GitHub Actions).
+(`command gh`: the shell's `gh` function is broken in this environment.) Expected: `{"build_type":"workflow","html_url":"https://jcfigueiredo.github.io/evem/"}`. If it says `Not Found` or another `build_type`, ask the user before changing the setting: until it's `workflow`, `pages.yml`'s deploy fails on `main`.
