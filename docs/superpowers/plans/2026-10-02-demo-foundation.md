@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - No runtime dependencies: everything added here is a dev dependency. The published package (`files: ["dist"]`) is unchanged.
-- Vite 8 needs Node.js `^20.19.0 || >=22.12.0` for the dev tooling; the library itself still supports Node.js 20+. CI's Node 20 leg uses the latest 20.x.
+- **Development needs Node.js 20.19+ or 22.12+.** That's Vite 8's `engines` (`^20.19.0 || >=22.12.0`); none of the other new dependencies sets a floor. Since `tests/site/build.test.ts` runs Vite, the floor covers `pnpm test:nowatch` and `pnpm check`, not only `pnpm demo`: on an older Node, pnpm warns about an unsupported engine at install, and Vite doesn't support it. The published package is unaffected: everything added is a dev dependency, and its `engines` stays `>=20`. CI qualifies (`setup-node` with `20` installs the latest 20.x, 20.20.2 today; the other leg and the release workflow use 22). Task 9 documents the floor in CLAUDE.md and the README.
 - The site imports the library only as `@jcfigueiredo/evem`, `@jcfigueiredo/evem/websocket`, `@jcfigueiredo/evem/sse` and `@jcfigueiredo/evem/sse/server`, aliased to `src/` in `demo/vite.config.ts`, `vitest.config.ts` and `tsconfig.json` (`paths`).
 - Colors only through daisyUI semantic tokens, except the shared code-panel palette (`--code-*`); every text pair meets WCAG AA (4.5:1), enforced by `tests/site/contrast.test.ts`.
 - Class names that Tailwind must generate are written out in full in the source (no `` `status-${tone}` ``): Tailwind scans the files for literal class names.
@@ -3264,9 +3264,10 @@ CI (`ci.yml`) needs no change: `pnpm test:nowatch` runs `tests/site/build.test.t
 
 - [ ] **Step 2: Update CLAUDE.md**
 
-In `## Commands`, after the **Build** line, add:
+In `## Commands`, after the **Build** line, add these two lines:
 
 ```markdown
+- **Node.js for development**: 20.19+ or 22.12+ (Vite 8's floor; the whole suite needs it, since `tests/site/build.test.ts` builds the demo site). The package itself supports Node.js 20+ (`engines`): Vite and the rest of the demo's dependencies are dev-only
 - **Demo site**: `pnpm demo` (Vite dev server for `demo/`: the showcase at `/`, the playground at `/playground/`; `/python` is proxied to the Python SSE examples on port 8000) and `pnpm demo:build` (static site into `demo/dist/`, git-ignored; `DEMO_BASE=/evem/` builds it for GitHub Pages)
 ```
 
@@ -3311,6 +3312,12 @@ pnpm demo            # The demo site (showcase and playground) on a local dev se
 pnpm demo:build      # Build the demo site into demo/dist/
 ```
 
+and after that block, before the "Maintainers release…" line, add:
+
+```markdown
+Developing needs Node.js 20.19+ or 22.12+ (the demo site is built with Vite 8, and the tests build it); the package itself runs on Node.js 20+.
+```
+
 In `docs/demo-revamp-design.md`:
 - the status line: replace `phase 1 (examples audit) implemented; phases 2–5 not started.` with `phases 1 (examples audit) and 2 (foundation) implemented; phases 3–5 not started.`
 - under Phase 2 → Layout, **Dependencies**: replace `` `vite` 7 `` with `` `vite` 8 ``
@@ -3336,8 +3343,10 @@ and deploys it with actions/deploy-pages. CI needs no new step: the
 test suite already builds the site the same way.
 
 CLAUDE.md describes the demo site (aliases, engine, scenarios, UI,
-themes, tests) and its commands, the README lists pnpm demo and pnpm
-demo:build, and the design marks phase 2 done (on Vite 8).
+themes, tests), its commands and the Node.js floor for development
+(20.19+ or 22.12+, Vite 8's; the package still supports Node.js 20+),
+the README lists pnpm demo and pnpm demo:build with that floor, and the
+design marks phase 2 done (on Vite 8).
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
