@@ -19,6 +19,15 @@ function themes(): Map<string, Map<string, string>> {
 /** The shared code-panel colors (`--code-*`) */
 const codeColors = new Map([...css.matchAll(/--code-([\w-]+): (#[0-9a-f]{6});/g)].map(match => [match[1]!, match[2]!]));
 
+/** The color token styles.css gives a daisyUI menu variable, or daisyUI's default */
+const menuColor = (variable: string, fallback: string) =>
+  new RegExp(`--${variable}: var\\(--color-([\\w-]+)\\)`).exec(css)?.[1] ?? fallback;
+
+/** The token of the keyboard focus ring styles.css gives menu items (daisyUI shows none on the current link) */
+const focusRing = /\.menu :is\(a, button\):focus-visible \{\s*outline: 2px solid var\(--color-([\w-]+)\)/.exec(
+  css
+)?.[1];
+
 /** WCAG 2.1 contrast ratio of two #rrggbb colors */
 function contrast(a: string, b: string): number {
   const luminance = (hex: string) => {
@@ -57,6 +66,18 @@ describe('theme colors', () => {
 
     it.each([...codeColors.keys()])('code color %s meets WCAG AA on the code panel', token => {
       expect(contrast(codeColors.get(token)!, color('neutral'))).toBeGreaterThanOrEqual(4.5);
+    });
+
+    // The sidebar (base-300): where you are, and where keyboard focus is, must show (WCAG 1.4.11: 3:1 for non-text)
+    it("the sidebar's current link stands out from the sidebar, and its text reads on it", () => {
+      const background = color(menuColor('menu-active-bg', 'neutral'));
+      expect(contrast(background, color('base-300'))).toBeGreaterThanOrEqual(3);
+      expect(contrast(color(menuColor('menu-active-fg', 'neutral-content')), background)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it('menu items show keyboard focus with a ring that stands out from the sidebar', () => {
+      expect(focusRing, 'a :focus-visible outline for menu items in styles.css').toBeDefined();
+      expect(contrast(color(focusRing!), color('base-300'))).toBeGreaterThanOrEqual(3);
     });
   });
 });

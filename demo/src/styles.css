@@ -95,6 +95,19 @@
   box-shadow: 0 0 8px currentColor;
 }
 
+/* The current sidebar link: a primary pill. daisyUI's default, neutral, is the sidebar's own color in Signal */
+.menu {
+  --menu-active-bg: var(--color-primary);
+  --menu-active-fg: var(--color-primary-content);
+}
+
+/* Keyboard focus on menu items: a ring, like buttons. daisyUI shows it only as a background, and not at all on the
+   current link */
+.menu :is(a, button):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
