@@ -21,7 +21,8 @@ export class ActionGate {
 
   /** A run ended: true if it still held the buttons (so they can be enabled again) */
   end(token: number): boolean {
-    if (token !== this.holder || token !== this.generation) return false;
+    // The holder is always the current generation, and reset() clears it, so an older run's token never matches
+    if (token !== this.holder) return false;
     this.holder = undefined;
     return true;
   }

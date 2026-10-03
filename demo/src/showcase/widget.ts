@@ -160,6 +160,7 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
     if (token === undefined) return;
     for (const button of actions.querySelectorAll<HTMLButtonElement>('button:not([data-server-control])'))
       button.disabled = true;
+    void editor?.then(view => view.setRunsEnabled(false));
     if (!adapter) announced = 0;
     try {
       await session.run(id);
@@ -167,6 +168,7 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
       if (gate.end(token)) {
         for (const button of actions.querySelectorAll<HTMLButtonElement>('button:not([data-server-control])'))
           button.disabled = false;
+        void editor?.then(view => view.setRunsEnabled(true));
       }
     }
   };
@@ -197,7 +199,10 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
           async value => {
             gate.reset();
             await session.setValue(name, value);
-            void editor?.then(view => view.setCode(session.code));
+            void editor?.then(view => {
+              view.setCode(session.code);
+              view.setRunsEnabled(true);
+            });
             renderActions();
             announced = 0;
             render();

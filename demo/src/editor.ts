@@ -25,6 +25,8 @@ export interface CodeEditor {
   getCode(): string;
   setCode(code: string): void;
   setEditable(editable: boolean): void;
+  /** Whether the ▶ buttons can run their action: off while a run holds the actions, like the action buttons */
+  setRunsEnabled(enabled: boolean): void;
   focus(): void;
   destroy(): void;
 }
@@ -63,7 +65,8 @@ const theme = EditorView.theme(
       lineHeight: '1',
       padding: '3px 5px'
     },
-    '.cm-run:hover': { backgroundColor: 'color-mix(in oklch, var(--code-string) 18%, transparent)' },
+    '.cm-run:disabled': { opacity: '0.35', cursor: 'default' },
+    '.cm-run:hover:not(:disabled)': { backgroundColor: 'color-mix(in oklch, var(--code-string) 18%, transparent)' },
     // Keyboard focus needs a ring that stands out from the code panel (3:1, pinned in contrast.test.ts)
     '.cm-run:focus-visible': { outline: '2px solid var(--code-string)', outlineOffset: '1px' },
     '.cm-content': { fontFamily: 'var(--font-mono)', padding: '12px 0', caretColor: 'var(--code-keyword)' },
@@ -79,7 +82,10 @@ const theme = EditorView.theme(
 
 /** A ▶ button in the margin of an action's line */
 class RunMarker extends GutterMarker {
-  constructor(readonly label: string) {
+  constructor(
+    readonly label: string,
+    readonly enabled: () => boolean
+  ) {
     super();
   }
 
@@ -94,12 +100,13 @@ class RunMarker extends GutterMarker {
     button.textContent = '▶';
     button.title = `Run “${this.label}”`;
     button.setAttribute('aria-label', `Run “${this.label}”`);
+    button.disabled = !this.enabled();
     return button;
   }
 }
 
 /** The margin with a ▶ button on each `// ▶ Label` line, which calls `onRunAction` with the label */
-function runGutter(onRunAction: (label: string) => void) {
+function runGutter(onRunAction: (label: string) => void, enabled: () => boolean) {
   return gutter({
     class: 'cm-run-gutter',
     markers: view => {
@@ -107,13 +114,14 @@ function runGutter(onRunAction: (label: string) => void) {
       for (let number = 1; number <= view.state.doc.lines; number++) {
         const line = view.state.doc.line(number);
         const label = actionLabel(line.text);
-        if (label !== undefined) markers.add(line.from, line.from, new RunMarker(label));
+        if (label !== undefined) markers.add(line.from, line.from, new RunMarker(label, enabled));
       }
       return markers.finish();
     },
     domEventHandlers: {
       click: (view, block, event) => {
         if (!(event.target instanceof Element) || !event.target.closest('.cm-run')) return false;
+        if (!enabled()) return true;
         const label = actionLabel(view.state.doc.lineAt(block.from).text);
         if (label !== undefined) onRunAction(label);
         return true;
@@ -131,7 +139,8 @@ export function createEditor(
   const editable = new Compartment();
   // The ▶ buttons run the program that's running, so they go while the code is being edited
   const runButtons = new Compartment();
-  const runs = (on: boolean) => (on && options.onRunAction ? runGutter(options.onRunAction) : []);
+  let runsEnabled = true;
+  const runs = (on: boolean) => (on && options.onRunAction ? runGutter(options.onRunAction, () => runsEnabled) : []);
   const readOnly = (on: boolean) => [EditorView.editable.of(!on), EditorState.readOnly.of(on)];
   const view = new EditorView({
     parent,
@@ -163,6 +172,10 @@ export function createEditor(
     setCode: next => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: next } }),
     setEditable: on =>
       view.dispatch({ effects: [editable.reconfigure(readOnly(!on)), runButtons.reconfigure(runs(!on))] }),
+    setRunsEnabled: enabled => {
+      runsEnabled = enabled;
+      for (const button of view.dom.querySelectorAll<HTMLButtonElement>('.cm-run')) button.disabled = !enabled;
+    },
     focus: () => view.focus(),
     destroy: () => view.destroy()
   };

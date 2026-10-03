@@ -72,6 +72,8 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     clearedFrom = 0;
     await change();
     editor.setCode(session.code);
+    // A run from before the reset may never end: the ▶ buttons are free again, like the action buttons
+    editor.setRunsEnabled(true);
     renderActions();
     renderTimeline();
   };
@@ -189,10 +191,14 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     const token = gate.start();
     if (token === undefined) return;
     for (const button of actions.querySelectorAll('button')) button.disabled = true;
+    editor.setRunsEnabled(false);
     try {
       await session.run(id);
     } finally {
-      if (gate.end(token)) for (const button of actions.querySelectorAll('button')) button.disabled = false;
+      if (gate.end(token)) {
+        for (const button of actions.querySelectorAll('button')) button.disabled = false;
+        editor.setRunsEnabled(true);
+      }
     }
   };
 
