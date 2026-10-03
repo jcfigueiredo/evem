@@ -1248,15 +1248,14 @@ class EvEm implements IEventEmitter {
       console.group('Event subscription details:');
 
       try {
-        const eventInfo = this.info(event);
+        // The subscriptions the warning counted: those to this exact event name or pattern
+        const subscriptions = this.events.get(event) ?? new Map<string, CallbackInfo>();
 
-        console.log(`Total subscriptions for "${event}" pattern: ${eventInfo.length}`);
+        console.log(`Subscriptions to "${event}": ${subscriptions.size}`);
         console.log('Subscription IDs:');
 
-        eventInfo.forEach(info => {
-          if (!info.isMiddleware && info.id) {
-            console.log(`- ${info.id} (priority: ${info.priority})`);
-          }
+        subscriptions.forEach((info, id) => {
+          console.log(`- ${id} (priority: ${info.priority})`);
         });
 
         console.log('To fix this issue:');

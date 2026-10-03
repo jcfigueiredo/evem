@@ -178,4 +178,17 @@ describe('Memory Leak Detection', () => {
     // Should warn again since it fell below threshold and then exceeded again
     expect(console.warn).toHaveBeenCalledTimes(1);
   });
+
+  it('should list in the details only the subscriptions the warning counted', () => {
+    evem.use((_event, data) => data); // middleware isn't a subscription
+    evem.subscribe('user.login', () => {}); // matches user.* but subscribes to another name
+    evem.enableMemoryLeakDetection({ threshold: 2 });
+
+    const ids = [1, 2, 3].map(() => evem.subscribe('user.*', () => {}));
+
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('3 handlers added for event "user.*"'));
+    const logged = vi.mocked(console.log).mock.calls.map(call => call.join(' '));
+    expect(logged).toContain('Subscriptions to "user.*": 3');
+    expect(logged.filter(line => line.startsWith('- '))).toEqual(ids.map(id => `- ${id} (priority: 0)`));
+  });
 });
