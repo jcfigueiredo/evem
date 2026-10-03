@@ -63,7 +63,9 @@ const theme = EditorView.theme(
       lineHeight: '1',
       padding: '3px 5px'
     },
-    '.cm-run:hover, .cm-run:focus-visible': { backgroundColor: 'rgb(163 230 53 / 0.18)', outline: 'none' },
+    '.cm-run:hover': { backgroundColor: 'color-mix(in oklch, var(--code-string) 18%, transparent)' },
+    // Keyboard focus needs a ring that stands out from the code panel (3:1, pinned in contrast.test.ts)
+    '.cm-run:focus-visible': { outline: '2px solid var(--code-string)', outlineOffset: '1px' },
     '.cm-content': { fontFamily: 'var(--font-mono)', padding: '12px 0', caretColor: 'var(--code-keyword)' },
     '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.6', overflow: 'auto' },
     '.cm-gutters': { backgroundColor: 'transparent', color: 'var(--code-comment)', border: 'none' },

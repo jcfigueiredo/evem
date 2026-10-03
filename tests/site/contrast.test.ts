@@ -28,6 +28,11 @@ const focusRing = /\.menu :is\(a, button\):focus-visible \{\s*outline: 2px solid
   css
 )?.[1];
 
+/** The `--code-*` color of the keyboard focus ring editor.ts gives the code's ▶ buttons */
+const runFocusRing = /'\.cm-run:focus-visible': \{[^}]*outline: '2px solid var\(--code-([\w-]+)\)'/.exec(
+  readFileSync(new URL('../../demo/src/editor.ts', import.meta.url), 'utf8')
+)?.[1];
+
 /** The site's markup and scripts: the pages, and everything under demo/src */
 const demoFile = (path: string) => readFileSync(new URL(`../../demo/${path}`, import.meta.url), 'utf8');
 const sources = [
@@ -115,6 +120,11 @@ describe('theme colors', () => {
         const faded = blend(color('base-content'), color(base), opacity / 100);
         expect(contrast(faded, color(base)), `on ${base}`).toBeGreaterThanOrEqual(3);
       }
+    });
+
+    it("the code's ▶ buttons show keyboard focus with a ring that stands out from the code panel", () => {
+      expect(runFocusRing, 'a :focus-visible outline for .cm-run in editor.ts, in a --code-* color').toBeDefined();
+      expect(contrast(codeColors.get(runFocusRing!)!, color('neutral'))).toBeGreaterThanOrEqual(3);
     });
 
     it('menu items show keyboard focus with a ring that stands out from the sidebar', () => {
