@@ -31,7 +31,9 @@ export function renderLaneChart(container: HTMLElement, chart: LaneChart | undef
     );
     return;
   }
-  const { span, ticks } = timeAxis(chart.end - chart.start);
+  // Room for a tick label about every 72 px of the time track (the chart's width, less the name column and gap)
+  const maxIntervals = Math.min(8, Math.max(2, Math.floor((container.clientWidth - 156) / 72)));
+  const { span, ticks } = timeAxis(chart.end - chart.start, maxIntervals);
   const left = (at: number) => `left: ${(((at - chart.start) / span) * 100).toFixed(2)}%`;
   const lane = (label: string, dots: LaneDot[]) => [
     el('span', { class: 'font-mono text-xs text-base-content/70 truncate', title: label }, [label]),
@@ -51,7 +53,7 @@ export function renderLaneChart(container: HTMLElement, chart: LaneChart | undef
     el(
       'div',
       {
-        class: 'grid grid-cols-[minmax(4rem,9rem)_minmax(0,1fr)] items-center gap-x-3',
+        class: 'grid grid-cols-[fit-content(9rem)_minmax(0,1fr)] items-center gap-x-3',
         role: 'img',
         'aria-label': summary(chart)
       },
@@ -66,7 +68,7 @@ export function renderLaneChart(container: HTMLElement, chart: LaneChart | undef
             el(
               'span',
               {
-                class: 'absolute top-1 -translate-x-1/2 text-xs text-base-content/70',
+                class: 'absolute top-1 -translate-x-1/2 whitespace-nowrap text-xs text-base-content/70',
                 style: left(chart.start + tick)
               },
               [`${tick} ms`]

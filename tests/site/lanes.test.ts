@@ -8,6 +8,11 @@ describe('timeAxis', () => {
     expect(timeAxis(1000)).toEqual({ span: 1050, ticks: [0, 200, 400, 600, 800, 1000] });
     expect(timeAxis(4000).ticks).toEqual([0, 1000, 2000, 3000, 4000]);
   });
+
+  it('takes fewer, larger steps when the track only has room for a few labels', () => {
+    expect(timeAxis(1000, 3)).toEqual({ span: 1050, ticks: [0, 500, 1000] });
+    expect(timeAxis(12_000, 2).ticks).toEqual([0, 10_000]);
+  });
 });
 
 describe('laneChart', () => {

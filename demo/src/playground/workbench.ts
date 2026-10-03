@@ -165,6 +165,9 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     });
   };
   const traceSubscription = bus.subscribe('trace.entry', scheduleRender);
+  // The chart's tick labels depend on its width: draw it again when that changes
+  const resizes = lanesHost ? new ResizeObserver(() => scheduleRender()) : undefined;
+  if (lanesHost) resizes?.observe(lanesHost);
 
   const runAction = async (id: string) => {
     if (busy) return;
@@ -297,6 +300,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
 
   return () => {
     bus.unsubscribeById(traceSubscription);
+    resizes?.disconnect();
     editor.destroy();
   };
 }

@@ -24,10 +24,14 @@ export interface LaneChart {
   lanes: Lane[];
 }
 
-/** The time axis for a chart lasting `duration` ms: its span (a little longer), and readable ticks */
-export function timeAxis(duration: number): { span: number; ticks: number[] } {
+/**
+ * The time axis for a chart lasting `duration` ms: its span (a little longer), and readable ticks, at most
+ * `maxIntervals` of them apart (fewer on a narrow chart, so their labels don't collide)
+ */
+export function timeAxis(duration: number, maxIntervals = 8): { span: number; ticks: number[] } {
   const span = Math.max(Math.ceil(duration * 1.05), 400);
-  const step = [50, 100, 200, 250, 500, 1000, 2000, 5000, 10_000, 30_000].find(size => span / size <= 8) ?? 60_000;
+  const step =
+    [50, 100, 200, 250, 500, 1000, 2000, 5000, 10_000, 30_000].find(size => span / size <= maxIntervals) ?? 60_000;
   const ticks: number[] = [];
   for (let tick = 0; tick <= span; tick += step) ticks.push(tick);
   return { span, ticks };
