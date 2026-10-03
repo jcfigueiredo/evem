@@ -25,6 +25,7 @@
         document.documentElement.setAttribute('data-theme', theme);
       })();
     </script>
+    <link rel="stylesheet" href="./src/styles.css" />
     <script type="module" src="./src/showcase/main.ts"></script>
   </head>
   <body class="min-h-screen bg-base-200">
@@ -91,9 +92,11 @@
 
           <figure id="flow" class="card w-full max-w-lg border border-base-300 bg-base-100 lg:flex-1">
             <div class="card-body gap-4 p-5">
-              <div class="flex items-center justify-between gap-2" data-flow-live hidden>
-                <p class="text-xs tracking-widest text-base-content/70 uppercase">Live</p>
-                <button type="button" class="btn btn-ghost btn-xs" data-flow-pause aria-pressed="false">Pause</button>
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-xs tracking-widest text-base-content/70 uppercase" data-flow-label>How an event flows</p>
+                <button type="button" class="btn btn-ghost btn-xs invisible" data-flow-pause aria-pressed="false">
+                  Pause
+                </button>
               </div>
               <div
                 class="relative grid grid-cols-1 gap-2 text-center sm:grid-cols-[auto_auto_auto_auto_minmax(0,1fr)] sm:items-center sm:text-start"
@@ -146,9 +149,8 @@
                 </div>
               </div>
               <figcaption class="text-sm text-base-content/70">
-                <span data-flow-live hidden>A real EvEm, publishing an event every few seconds.</span>
-                The middleware drops <code>debug.*</code>, and the subscribers whose pattern matches run, highest
-                priority first.
+                A real EvEm: the middleware drops <code>debug.*</code>, and the subscribers whose pattern matches run,
+                highest priority first.
               </figcaption>
             </div>
           </figure>
@@ -172,7 +174,7 @@
               for everything. Type your own pattern and see what it matches, and why.
             </p>
           </div>
-          <div data-scenario="wildcards"></div>
+          <div class="card h-[32rem] border border-base-300 bg-base-100" data-scenario="wildcards"></div>
         </article>
 
         <article
@@ -185,7 +187,7 @@
               Change the priorities and publish again.
             </p>
           </div>
-          <div data-scenario="priorities"></div>
+          <div class="card h-[32rem] border border-base-300 bg-base-100" data-scenario="priorities"></div>
         </article>
 
         <article
@@ -198,7 +200,7 @@
               it under another name.
             </p>
           </div>
-          <div data-scenario="middleware"></div>
+          <div class="card h-[32rem] border border-base-300 bg-base-100" data-scenario="middleware"></div>
         </article>
 
         <article
@@ -211,7 +213,7 @@
               waits for a pause, and together they do both. The chart shows a burst of keystrokes over time.
             </p>
           </div>
-          <div data-scenario="throttle-debounce"></div>
+          <div class="card h-[32rem] border border-base-300 bg-base-100" data-scenario="throttle-debounce"></div>
         </article>
 
         <article
@@ -224,7 +226,7 @@
               check that stops a payment before it's charged.
             </p>
           </div>
-          <div data-scenario="cancelable-events"></div>
+          <div class="card h-[32rem] border border-base-300 bg-base-100" data-scenario="cancelable-events"></div>
         </article>
 
         <article
@@ -236,7 +238,7 @@
               EvEm can remember events, so a subscriber that arrives late still gets the latest one, or all of them.
             </p>
           </div>
-          <div data-scenario="history-replay"></div>
+          <div class="card h-[32rem] border border-base-300 bg-base-100" data-scenario="history-replay"></div>
         </article>
 
         <article
@@ -249,7 +251,7 @@
               subscriber and is logged; other policies skip it quietly, run it anyway, or reject the publish.
             </p>
           </div>
-          <div data-scenario="schema-validation"></div>
+          <div class="card h-[32rem] border border-base-300 bg-base-100" data-scenario="schema-validation"></div>
         </article>
       </section>
     </main>

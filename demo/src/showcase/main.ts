@@ -1,4 +1,3 @@
-import '../styles.css';
 import { EvEm } from '@jcfigueiredo/evem';
 import { scenarios } from '../scenarios';
 import { mountThemePicker } from '../theme';

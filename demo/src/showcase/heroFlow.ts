@@ -14,13 +14,14 @@ const DIM = 'opacity-50';
  * Animate the hero's diagram (`#flow` in index.html) with a real EvEm (`createFlow`): every few seconds it publishes
  * the next event, and a dot follows it from the publish node through the middleware to each subscriber that ran, in
  * the order they ran. It pauses when the reader presses Pause, scrolls it out of view or leaves the tab. With reduced
- * motion (or without JavaScript), the diagram stays still, and only the parts that say it's live (`data-flow-live`:
- * the Live label, the Pause button, a line of the caption) stay hidden.
+ * motion (or without JavaScript), the diagram stays still under its "How an event flows" label. Going live changes
+ * the label and shows Pause, which kept its place while invisible, so the card's size never changes.
  */
 export function mountHeroFlow(root: HTMLElement): void {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  for (const live of root.querySelectorAll<HTMLElement>('[data-flow-live]')) live.hidden = false;
+  root.querySelector<HTMLElement>('[data-flow-label]')!.textContent = 'Live';
   const pause = root.querySelector<HTMLButtonElement>('[data-flow-pause]')!;
+  pause.classList.remove('invisible');
   const stage = root.querySelector<HTMLElement>('[data-flow]')!;
   const node = (name: string) => stage.querySelector<HTMLElement>(`[data-flow-node="${name}"]`)!;
   const eventLabel = stage.querySelector<HTMLElement>('[data-flow-event]')!;

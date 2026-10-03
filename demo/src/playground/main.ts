@@ -1,4 +1,3 @@
-import '../styles.css';
 import { EvEm } from '@jcfigueiredo/evem';
 import { scenarioForHash } from '../routing';
 import { scenarios } from '../scenarios';

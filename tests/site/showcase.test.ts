@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ScenarioSession } from '../../demo/src/engine/session';
 import { scenarios } from '../../demo/src/scenarios';
 import { FLOW_MIDDLEWARE, FLOW_SUBSCRIBERS } from '../../demo/src/showcase/flow';
+import { WIDGET_HEIGHT } from '../../demo/src/showcase/widget';
 
 const page = readFileSync(new URL('../../demo/index.html', import.meta.url), 'utf8');
 /** The text of an element, tags stripped, whitespace collapsed */
@@ -32,6 +33,18 @@ describe('the showcase page', () => {
       session.stop();
       expect(session.actions.length, id).toBeGreaterThan(0);
     }
+  });
+
+  it("reserves each widget's height in its slot, so a widget coming in never moves the page", () => {
+    const slots = [...page.matchAll(/<div([^>]*)data-scenario="[^"]+"([^>]*)>/g)].map(match => match[1]! + match[2]!);
+    expect(slots).toHaveLength(7);
+    for (const slot of slots) expect(slot.match(/class="([^"]*)"/)?.[1]?.split(/\s+/)).toContain(WIDGET_HEIGHT);
+  });
+
+  it("keeps the hero diagram's size from the first paint: nothing in it waits hidden for the script", () => {
+    const figure = page.slice(page.indexOf('<figure id="flow"'), page.indexOf('</figure>'));
+    expect(figure).not.toMatch(/\shidden[\s>]/);
+    expect(figure).toContain('data-flow-label');
   });
 
   it('draws the hero diagram as the flow is wired: its middleware, and each subscriber with its pattern and priority', () => {
