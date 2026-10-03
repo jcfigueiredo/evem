@@ -3,6 +3,7 @@ import * as core from '@jcfigueiredo/evem';
 import * as sse from '@jcfigueiredo/evem/sse';
 import * as sseServer from '@jcfigueiredo/evem/sse/server';
 import * as websocket from '@jcfigueiredo/evem/websocket';
+import { FakeWebSocketServer, type FakeWebSocketBehavior } from '../fakes/webSocketServer';
 import { compileProgram, renderCode, type Action, type ControlValue, type PackageImport } from './program';
 import { Trace } from './trace';
 import { createTracedEvEm } from './tracedEvEm';
@@ -51,6 +52,11 @@ export interface Scenario {
   explainMatches?: boolean;
   /** Show the latest action over time: a lane for its publishes and one per subscriber (flow control) */
   lanes?: boolean;
+  /**
+   * A fake WebSocket server for the scenario: how it behaves, and a sample frame for the server pane's send box. The
+   * code's `WebSocketHandler` connects to it unless the code passes its own `WebSocketConstructor`.
+   */
+  websocket?: FakeWebSocketBehavior & { sample?: string };
 }
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
@@ -100,7 +106,11 @@ export class ScenarioSession {
   edited = false;
   actions: Action[] = [];
   trace: Trace;
+  /** The scenario's fake WebSocket server, new at every reset (scenarios with `websocket`) */
+  server: FakeWebSocketServer | undefined;
   private program: Record<string, () => Promise<void>> | undefined;
+  /** The WebSocket handlers the code created, disconnected when the scenario starts over */
+  private handlers: websocket.WebSocketHandler[] = [];
 
   constructor(
     readonly scenario: Scenario,
@@ -134,14 +144,28 @@ export class ScenarioSession {
     return this.reset();
   }
 
+  /** End the run's connections: the code's WebSocket handlers disconnect, and the fake server closes */
+  stop(): void {
+    for (const handler of this.handlers.splice(0)) void handler.disconnect().catch(() => undefined);
+    this.server?.close();
+  }
+
   /**
-   * Start over: a new trace, a fresh EvEm, and the setup code run again. A setup that finishes after a newer reset
-   * started (a slow one) leaves the newer program and trace alone.
+   * Start over: a new trace, a fresh EvEm, and the setup code run again (and a new fake server, for a scenario with
+   * one). A setup that finishes after a newer reset started (a slow one) leaves the newer program and trace alone.
    */
   async reset(): Promise<void> {
     const trace = new Trace(this.bus);
     this.trace = trace;
     this.program = undefined;
+    this.stop();
+    this.server = this.scenario.websocket
+      ? new FakeWebSocketServer(
+          this.scenario.websocket,
+          () => trace.now(),
+          entry => void this.bus?.publish('wire.entry', entry)
+        )
+      : undefined;
     this.actions = [];
     try {
       const { body, actions, imports } = compileProgram(this.code);
@@ -151,7 +175,7 @@ export class ScenarioSession {
           ...core,
           EvEm: createTracedEvEm(trace, this.helperNames(), { explainMatches: this.scenario.explainMatches })
         },
-        '@jcfigueiredo/evem/websocket': websocket,
+        '@jcfigueiredo/evem/websocket': { ...websocket, WebSocketHandler: this.playgroundWebSocketHandler(trace) },
         '@jcfigueiredo/evem/sse': sse,
         '@jcfigueiredo/evem/sse/server': sseServer
       };
@@ -182,6 +206,30 @@ export class ScenarioSession {
     } catch (error) {
       trace.record({ kind: 'error', message: messageOf(error) });
     }
+  }
+
+  /**
+   * The code's WebSocketHandler: the library's, connecting to the scenario's fake server unless the code passes its own
+   * WebSocketConstructor (or a socket), and naming what it registers on the emitter after itself in the timeline
+   */
+  private playgroundWebSocketHandler(trace: Trace): typeof websocket.WebSocketHandler {
+    const server = this.server;
+    const handlers = this.handlers;
+    return class PlaygroundWebSocketHandler extends websocket.WebSocketHandler {
+      constructor(...[urlOrSocket, evem, options = {}]: ConstructorParameters<typeof websocket.WebSocketHandler>) {
+        const connect =
+          server && typeof urlOrSocket === 'string' && !options.WebSocketConstructor
+            ? { ...options, WebSocketConstructor: server.socketClass }
+            : options;
+        trace.owner = 'WebSocketHandler';
+        try {
+          super(urlOrSocket, evem, connect);
+        } finally {
+          trace.owner = undefined;
+        }
+        handlers.push(this);
+      }
+    };
   }
 
   /** The scenario's names for its helpers, which a production build's minifier would otherwise rename */

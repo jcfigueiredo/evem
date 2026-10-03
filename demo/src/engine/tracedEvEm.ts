@@ -174,7 +174,7 @@ export function createTracedEvEm(
     ): string {
       // EvEm refuses an empty name before doing anything: so does the trace
       if (!event) return super.subscribe(event, callback, options);
-      const name = nameOf(callback, () => `subscriber ${++this.anonymous}`);
+      const name = trace.owner ?? nameOf(callback, () => `subscriber ${++this.anonymous}`);
       let id = '';
       const wrapped: EventCallback<T> = data => {
         const state = this.current();
@@ -321,7 +321,7 @@ export function createTracedEvEm(
 
     override use<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void {
       const handler = typeof middleware === 'function' ? middleware : middleware.handler;
-      const name = nameOf(handler, `middleware ${this.middlewares.size + 1}`);
+      const name = trace.owner ?? nameOf(handler, `middleware ${this.middlewares.size + 1}`);
       const traced: MiddlewareFunction<T> = (event, data) => {
         const state = this.current();
         const publish = trace.currentPublish;

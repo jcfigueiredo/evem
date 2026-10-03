@@ -31,8 +31,25 @@ const kinds = (session: ScenarioSession) => session.trace.entries.map(entry => e
 const logs = (session: ScenarioSession) =>
   session.trace.entries.flatMap(entry => (entry.kind === 'log' ? [entry.text] : []));
 
+/** A scenario with a fake WebSocket server, whose code connects a WebSocketHandler to it (or to `options`) */
+const websocketScenario = (options = '{}'): Scenario => ({
+  ...scenario,
+  id: 'socket',
+  controls: {},
+  helpers: {},
+  code: [
+    "import { EvEm } from '@jcfigueiredo/evem';",
+    "import { WebSocketHandler } from '@jcfigueiredo/evem/websocket';",
+    'const evem = new EvEm();',
+    `const handler = new WebSocketHandler('wss://example.test/ws', evem, ${options});`,
+    "evem.subscribe('server.news', function news() {});"
+  ].join('\n'),
+  websocket: { latency: 10 }
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('ScenarioSession', () => {
@@ -240,6 +257,71 @@ describe('ScenarioSession', () => {
       expect.objectContaining({ kind: 'action', label: 'Fail' }),
       expect.objectContaining({ kind: 'error', message: 'no' })
     ]);
+  });
+});
+
+describe('ScenarioSession with a fake WebSocket server', () => {
+  it("connects the code's WebSocketHandler to the scenario's server, and names what the handler registers after it", async () => {
+    vi.useFakeTimers();
+    const session = new ScenarioSession(websocketScenario());
+    await session.reset();
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(session.server?.openConnections).toBe(1);
+    const subscribers = session.trace.entries.flatMap(entry =>
+      entry.kind === 'subscribe' ? [entry.subscription] : []
+    );
+    expect(new Set(subscribers)).toEqual(new Set(['WebSocketHandler', 'news']));
+    expect(subscribers.at(-1)).toBe('news');
+  });
+
+  it('leaves a WebSocketConstructor the code passes alone', async () => {
+    vi.useFakeTimers();
+    const ownSocket = [
+      '{ WebSocketConstructor: class OwnSocket {',
+      '  constructor(url) { console.log("own socket for", url); this.readyState = 0; }',
+      '  send() {}',
+      '  close() {}',
+      '} }'
+    ].join(' ');
+    const session = new ScenarioSession(websocketScenario(ownSocket));
+    await session.reset();
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(logs(session)).toEqual(['own socket for wss://example.test/ws']);
+    expect(session.server?.openConnections).toBe(0);
+  });
+
+  it("names the code's own subscriptions after them again when a handler's constructor throws", async () => {
+    const failing = "{ WebSocketConstructor: class Offline { constructor() { throw new Error('offline'); } } }";
+    const code = websocketScenario(failing).code.replace(
+      /const handler = (new WebSocketHandler\(.*\));/,
+      "try { $1; } catch (error) { console.log('no handler:', error.message); }"
+    );
+    const session = new ScenarioSession({ ...websocketScenario(), code });
+    await session.reset();
+
+    expect(logs(session)).toEqual(['no handler: offline']);
+    expect(session.trace.entries.filter(entry => entry.kind === 'subscribe')).toMatchObject([{ subscription: 'news' }]);
+  });
+
+  it("ends the previous run's connections on reset, and stop() ends the current ones", async () => {
+    vi.useFakeTimers();
+    const session = new ScenarioSession(websocketScenario('{ reconnect: true, reconnectDelay: 50 }'));
+    await session.reset();
+    await vi.advanceTimersByTimeAsync(10);
+    const first = session.server!;
+
+    await session.reset();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(first.openConnections).toBe(0);
+    expect(session.server).not.toBe(first);
+    expect(session.server?.openConnections).toBe(1);
+
+    const second = session.server!;
+    session.stop();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(second.openConnections).toBe(0);
   });
 });
 
