@@ -1193,7 +1193,7 @@ try {
   const { validationErrors } = error as { validationErrors: SchemaValidationError[] };
   console.log(validationErrors.map(e => e.path));
 }
-// Logs: Schema validation failed for event 'user.register' (from the first subscriber)
+// Logs: Schema validation failed for event 'user.register'  <- from the first subscriber
 // Output: [ 'email', 'age' ]
 ```
 
