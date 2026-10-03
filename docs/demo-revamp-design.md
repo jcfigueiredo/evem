@@ -191,6 +191,7 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 | 3a review | History & replay doesn't show `replayLastEvent` picking the last *matching* event | 3b |
 | 3a review | CLAUDE.md's Engine bullet runs two sentences together | 3b |
 | Phase 2, ruling 13 | `vite/client` types, for `import.meta.env` in Python mode | 3c |
+| Note, 2026-10-03 | The public site builds the library from `src/` on every push to `main`, not from the npm release, so the playground can show unreleased behavior (phase 1's fixes are still under Unreleased) while the showcase says `npm install`: show which code the site runs, and release a version when the playground depends on unreleased behavior | 4 |
 | Phase 2 review | Check narrow layouts below 513 px, with device emulation | 5 |
 
 ## Phase 4: Showcase
