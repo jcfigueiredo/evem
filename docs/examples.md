@@ -29,7 +29,7 @@ const subId = evem.subscribe<string>("event.name", data => {
 
 ### Publishing an Event
 
-`publish` returns a promise that resolves once the matching subscribers have run (async callbacks are awaited): to `true`, or to `false` if the event was canceled (by a subscriber of a cancelable event, by middleware returning `null`, or by the `CANCEL_ON_ERROR` error policy).
+`publish` returns a promise that resolves once the matching subscribers have run (async callbacks are awaited): to `true`, or to `false` if the event was canceled (by a subscriber of a cancelable event, by middleware returning `null` or throwing, or by the `CANCEL_ON_ERROR` error policy).
 
 ```typescript
 async function publishEvent() {
@@ -266,7 +266,7 @@ interface Registration {
 }
 
 // Step 1: Data validation
-evem.subscribe<Registration & CancelableEvent>("user.register", event => {
+evem.subscribe<Registration & CancelableEvent>("account.register", event => {
   if (!event.email || !event.password) {
     console.log("Missing required fields");
     event.cancel();
@@ -275,7 +275,7 @@ evem.subscribe<Registration & CancelableEvent>("user.register", event => {
 }, { priority: "high" });
 
 // Step 2: Business rules
-evem.subscribe<Registration & CancelableEvent>("user.register", event => {
+evem.subscribe<Registration & CancelableEvent>("account.register", event => {
   if (event.password.length < 8) {
     console.log("Password too short");
     event.cancel();
@@ -284,14 +284,14 @@ evem.subscribe<Registration & CancelableEvent>("user.register", event => {
 }, { priority: "normal" });
 
 // Step 3: The actual registration process
-evem.subscribe<Registration>("user.register", event => {
+evem.subscribe<Registration>("account.register", event => {
   console.log("Registering user:", event.email);
   // Save user to database...
 }, { priority: "low" });
 
 // Publish with cancelable option
 const userData: Registration = { email: "user@example.com", password: "short" };
-const registrationComplete = await evem.publish("user.register", userData, { cancelable: true });
+const registrationComplete = await evem.publish("account.register", userData, { cancelable: true });
 
 console.log(registrationComplete ? "User registered" : "Registration canceled");
 // Password too short
@@ -346,7 +346,7 @@ If the first handler takes longer than 5 seconds, `CANCEL_ON_ERROR` logs `Error 
 The adapter has its own entry point, `@jcfigueiredo/evem/websocket`. **`WebSocketHandler` is the recommended way to use it**: it connects a WebSocket to an EvEm instance and runs the adapter's other components for you.
 
 - **Connection state**: publishes `ws.connection.state` changes; with `reconnect: true` it reconnects after unexpected closes and publishes `ws.reconnect.failed` when it gives up.
-- **Outgoing messages**: sends `ws.send` and `ws.send.*` events (such as `ws.send.chat`) while connected and queues them while offline, sending the queue when the socket opens. Only the payload is sent, as JSON; the event name is not.
+- **Outgoing messages**: sends `ws.send` and `ws.send.*` events (such as `ws.send.chat`) while connected and queues them while offline, sending the queue when the socket opens. Only the payload is sent, as JSON; the event name is not. Names containing `queued` are reserved for the queue.
 - **Requests**: `handler.request(method, params?, options?)` sends a request and resolves with the server's response.
 - **Incoming messages**: `{ "event": "chat.message", "data": ... }` (or the older `{ "type": "chat.message", "data": ... }`) is published as `server.chat.message`, with `data` as the payload, and responses to requests settle `request()`. Messages with neither field go to `ws.message`, messages that aren't valid JSON to `ws.parse.error`, and socket errors to `ws.error`.
 
@@ -417,7 +417,7 @@ try {
 }
 ```
 
-Requests made while offline are queued like other messages and sent when the socket opens, but their timeout starts when `request()` is called.
+Requests made while offline are queued like other messages and sent when the socket opens, but their timeout starts when `request()` is called. A request that times out while it's still queued is sent anyway when the socket opens, and its response is ignored.
 
 ### Concurrent Requests
 
