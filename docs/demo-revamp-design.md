@@ -1,6 +1,6 @@
 # Demo Revamp Design
 
-> **Status: phases 1 (examples audit), 2 (foundation), 3 (playground: 3a core scenarios, 3b flow control, 3c-1 WebSocket and Recipes, 3c-2 SSE and the local server switch), 4a (showcase: navbar, hero, features), the UX pass after 4a, and 4b-1 (adapter cards, Why EvEm, footer, metadata, the showcase's follow-ups) implemented; 4b-2 (the playground's follow-ups) and 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
+> **Status: phases 1 (examples audit), 2 (foundation), 3 (playground: 3a core scenarios, 3b flow control, 3c-1 WebSocket and Recipes, 3c-2 SSE and the local server switch), 4 (showcase: 4a navbar, hero, features; 4b-1 adapter cards, Why EvEm, footer, metadata; 4b-2 the playground's follow-ups) and the UX pass after 4a implemented; the 0.3.0 release and phase 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
 
 ## Summary
 
@@ -182,20 +182,6 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 
 | From | Follow-up | Phase |
 |---|---|---|
-| 3b review | The lane chart has no legend: filled (ran) and hollow (held back) are explained only in tooltips | 4 |
-| Layout-shift fixes' review | `ActionGate.end` checks the token against both the holder and the generation, and the second check never decides: drop it, or say why both are there | 4 |
-| UX pass review | The tab counts start from the row count at a new trace's first render, which is right only because every scenario's setup is synchronous: a setup that awaits would show its rows unfolded, then folded, and leave a hidden tab's count off. Count from an entry index (against `setupEnd` and `clearedFrom`) instead | 4 |
-| UX pass review | Three buttons don't use `BUTTON`: Clear (`btn-xs btn-ghost`), the Server tab's send button (`btn-xs btn-primary`) and the development-only Simulated / Local server switch, whose inactive half is a plain `btn`, the variant this pass found reads as text in Signal. Add `BUTTON` entries for them | 4 |
-| UX pass review | After Clear, the empty timeline still says "Nothing yet: press …", which reads oddly once the reader has run something | 4 |
-| UX pass review | `tabList` moves focus with `document.getElementById` though it holds the buttons: while the next scenario's workbench awaits the editor, two tab lists share the `output-` ids for a moment. Focus the button itself | 4 |
-| UX pass review | The output's tab panels aren't focusable (`tabindex="0"`), so a keyboard user can't scroll the timeline or the lane chart after leaving the tab row | 4 |
-| UX pass review | Rows after Clear (and in the folded setup) are timed since the reset, not `+N ms` since their action: `timelineRows` runs on the slice, which drops the action `since` counts from. Compute the rows over the whole trace and slice them afterwards | 4 |
-| UX pass review | The ▶ buttons in the code give no cue while a run holds the actions (a press is dropped quietly): disable them with the action buttons | 4 |
-| 4b-1 | An adapter card's live region reads its stream's ticks aloud for 5 s after each click (`liveAnnouncement`'s window), which is chatty for a stream: announce only what the click caused, or summarize | 4 |
-| 4b-1 review | The footer's titles (daisyUI's `.footer-title`) are at 60% opacity, 4.75:1 in Signal Light: AA, but the contrast test only knows `text-base-content/NN` utilities, so it doesn't guard them. Use a tested pair (`opacity-100 text-base-content/70`) or pin `.footer-title` in the test | 4 |
-| 4b-1 review | The dev server stamps the commit it started at (`siteBuild()` runs once at config load), so after new commits its footer is behind: compute it per request when serving, or say so | 4 |
-| 4b-1 review | An adapter card's tab list is named "…: output or code", but it has Output, Wire and Code | 4 |
-| 4b-1 review | `tests/site/widget.test.ts` waits a real 150 ms for a 30 ms fake connection: poll for the open connection instead, for a loaded CI runner | 4 |
 | Note, 2026-10-03 | The site runs the library from source (its footer and the playground's sidebar now say which version and commit), and the package isn't on npm yet though the hero says `npm install`: release 0.3.0 (`pnpm release 0.3.0 --dry-run` first, then the user's OK) | after 4b |
 | Phase 2 review | Check narrow layouts below 513 px, with device emulation | 5 |
 | 3c-2 review | A write after *Go silent* vanishes without a note: the silenced stream still counts as open, and the write is dropped quietly | 5 |
