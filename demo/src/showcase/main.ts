@@ -9,6 +9,23 @@ const bus = new EvEm();
 mountThemePicker(document.getElementById('theme-picker')!, bus, 'dropdown-end');
 mountHeroFlow(document.getElementById('flow')!);
 
+// The phone menu closes once a link is chosen, on Escape, and when a click or the focus goes elsewhere
+for (const menu of document.querySelectorAll<HTMLDetailsElement>('details[data-menu]')) {
+  const close = () => menu.removeAttribute('open');
+  for (const link of menu.querySelectorAll('a')) link.addEventListener('click', close);
+  menu.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !menu.open) return;
+    close();
+    menu.querySelector('summary')?.focus();
+  });
+  menu.addEventListener('focusout', event => {
+    if (!menu.contains(event.relatedTarget as Node | null)) close();
+  });
+  document.addEventListener('click', event => {
+    if (!menu.contains(event.target as Node)) close();
+  });
+}
+
 // Copy buttons: the text in data-copy, and a moment of "Copied"
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy]')) {
   button.addEventListener('click', async () => {
