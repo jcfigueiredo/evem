@@ -191,6 +191,11 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 | UX pass review | The output's tab panels aren't focusable (`tabindex="0"`), so a keyboard user can't scroll the timeline or the lane chart after leaving the tab row | 4 |
 | UX pass review | Rows after Clear (and in the folded setup) are timed since the reset, not `+N ms` since their action: `timelineRows` runs on the slice, which drops the action `since` counts from. Compute the rows over the whole trace and slice them afterwards | 4 |
 | UX pass review | The ▶ buttons in the code give no cue while a run holds the actions (a press is dropped quietly): disable them with the action buttons | 4 |
+| 4b-1 | An adapter card's live region reads its stream's ticks aloud for 5 s after each click (`liveAnnouncement`'s window), which is chatty for a stream: announce only what the click caused, or summarize | 4 |
+| 4b-1 review | The footer's titles (daisyUI's `.footer-title`) are at 60% opacity, 4.75:1 in Signal Light: AA, but the contrast test only knows `text-base-content/NN` utilities, so it doesn't guard them. Use a tested pair (`opacity-100 text-base-content/70`) or pin `.footer-title` in the test | 4 |
+| 4b-1 review | The dev server stamps the commit it started at (`siteBuild()` runs once at config load), so after new commits its footer is behind: compute it per request when serving, or say so | 4 |
+| 4b-1 review | An adapter card's tab list is named "…: output or code", but it has Output, Wire and Code | 4 |
+| 4b-1 review | `tests/site/widget.test.ts` waits a real 150 ms for a 30 ms fake connection: poll for the open connection instead, for a loaded CI runner | 4 |
 | Note, 2026-10-03 | The site runs the library from source (its footer and the playground's sidebar now say which version and commit), and the package isn't on npm yet though the hero says `npm install`: release 0.3.0 (`pnpm release 0.3.0 --dry-run` first, then the user's OK) | after 4b |
 | Phase 2 review | Check narrow layouts below 513 px, with device emulation | 5 |
 | 3c-2 review | A write after *Go silent* vanishes without a note: the silenced stream still counts as open, and the write is dropped quietly | 5 |
