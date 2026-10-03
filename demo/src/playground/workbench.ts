@@ -1,7 +1,7 @@
 import type { EvEm } from '@jcfigueiredo/evem';
 import { el } from '../dom';
 import type { ControlValue } from '../engine/program';
-import { ScenarioSession, type Control, type Scenario } from '../engine/session';
+import { numberInput, ScenarioSession, type Control, type Scenario } from '../engine/session';
 import { announcement, timelineRows, type Tone } from '../timeline';
 
 // Full class names, so Tailwind finds them in the source
@@ -36,10 +36,40 @@ function controlField(
       step: String(control.step ?? 1),
       value: String(value)
     });
-    input.addEventListener('change', () => onChange(Number(input.value)));
+    let current = Number(value);
+    input.addEventListener('change', () => {
+      const next = numberInput(input.value, control, current);
+      input.value = String(next);
+      if (next === current) return;
+      current = next;
+      onChange(next);
+    });
     return el('fieldset', { class: 'fieldset py-1' }, [
       el('legend', { class: 'fieldset-legend' }, [control.label]),
       input
+    ]);
+  }
+  if (control.kind === 'text') {
+    const listId = `control-${name}-suggestions`;
+    const input = el('input', {
+      type: 'text',
+      class: 'input input-sm w-full font-mono',
+      name,
+      value: String(value),
+      list: listId,
+      autocomplete: 'off',
+      spellcheck: 'false'
+    });
+    // change fires on Enter and when the input loses focus, not on every key
+    input.addEventListener('change', () => onChange(input.value));
+    return el('fieldset', { class: 'fieldset py-1' }, [
+      el('legend', { class: 'fieldset-legend' }, [control.label]),
+      input,
+      el(
+        'datalist',
+        { id: listId },
+        (control.suggestions ?? []).map(suggestion => el('option', { value: suggestion }))
+      )
     ]);
   }
   const select = el(
@@ -99,7 +129,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
             class: `status ${TONE_CLASS[row.tone]} absolute -start-[0.3rem] top-[0.45rem] signal-glow`,
             'aria-hidden': 'true'
           }),
-          el('span', { class: 'font-mono text-sm' }, [row.text]),
+          el('span', { class: 'font-mono text-sm break-words whitespace-pre-wrap' }, [row.text]),
           row.detail
             ? el('span', { class: 'font-mono text-xs text-base-content/60 ms-2 break-all' }, [row.detail])
             : null,

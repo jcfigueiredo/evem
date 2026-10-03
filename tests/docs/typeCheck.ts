@@ -47,11 +47,16 @@ function compilerOptions(): ts.CompilerOptions {
 
 /**
  * Type-check in-memory files against the library's sources, with the repository's compiler options.
- * `declarationFiles` (absolute paths) are added to the program, e.g. preludes that declare globals.
+ * `declarationFiles` (absolute paths) are added to the program, e.g. preludes that declare globals, and `overrides`
+ * change compiler options (the demo's scenarios turn off `noImplicitAny`: their code is JavaScript).
  * Returns the syntactic and semantic diagnostics of the in-memory files and of the declaration files.
  */
-export function typeCheck(files: VirtualFile[], declarationFiles: string[] = []): TypeDiagnostic[] {
-  const options = compilerOptions();
+export function typeCheck(
+  files: VirtualFile[],
+  declarationFiles: string[] = [],
+  overrides: ts.CompilerOptions = {}
+): TypeDiagnostic[] {
+  const options = { ...compilerOptions(), ...overrides };
   const virtual = new Map(files.map(file => [join(REPO_ROOT, file.path), file]));
 
   const host = ts.createCompilerHost(options);

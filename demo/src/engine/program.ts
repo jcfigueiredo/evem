@@ -16,12 +16,17 @@ export function toLiteral(value: ControlValue): string {
 }
 
 /** A scenario's code with each `{{name}}` replaced by that control's value as a literal */
-export function renderCode(template: string, values: Record<string, ControlValue>): string {
+export function renderCode(
+  template: string,
+  values: Record<string, ControlValue>,
+  raw: ReadonlySet<string> = new Set()
+): string {
   return template.replace(PLACEHOLDER, (placeholder, name: string) => {
     if (!(name in values)) {
       throw new Error(`No control named ${name} for ${placeholder}`);
     }
-    return toLiteral(values[name]!);
+    // A raw control's values are code (`ErrorPolicy.THROW`, `[1, 2]`), written as they are
+    return raw.has(name) ? String(values[name]) : toLiteral(values[name]!);
   });
 }
 
