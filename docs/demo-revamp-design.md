@@ -183,6 +183,9 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 | From | Follow-up | Phase |
 |---|---|---|
 | Phase 2, ruling 13 | `vite/client` types, for `import.meta.env` in Python mode | 3c-2 |
+| 3c-1 review | The Server card rebuilds its log and scrolls it to the end on every redraw, even when no frame arrived: a reader who scrolled up loses their place. Rebuild and re-pin only when the log grew | 3c-2 |
+| 3c-1 review | The fake WebSocket server ignores a client frame that isn't JSON without a note (only edited code with its own `messageFormatter` sends one); decide the rule for frames neither side can read once, for both fake servers | 3c-2 |
+| 3c-1 review | After *Drop the connection* in a scenario whose handler doesn't reconnect (Request–response, Server events & routing), every later action waits or times out until *Reset*, and nothing says so | 3c-2 |
 | 3b review | The lane chart has no legend: filled (ran) and hollow (held back) are explained only in tooltips | 4 |
 | 3b review | The site has no favicon (a 404 in the console) | 4 |
 | Note, 2026-10-03 | The public site builds the library from `src/` on every push to `main`, not from the npm release, so the playground can show unreleased behavior (phase 1's fixes are still under Unreleased) while the showcase says `npm install`: show which code the site runs, and release a version when the playground depends on unreleased behavior | 4 |
