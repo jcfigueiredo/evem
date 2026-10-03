@@ -3,7 +3,7 @@ import { el } from '../dom';
 import type { ControlValue } from '../engine/program';
 import { numberInput, optionLabel, ScenarioSession, type Control, type Scenario } from '../engine/session';
 import { laneChart } from '../lanes';
-import { announcement, timelineRows, type Tone } from '../timeline';
+import { isAtEnd, liveAnnouncement, timelineRows, type Tone } from '../timeline';
 import { renderLaneChart } from './laneChart';
 import { serverPane } from './serverPane';
 
@@ -111,6 +111,14 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   const announcer = el('p', { class: 'sr-only', 'aria-live': 'polite' });
   let announcedTrace = session.trace;
   let announcedRows = 0;
+  // New rows are read out only after the reader did something (see liveAnnouncement)
+  let lastInteraction = Number.NEGATIVE_INFINITY;
+  const interacted = () => {
+    lastInteraction = performance.now();
+  };
+  for (const type of ['click', 'change', 'keydown']) root.addEventListener(type, interacted);
+  // The timeline follows new rows only for a reader at its end (and on a new trace, which starts at the top)
+  let shownTrace = session.trace;
   const timelineBox = el('div', { class: 'max-h-[26rem] overflow-y-auto pe-2' }, [timeline]);
   const controls = el('fieldset', { class: 'space-y-1' });
   const actions = el('div', { class: 'flex flex-wrap gap-2 pt-2' });
@@ -125,11 +133,21 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
 
   // Flow control scenarios show the latest action over time too
   const lanesHost = scenario.lanes ? el('div', {}) : undefined;
-  // Adapter scenarios show their fake server: the wire log, and controls
-  const server = scenario.websocket ? serverPane(session, scenario.websocket.sample ?? '') : undefined;
+  // Adapter scenarios show their server: the wire log, and controls
+  const server =
+    scenario.websocket || scenario.sse
+      ? serverPane(session, async local => {
+          startOver();
+          await session.useLocalServer(local);
+          renderActions();
+          renderTimeline();
+        })
+      : undefined;
 
   const renderTimeline = () => {
     const rows = timelineRows(session.trace.entries);
+    const follow = session.trace !== shownTrace || isAtEnd(timelineBox);
+    shownTrace = session.trace;
     timeline.replaceChildren(
       ...rows.map(row =>
         el('li', { class: 'relative ps-4', style: `margin-inline-start: ${row.depth * 1.25}rem` }, [
@@ -148,14 +166,15 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     if (rows.length === 0) {
       timeline.append(el('li', { class: 'ps-4 text-sm text-base-content/60' }, ['Nothing yet: run an action.']));
     }
-    timelineBox.scrollTop = timelineBox.scrollHeight;
+    if (follow) timelineBox.scrollTop = timelineBox.scrollHeight;
     if (lanesHost) renderLaneChart(lanesHost, laneChart(session.trace.entries));
     server?.render();
     // A new trace means the reader started over (a control, Reset, edited code): its setup isn't announced
     if (session.trace !== announcedTrace) {
       announcedTrace = session.trace;
     } else if (rows.length > announcedRows) {
-      announcer.textContent = announcement(rows.slice(announcedRows));
+      const text = liveAnnouncement(rows.slice(announcedRows), performance.now() - lastInteraction);
+      if (text !== undefined) announcer.textContent = text;
     }
     announcedRows = rows.length;
   };
@@ -314,6 +333,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   renderTimeline();
 
   return () => {
+    for (const type of ['click', 'change', 'keydown']) root.removeEventListener(type, interacted);
     bus.unsubscribeById(traceSubscription);
     bus.unsubscribeById(wireSubscription);
     resizes?.disconnect();

@@ -1,12 +1,5 @@
 import type { IWebSocket } from '@jcfigueiredo/evem/websocket';
-
-/** One line of the wire log: a frame the client or the server sent, or something that happened to a connection */
-export interface WireEntry {
-  /** Milliseconds since the scenario started */
-  at: number;
-  direction: 'client' | 'server' | 'note';
-  text: string;
-}
+import { pageClock, WireLog, type FakeServer, type WireEntry } from './wire';
 
 /** How the fake server behaves; each scenario gives its own */
 export interface FakeWebSocketBehavior {
@@ -38,21 +31,22 @@ interface MethodError {
  * it, after `latency` ms. It answers requests, reacts to messages, can drop its connections or refuse the next ones,
  * and logs every frame and connection event in `wire`.
  */
-export class FakeWebSocketServer {
-  readonly wire: WireEntry[] = [];
+export class FakeWebSocketServer implements FakeServer {
   /** A WebSocket class whose sockets connect to this server (`WebSocketConstructor`) */
   readonly socketClass: new (url: string) => IWebSocket;
   private readonly sockets = new Set<FakeSocket>();
   private readonly latency: number;
+  private readonly log: WireLog;
   private refusals = 0;
   private connections = 0;
   private closed = false;
 
   constructor(
     private readonly behavior: FakeWebSocketBehavior = {},
-    private readonly now: () => number = () => Math.round(performance.now()),
-    private readonly onWire?: (entry: WireEntry) => void
+    now: () => number = pageClock,
+    onWire?: (entry: WireEntry) => void
   ) {
+    this.log = new WireLog(now, onWire);
     this.latency = behavior.latency ?? 20;
     const server = this;
     this.socketClass = class extends FakeSocket {
@@ -62,9 +56,21 @@ export class FakeWebSocketServer {
     };
   }
 
+  get wire(): WireEntry[] {
+    return this.log.entries;
+  }
+
   /** Connections open now */
   get openConnections(): number {
     return this.sockets.size;
+  }
+
+  /** The Server card's controls: `send <text>`, `drop`, `refuse` */
+  run(command: string, argument = ''): void {
+    if (command === 'send') this.send(argument);
+    else if (command === 'drop') this.drop();
+    else if (command === 'refuse') this.refuseNext();
+    else throw new Error(`The WebSocket server has no command ${command}`);
   }
 
   /** Send a message to every open connection: a string as it is (it may not even be JSON), anything else as JSON */
@@ -92,6 +98,7 @@ export class FakeWebSocketServer {
   /** Stop for good, quietly: the scenario started over */
   close(): void {
     this.closed = true;
+    this.log.close();
     for (const socket of [...this.sockets]) socket.closeFromServer(1001);
     this.sockets.clear();
   }
@@ -121,6 +128,8 @@ export class FakeWebSocketServer {
     try {
       message = JSON.parse(text);
     } catch {
+      // What the server can't read, it says so (what the client can't read is its own ws.parse.error)
+      this.note(`could not read connection ${socket.number}'s frame: it isn't JSON`);
       return;
     }
     const request = message as { type?: unknown; id?: unknown; method?: unknown; params?: unknown };
@@ -151,21 +160,18 @@ export class FakeWebSocketServer {
       this.note(`not sent (connection ${socket.number} is closed): ${text}`);
       return;
     }
-    this.log('server', text);
+    this.record('server', text);
     setTimeout(() => socket.deliver(text), this.latency);
   }
 
   /** @internal */
-  log(direction: WireEntry['direction'], text: string): void {
-    if (this.closed) return;
-    const entry = { at: this.now(), direction, text };
-    this.wire.push(entry);
-    this.onWire?.(entry);
+  record(direction: WireEntry['direction'], text: string): void {
+    this.log.add(direction, text);
   }
 
   /** @internal */
   note(text: string): void {
-    this.log('note', text);
+    this.log.add('note', text);
   }
 
   /** @internal */
@@ -211,7 +217,7 @@ class FakeSocket implements IWebSocket {
       throw new Error("Failed to execute 'send' on 'WebSocket': Still in CONNECTING state.");
     if (this.readyState !== OPEN) return;
     const text = String(data);
-    this.server.log('client', text);
+    this.server.record('client', text);
     setTimeout(() => {
       if (this.readyState === OPEN) this.server.receive(this, text);
     }, this.server.delay);

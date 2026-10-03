@@ -325,6 +325,112 @@ describe('ScenarioSession with a fake WebSocket server', () => {
   });
 });
 
+/** A scenario with a fake SSE server whose code reads from it with an SseHandler (with `options`) */
+const sseScenario = (options = '{ reconnect: false }'): Scenario => ({
+  ...scenario,
+  id: 'stream',
+  controls: {},
+  helpers: {},
+  code: [
+    "import { EvEm } from '@jcfigueiredo/evem';",
+    "import { SseHandler } from '@jcfigueiredo/evem/sse';",
+    'const evem = new EvEm();',
+    `const sse = new SseHandler('/events', evem, ${options});`,
+    "evem.subscribe('server.hello', function hello(data) { console.log('hello', data); });"
+  ].join('\n'),
+  sse: {
+    latency: 10,
+    onOpen: stream => stream.send({ event: 'hello', data: 1 }),
+    local: { command: 'python3 server.py' }
+  }
+});
+
+describe('ScenarioSession with a fake SSE server', () => {
+  // SseHandler resolves a relative URL against the page's address, as it does in the browser
+  const page = () => vi.stubGlobal('location', { href: 'http://localhost:5199/playground/' });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("gives the code's SseHandler the scenario's server, and stop() closes its stream", async () => {
+    vi.useFakeTimers();
+    page();
+    const session = new ScenarioSession(sseScenario());
+    await session.reset();
+    await vi.advanceTimersByTimeAsync(30);
+
+    expect(logs(session)).toEqual(['hello 1']);
+    expect(session.server?.openConnections).toBe(1);
+    session.stop();
+    await vi.advanceTimersByTimeAsync(30);
+    expect(session.server?.openConnections).toBe(0);
+  });
+
+  it("tells the states of the code's handlers: reconnecting after a drop, or stopped for good", async () => {
+    vi.useFakeTimers();
+    page();
+    const reconnecting = new ScenarioSession(sseScenario('{ reconnectDelay: 1000 }'));
+    await reconnecting.reset();
+    await vi.advanceTimersByTimeAsync(30);
+    expect(reconnecting.connectionStates()).toEqual(['connected']);
+    reconnecting.server?.run('drop');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(reconnecting.connectionStates()).toEqual(['reconnecting']);
+
+    const stopped = new ScenarioSession(sseScenario());
+    await stopped.reset();
+    await vi.advanceTimersByTimeAsync(30);
+    stopped.server?.run('drop');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(stopped.connectionStates()).toEqual(['disconnected']);
+    reconnecting.stop();
+  });
+
+  it('leaves a fetch the code passes alone', async () => {
+    vi.useFakeTimers();
+    page();
+    const own =
+      "{ reconnect: false, fetch: async url => { console.log('own fetch for', url); throw new Error('offline'); } }";
+    const session = new ScenarioSession(sseScenario(own));
+    await session.reset();
+    await vi.advanceTimersByTimeAsync(30);
+
+    expect(logs(session)).toEqual(['own fetch for /events']);
+    expect(session.server?.wire).toEqual([]);
+  });
+
+  it("switches to the local server: the page's own fetch, with the same wire log", async () => {
+    page();
+    const encoder = new TextEncoder();
+    const pageFetch = vi.fn(async () => {
+      const body = new ReadableStream<Uint8Array>({
+        start: controller => {
+          controller.enqueue(encoder.encode('event: hello\ndata: 2\n\n'));
+          controller.close();
+        }
+      });
+      return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
+    });
+    vi.stubGlobal('fetch', pageFetch);
+    const session = new ScenarioSession(sseScenario());
+    await session.useLocalServer(true);
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    expect(pageFetch).toHaveBeenCalledWith('/events', expect.anything());
+    expect(logs(session)).toEqual(['hello 2']);
+    expect(session.server?.wire.map(entry => entry.text)).toEqual([
+      'GET /events',
+      'connection 1 answered 200 (text/event-stream)',
+      'event: hello\ndata: 2\n\n',
+      'connection 1 ended by the server'
+    ]);
+
+    await session.useLocalServer(false);
+    expect(session.localServer).toBe(false);
+    expect(() => session.server?.run('end')).not.toThrow();
+  });
+});
+
 describe('optionLabel', () => {
   it("shows a select's options as they are, and the empty string as something to see", () => {
     expect(optionLabel('server')).toBe('server');

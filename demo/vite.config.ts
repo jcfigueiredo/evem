@@ -20,8 +20,9 @@ export default defineConfig({
     ]
   },
   server: {
-    // Python mode: SSE scenarios reach examples/python/server.py (or the Flask / FastAPI apps) on port 8000
-    proxy: { '/python': { target: 'http://127.0.0.1:8000', rewrite: path => path.replace(/^\/python/, '') } }
+    // The local server switch: SSE scenarios read /events from examples/python/server.py (or the Flask / FastAPI
+    // apps, or any SSE server) on port 8000, with the same URL their code uses with the simulated server
+    proxy: { '/events': 'http://127.0.0.1:8000' }
   },
   build: {
     outDir: here('dist'),

@@ -140,3 +140,22 @@ export function timelineRows(entries: readonly TraceEntry[]): TimelineRow[] {
 export function announcement(rows: readonly TimelineRow[]): string {
   return rows.map(row => `${row.text}.`).join(' ');
 }
+
+/** How long after the reader's last click, change or key press new rows are still read out */
+const ANNOUNCE_WINDOW = 5000;
+
+/**
+ * What the live region reads out for new rows: what the reader's own interaction caused, in the few seconds after it.
+ * A stream that runs by itself (a tick every second) isn't read out, or it would talk over everything else.
+ */
+export function liveAnnouncement(rows: readonly TimelineRow[], msSinceInteraction: number): string | undefined {
+  return rows.length > 0 && msSinceInteraction <= ANNOUNCE_WINDOW ? announcement(rows) : undefined;
+}
+
+/**
+ * Whether a scrolled list shows its end (give or take a line): a list keeps following new content only for a reader
+ * who was there, so scrolling up to read stays put
+ */
+export function isAtEnd(box: { scrollTop: number; scrollHeight: number; clientHeight: number }): boolean {
+  return box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+}

@@ -3,7 +3,10 @@ import * as core from '@jcfigueiredo/evem';
 import * as sse from '@jcfigueiredo/evem/sse';
 import * as sseServer from '@jcfigueiredo/evem/sse/server';
 import * as websocket from '@jcfigueiredo/evem/websocket';
+import { LocalSseServer } from '../fakes/localSseServer';
+import { FakeSseServer, type FakeSseBehavior } from '../fakes/sseServer';
 import { FakeWebSocketServer, type FakeWebSocketBehavior } from '../fakes/webSocketServer';
+import type { FakeServer, WireEntry } from '../fakes/wire';
 import { compileProgram, renderCode, type Action, type ControlValue, type PackageImport } from './program';
 import { Trace } from './trace';
 import { createTracedEvEm } from './tracedEvEm';
@@ -35,6 +38,17 @@ export interface ScenarioCheck {
   skipped?: string[];
   /** Parts of the fake server's wire log during the action, in order (`client: …`, `server: …`, `note: …`) */
   wire?: string[];
+  /**
+   * Milliseconds to let pass after the action, for a scenario whose server never runs out of timers (a stream of
+   * ticks); without it, every timer the action starts runs
+   */
+  wait?: number;
+}
+
+/** A ready-made message for the Server card's send box */
+export interface ServerSample {
+  label: string;
+  text: string;
 }
 
 export interface Scenario {
@@ -59,6 +73,13 @@ export interface Scenario {
    * code's `WebSocketHandler` connects to it unless the code passes its own `WebSocketConstructor`.
    */
   websocket?: FakeWebSocketBehavior & { sample?: string };
+  /**
+   * A fake SSE server for the scenario: how it behaves, and samples for the server pane's send box. The code's
+   * `SseHandler` reads from it unless the code passes its own `fetch` or another transport. With `local`, the
+   * development server can switch to a real SSE server instead (`/events` is proxied to port 8000), and the Server card
+   * shows `local.command` to start one.
+   */
+  sse?: FakeSseBehavior & { samples?: ServerSample[]; local?: { command: string } };
 }
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
@@ -113,11 +134,13 @@ export class ScenarioSession {
   edited = false;
   actions: Action[] = [];
   trace: Trace;
-  /** The scenario's fake WebSocket server, new at every reset (scenarios with `websocket`) */
-  server: FakeWebSocketServer | undefined;
+  /** The scenario's server (scenarios with `websocket` or `sse`), new at every reset */
+  server: FakeServer | undefined;
+  /** Use the local SSE server instead of the fake one (scenarios with `sse.local`, in development) */
+  localServer = false;
   private program: Record<string, () => Promise<void>> | undefined;
-  /** The WebSocket handlers the code created, disconnected when the scenario starts over */
-  private handlers: websocket.WebSocketHandler[] = [];
+  /** The WebSocket and SSE handlers the code created, disconnected when the scenario starts over */
+  private handlers: Array<{ disconnect(): Promise<void>; getConnectionState(): string }> = [];
 
   constructor(
     readonly scenario: Scenario,
@@ -151,7 +174,18 @@ export class ScenarioSession {
     return this.reset();
   }
 
-  /** End the run's connections: the code's WebSocket handlers disconnect, and the fake server closes */
+  /** The connection states of the handlers the code created (`connected`, `reconnecting`, …), oldest first */
+  connectionStates(): string[] {
+    return this.handlers.map(handler => handler.getConnectionState());
+  }
+
+  /** Switch between the fake SSE server and the local one, and start over */
+  useLocalServer(local: boolean): Promise<void> {
+    this.localServer = local;
+    return this.reset();
+  }
+
+  /** End the run's connections: the code's handlers disconnect, and the server closes */
   stop(): void {
     for (const handler of this.handlers.splice(0)) void handler.disconnect().catch(() => undefined);
     this.server?.close();
@@ -166,13 +200,16 @@ export class ScenarioSession {
     this.trace = trace;
     this.program = undefined;
     this.stop();
-    this.server = this.scenario.websocket
-      ? new FakeWebSocketServer(
-          this.scenario.websocket,
-          () => trace.now(),
-          entry => void this.bus?.publish('wire.entry', entry)
-        )
+    const clock = () => trace.now();
+    const onWire = (entry: WireEntry) => void this.bus?.publish('wire.entry', entry);
+    const { websocket: socketBehavior, sse: sseBehavior } = this.scenario;
+    const socketServer = socketBehavior ? new FakeWebSocketServer(socketBehavior, clock, onWire) : undefined;
+    const streamServer = sseBehavior
+      ? this.localServer && sseBehavior.local
+        ? new LocalSseServer(undefined, clock, onWire)
+        : new FakeSseServer(sseBehavior, clock, onWire)
       : undefined;
+    this.server = socketServer ?? streamServer;
     this.actions = [];
     try {
       const { body, actions, imports } = compileProgram(this.code);
@@ -182,8 +219,11 @@ export class ScenarioSession {
           ...core,
           EvEm: createTracedEvEm(trace, this.helperNames(), { explainMatches: this.scenario.explainMatches })
         },
-        '@jcfigueiredo/evem/websocket': { ...websocket, WebSocketHandler: this.playgroundWebSocketHandler(trace) },
-        '@jcfigueiredo/evem/sse': sse,
+        '@jcfigueiredo/evem/websocket': {
+          ...websocket,
+          WebSocketHandler: this.playgroundWebSocketHandler(trace, socketServer?.socketClass)
+        },
+        '@jcfigueiredo/evem/sse': { ...sse, SseHandler: this.playgroundSseHandler(streamServer?.fetch) },
         '@jcfigueiredo/evem/sse/server': sseServer
       };
       checkImports(imports, modules);
@@ -219,14 +259,16 @@ export class ScenarioSession {
    * The code's WebSocketHandler: the library's, connecting to the scenario's fake server unless the code passes its own
    * WebSocketConstructor (or a socket), and naming what it registers on the emitter after itself in the timeline
    */
-  private playgroundWebSocketHandler(trace: Trace): typeof websocket.WebSocketHandler {
-    const server = this.server;
+  private playgroundWebSocketHandler(
+    trace: Trace,
+    socketClass: websocket.WebSocketHandlerOptions['WebSocketConstructor']
+  ): typeof websocket.WebSocketHandler {
     const handlers = this.handlers;
     return class PlaygroundWebSocketHandler extends websocket.WebSocketHandler {
       constructor(...[urlOrSocket, evem, options = {}]: ConstructorParameters<typeof websocket.WebSocketHandler>) {
         const connect =
-          server && typeof urlOrSocket === 'string' && !options.WebSocketConstructor
-            ? { ...options, WebSocketConstructor: server.socketClass }
+          socketClass && typeof urlOrSocket === 'string' && !options.WebSocketConstructor
+            ? { ...options, WebSocketConstructor: socketClass }
             : options;
         trace.owner = 'WebSocketHandler';
         try {
@@ -234,6 +276,21 @@ export class ScenarioSession {
         } finally {
           trace.owner = undefined;
         }
+        handlers.push(this);
+      }
+    };
+  }
+
+  /**
+   * The code's SseHandler: the library's, reading from the scenario's server (fake, or the local one) unless the code
+   * passes its own `fetch` or another transport. It registers nothing on the emitter, so nothing needs naming.
+   */
+  private playgroundSseHandler(serverFetch: sse.SseFetch | undefined): typeof sse.SseHandler {
+    const handlers = this.handlers;
+    return class PlaygroundSseHandler extends sse.SseHandler {
+      constructor(...[url, evem, options = {}]: ConstructorParameters<typeof sse.SseHandler>) {
+        const usesFetch = (options.transport ?? 'fetch') === 'fetch';
+        super(url, evem, serverFetch && usesFetch && !options.fetch ? { ...options, fetch: serverFetch } : options);
         handlers.push(this);
       }
     };
