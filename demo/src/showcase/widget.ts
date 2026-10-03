@@ -74,17 +74,23 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
   // The editor loads on demand, once, however quickly the Code tab is pressed
   let editor: Promise<CodeEditor> | undefined;
   const showCode = () =>
-    (editor ??= import('../editor').then(({ createEditor }) =>
-      createEditor(codeHost, session.code, () => undefined, {
-        // The ▶ in the code's margin runs that action, and shows its output
-        onRunAction: label => {
-          const action = session.actions.find(candidate => candidate.label === label);
-          if (!action) return;
-          tabs.select('output');
-          void run(action.id);
-        }
-      })
-    ));
+    (editor ??= import('../editor')
+      .then(({ createEditor }) =>
+        createEditor(codeHost, session.code, () => undefined, {
+          // The ▶ in the code's margin runs that action, and shows its output
+          onRunAction: label => {
+            const action = session.actions.find(candidate => candidate.label === label);
+            if (!action) return;
+            tabs.select('output');
+            void run(action.id);
+          }
+        })
+      )
+      .then(view => {
+        // Opened during a run, its ▶ buttons start disabled, like the action buttons
+        view.setRunsEnabled(!gate.busy);
+        return view;
+      }));
   // Output and code take turns in the card, whose height is fixed
   const tabs = tabList(
     [
@@ -93,7 +99,7 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
       { id: 'code', label: 'Code', panel: codeHost }
     ],
     {
-      label: `${scenario.title}: output or code`,
+      label: `${scenario.title}: ${adapter ? 'output, wire or code' : 'output or code'}`,
       idPrefix: prefix,
       onSelect: id => {
         if (id === 'code') void showCode();
@@ -137,7 +143,11 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
     }
     if (rows.length > announced) {
       const text = liveAnnouncement(rows.slice(announced), performance.now() - lastInteraction);
-      if (text !== undefined) announcer.textContent = text;
+      if (text !== undefined) {
+        announcer.textContent = text;
+        // A stream never stops: an adapter's card says once what followed the reader's click, not every tick after
+        if (adapter) lastInteraction = Number.NEGATIVE_INFINITY;
+      }
     }
     announced = rows.length;
   };
@@ -160,6 +170,7 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
     if (token === undefined) return;
     for (const button of actions.querySelectorAll<HTMLButtonElement>('button:not([data-server-control])'))
       button.disabled = true;
+    void editor?.then(view => view.setRunsEnabled(false));
     if (!adapter) announced = 0;
     try {
       await session.run(id);
@@ -167,6 +178,7 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
       if (gate.end(token)) {
         for (const button of actions.querySelectorAll<HTMLButtonElement>('button:not([data-server-control])'))
           button.disabled = false;
+        void editor?.then(view => view.setRunsEnabled(true));
       }
     }
   };
@@ -197,7 +209,10 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
           async value => {
             gate.reset();
             await session.setValue(name, value);
-            void editor?.then(view => view.setCode(session.code));
+            void editor?.then(view => {
+              view.setCode(session.code);
+              view.setRunsEnabled(true);
+            });
             renderActions();
             announced = 0;
             render();

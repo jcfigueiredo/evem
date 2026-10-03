@@ -8,6 +8,13 @@ const DOT_CLASS: Record<LaneDot['kind'], string> = {
   held: 'border-2 border-base-content/60 bg-base-100'
 };
 
+/** The legend under the chart, mark by mark */
+const LEGEND: Array<[LaneDot['kind'], string]> = [
+  ['publish', 'published'],
+  ['ran', 'ran'],
+  ['held', 'held back (throttle or debounce)']
+];
+
 const times = (count: number) => `${count} time${count === 1 ? '' : 's'}`;
 
 /** What the chart shows, in words, for screen readers */
@@ -81,6 +88,17 @@ export function renderLaneChart(container: HTMLElement, chart: LaneChart | undef
           )
         )
       ]
+    ),
+    // What the marks mean, which the tooltips alone told only a pointer
+    el(
+      'div',
+      { class: 'mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-base-content/70', 'aria-hidden': 'true' },
+      LEGEND.map(([kind, text]) =>
+        el('span', { class: 'inline-flex items-center gap-1.5' }, [
+          el('span', { class: `inline-block size-2.5 rounded-full ${DOT_CLASS[kind]}` }),
+          text
+        ])
+      )
     )
   );
 }

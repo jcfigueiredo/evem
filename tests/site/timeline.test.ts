@@ -7,9 +7,11 @@ import {
   keepsFollowing,
   liveAnnouncement,
   preview,
+  rowsFrom,
   setupSummary,
   sinceLatestAction,
-  timelineRows
+  timelineRows,
+  unseenRows
 } from '../../demo/src/timeline';
 
 describe('preview', () => {
@@ -168,6 +170,32 @@ describe('timelineRows times and kinds', () => {
       ['action', 0],
       ['log', 40]
     ]);
+  });
+});
+
+describe('rowsFrom', () => {
+  it('times the rows it keeps from their action, even when the action is before where it starts (after Clear)', () => {
+    const entries: TraceEntry[] = [
+      { kind: 'subscribe', subscription: 'tick', pattern: 'tick', options: [], at: 2 },
+      { kind: 'action', label: 'Go', at: 100 },
+      { kind: 'publish', id: 1, event: 'tick', data: 1, at: 104 },
+      { kind: 'log', level: 'log', text: 'tick 1', publish: 1, at: 105 }
+    ];
+    expect(rowsFrom(entries, 2).map(row => [row.kind, row.since, row.depth])).toEqual([
+      ['publish', 4, 0],
+      ['log', 5, 1]
+    ]);
+  });
+});
+
+describe('unseenRows', () => {
+  it("counts the rows after both where the timeline starts and what the reader saw, so a setup that's still running isn't news once it ends", () => {
+    expect(unseenRows(10, 3, 0)).toBe(7);
+    expect(unseenRows(10, 3, 8)).toBe(2);
+    // A setup still running (its end unknown, so the timeline starts at 0), then ended at 6: its rows drop out
+    expect(unseenRows(4, 0, 0)).toBe(4);
+    expect(unseenRows(7, 6, 0)).toBe(1);
+    expect(unseenRows(5, 6, 0)).toBe(0);
   });
 });
 

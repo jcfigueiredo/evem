@@ -145,6 +145,23 @@ export function timelineRows(entries: readonly TraceEntry[]): TimelineRow[] {
   });
 }
 
+/**
+ * The rows of the entries from `from` on (after the setup, or after the reader cleared the timeline), computed over
+ * the whole trace, so a row still nests under its publish and is timed from its action when those come before `from`
+ */
+export function rowsFrom(entries: readonly TraceEntry[], from: number): TimelineRow[] {
+  return timelineRows(entries).slice(from);
+}
+
+/**
+ * How many of `total` entries a hidden timeline tab counts as new: those after both where the timeline starts
+ * (`from`) and what the reader last saw (`seen`), as entry indexes, so a setup whose end isn't known yet stops
+ * counting once it is
+ */
+export function unseenRows(total: number, from: number, seen: number): number {
+  return Math.max(0, total - Math.max(from, seen));
+}
+
 /** One line about a setup the timeline folds away: how many subscriptions, publishes, logs and errors it made */
 export function setupSummary(entries: readonly TraceEntry[]): string {
   const count = (kind: TraceEntry['kind']) => entries.filter(entry => entry.kind === kind).length;
