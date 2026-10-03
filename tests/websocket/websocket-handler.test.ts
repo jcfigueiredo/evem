@@ -737,6 +737,18 @@ describe('WebSocketHandler - regressions', () => {
       expect(stateHandler).not.toHaveBeenCalled();
       expect(handler.getConnectionState()).toBe('disconnected');
     });
+
+    it('should not publish a state change when a socket that never opened closes', async () => {
+      const stateHandler = vi.fn();
+      evem.subscribe('ws.connection.state', stateHandler);
+      handler = new WebSocketHandler(mockWs, evem);
+
+      mockWs.simulateClose(1006);
+      await tick();
+
+      expect(stateHandler).not.toHaveBeenCalled();
+      expect(handler.getConnectionState()).toBe('disconnected');
+    });
   });
 
   describe('queued requests', () => {

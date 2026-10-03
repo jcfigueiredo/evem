@@ -53,6 +53,7 @@ First release published to npm, as `@jcfigueiredo/evem`. Version 0.2.0 was never
 ### Fixed
 
 - **`WebSocketHandler` with Node.js 22's built-in `WebSocket`**: a refused connection attempt fires only `error` there, never `close`, so with `reconnect: true` the handler didn't retry, stayed in `reconnecting` and never published `ws.reconnect.failed`. An error on a socket that never opened now counts as the failed attempt (once: a `close` that follows it, as in browsers and with `ws`, is ignored).
+- **`ws.connection.state`** is no longer published as `disconnected` → `disconnected` when a socket that never opened closes without `reconnect`.
 - `unsubscribe(event, callback)` now removes subscriptions created with options (filter, once, throttle, debounce, schema) and cancels their pending timers.
 - Removing an event's last subscription frees its entry, so dynamic event names no longer accumulate.
 - `WebSocketEvents` lists the events the adapter actually publishes (`ws.error`, `ws.message`, `ws.parse.error`, `ws.queue.overflow`, `ws.send.queued`, …) with their payloads; it listed events that were never published.

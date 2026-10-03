@@ -213,7 +213,10 @@ export class WebSocketHandler {
    */
   private async handleUnexpectedClose(): Promise<void> {
     if (!this.options.reconnect || !this.url) {
-      await this.connectionManager.transitionTo('disconnected');
+      // A socket that never opened leaves the state at 'disconnected': there's no change to announce
+      if (!this.connectionManager.isDisconnected()) {
+        await this.connectionManager.transitionTo('disconnected');
+      }
       return;
     }
 
