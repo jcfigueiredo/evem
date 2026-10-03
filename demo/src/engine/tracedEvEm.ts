@@ -154,8 +154,11 @@ export function createTracedEvEm(
      * the latest publish of an event that `pattern` matches
      */
     private publishFor(pattern: string, data: unknown): number | undefined {
-      for (let index = this.history.length - 1; index >= 0; index--) {
-        if (this.history[index]!.data === data && data !== undefined) return this.history[index]!.id;
+      // Only an object is the same one EvEm passed along; equal primitives (the same number, say) prove nothing. A
+      // cancelable publish's copy, or data a middleware or transform replaced, falls back to the event too
+      const identifiable = (typeof data === 'object' && data !== null) || typeof data === 'function';
+      for (let index = this.history.length - 1; identifiable && index >= 0; index--) {
+        if (this.history[index]!.data === data) return this.history[index]!.id;
       }
       for (let index = this.history.length - 1; index >= 0; index--) {
         const publish = this.history[index]!;

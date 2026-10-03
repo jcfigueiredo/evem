@@ -37,6 +37,22 @@ export function timeAxis(duration: number, maxIntervals = 8): { span: number; ti
   return { span, ticks };
 }
 
+/** The subscriber names found so far in each trace's entries, which only grow: a render scans just what's new */
+const subscriberNames = new WeakMap<readonly TraceEntry[], { scanned: number; names: Set<string> }>();
+
+/** Every subscriber's name in `entries`, in subscription order */
+function subscribersOf(entries: readonly TraceEntry[]): string[] {
+  let known = subscriberNames.get(entries);
+  if (!known || known.scanned > entries.length) known = { scanned: 0, names: new Set<string>() };
+  for (let index = known.scanned; index < entries.length; index++) {
+    const entry = entries[index]!;
+    if (entry.kind === 'subscribe') known.names.add(entry.subscription);
+  }
+  known.scanned = entries.length;
+  subscriberNames.set(entries, known);
+  return [...known.names];
+}
+
 /**
  * The lanes for the latest action in `entries` (undefined before any): its publishes, and for each subscriber of the
  * scenario, in subscription order, when it ran and when throttle or debounce held it back
@@ -48,7 +64,7 @@ export function laneChart(entries: readonly TraceEntry[]): LaneChart | undefined
   }
   if (from === -1) return undefined;
   const recent = entries.slice(from);
-  const names = [...new Set(entries.flatMap(entry => (entry.kind === 'subscribe' ? [entry.subscription] : [])))];
+  const names = subscribersOf(entries);
   const published = recent.flatMap(entry =>
     entry.kind === 'publish'
       ? [{ at: entry.at, kind: 'publish' as const, title: `${entry.event} ${preview(entry.data)}` }]
