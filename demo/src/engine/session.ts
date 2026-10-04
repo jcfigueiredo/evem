@@ -111,6 +111,12 @@ export function optionLabel(option: ControlValue): string {
   return option === '' ? "'' (empty)" : String(option);
 }
 
+/** A control's change as the timeline marks it, where the scenario started over: `backoff → off`, `queueSize → 5` */
+export function describeChange(control: Control, value: ControlValue): string {
+  const shown = typeof value === 'boolean' ? (value ? 'on' : 'off') : optionLabel(value);
+  return `${control.label} → ${shown}`;
+}
+
 /** The controls whose values are code, written as they are */
 export function rawControls(scenario: Scenario): Set<string> {
   return new Set(

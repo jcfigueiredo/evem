@@ -1,6 +1,6 @@
 # Demo Revamp Design
 
-> **Status: all five phases implemented: 1 (examples audit), 2 (foundation), 3 (playground), 4 (showcase, with a UX pass after 4a) and 5 (cleanup).** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
+> **Status: all five phases implemented: 1 (examples audit), 2 (foundation), 3 (playground), 4 (showcase, with a UX pass after 4a) and 5 (cleanup).** Since then, the playground's sidebar has become a top bar with a megamenu (Features and Adapters), and starting a scenario over keeps the output above a divider until Clear; where this document says sidebar, read the menu. This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
 
 ## Summary
 
@@ -182,6 +182,10 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 
 | From | Follow-up | Phase |
 |---|---|---|
+| Playground menu review | The timeline's kept history is rebuilt on every render (up to 500 rows each frame a stream produces), though it changes only on a restart or Clear: render it there | next |
+| Playground menu review | Browsers without CSS anchor positioning (Firefox before 147) open the menu's panels at the viewport's top-left and the phone menu over the bar; still usable. Position them from the invoker when `position-area` isn't supported | next |
+| Playground menu review | The phone menu is anchored to the Menu button, 12 px above the bar's bottom edge: seat it under the bar (`mt-3` below `lg`) | next |
+| Playground menu review | The menu's panels take the browser's popover text color (pure white or black), not `base-content` | next |
 | Phase 5 review | `docs/sse-adapter-design.md` (its decisions and deliverables) still names the SSE demo page `demo/examples/sse-demo.html`, which phase 5 removed: say the playground's SSE scenarios replaced it | next |
 | Phase 5 review | The design doc's Summary and Background describe the old demo in the present tense ("Today's demo is ten static HTML pages") although every phase is done: put them in the past | next |
 | Phase 5 review | The fake SSE server's "nothing to write" note covers only an empty text; a send box holding only whitespace writes that whitespace (harmless: the parser ignores it). Treat whitespace-only as empty if the note means "nothing in the box" | next |

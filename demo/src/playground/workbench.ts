@@ -1,14 +1,23 @@
 import type { EvEm } from '@jcfigueiredo/evem';
 import { ActionGate } from '../actionGate';
 import { el } from '../dom';
-import { ScenarioSession, type Scenario } from '../engine/session';
+import { describeChange, ScenarioSession, type Scenario } from '../engine/session';
 import { laneChart } from '../lanes';
 import { browserStorage } from '../theme';
-import { keepsFollowing, liveAnnouncement, rowsFrom, setupSummary, timelineRows, unseenRows } from '../timeline';
+import {
+  keepHistory,
+  keepsFollowing,
+  liveAnnouncement,
+  rowsFrom,
+  setupSummary,
+  timelineRows,
+  unseenRows,
+  type HistorySegment
+} from '../timeline';
 import { renderLaneChart } from './laneChart';
 import { GRID_ROWS, LAYOUTS, readCodeLayout, saveCodeLayout, type CodeLayout } from './layout';
 import { serverPane } from './serverPane';
-import { BUTTON, controlField, tabList, timelineItem, type Tab } from './views';
+import { BUTTON, controlField, startedOver, tabList, timelineItem, type Tab } from './views';
 
 const CARD = 'card bg-base-100 border border-base-300';
 const HEADING = 'text-xs uppercase tracking-widest text-base-content/70';
@@ -31,7 +40,10 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   const setupSummaryLine = el('summary', { class: 'cursor-pointer text-sm text-base-content/70' });
   const setupFold = el('details', { class: 'mb-3' }, [setupSummaryLine, setupList]);
   const timeline = el('ol', { class: 'relative ms-2 space-y-1.5 border-s border-base-300' });
-  const timelineBox = el('div', { class: 'min-h-0 flex-1 overflow-y-auto pe-2' }, [setupFold, timeline]);
+  // What the timeline showed before the scenario started over (a control, Reset, edited code): kept until Clear
+  const historyList = el('ol', { class: 'relative ms-2 space-y-1.5 border-s border-base-300' });
+  let history: HistorySegment[] = [];
+  const timelineBox = el('div', { class: 'min-h-0 flex-1 overflow-y-auto pe-2' }, [historyList, setupFold, timeline]);
   const clearButton = el('button', { type: 'button', class: BUTTON.minorSmall }, ['Clear']);
   // The list is rebuilt on every render, so screen readers hear only what's new, from this status line
   const announcer = el('p', { class: 'sr-only', 'aria-live': 'polite' });
@@ -67,7 +79,14 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     'The code is edited, so the controls are off. Run it with ⌘/Ctrl+Enter; Reset goes back to the controls.'
   ]);
 
-  const restart = async (change: () => Promise<void>) => {
+  /**
+   * Start the scenario over with `change` (a control, Reset, edited code, the local server): the code changes, so it
+   * runs again, but what the timeline and the wire log showed stays, under a divider that says why (`label`)
+   */
+  const restart = async (change: () => Promise<void>, label: string) => {
+    const shown = rowsFrom(session.trace.entries, Math.max(session.setupEnd, clearedFrom));
+    if (shown.length > 0) history = keepHistory(history, { label, rows: shown });
+    server?.startOver(label);
     gate.reset();
     clearedFrom = 0;
     await change();
@@ -82,7 +101,9 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   const lanesHost = scenario.lanes ? el('div', {}) : undefined;
   const server =
     scenario.websocket || scenario.sse
-      ? serverPane(session, local => restart(() => session.useLocalServer(local)))
+      ? serverPane(session, local =>
+          restart(() => session.useLocalServer(local), local ? 'Local server' : 'Simulated server')
+        )
       : undefined;
   const timelinePanel = el('div', { class: 'flex min-h-0 flex-1 flex-col' }, [timelineBox]);
   const outputTabs: Tab[] = [
@@ -108,7 +129,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     idPrefix: 'output',
     initial: scenario.lanes ? 'lanes' : 'timeline',
     onSelect: id => {
-      clearButton.classList.toggle('invisible', id !== 'timeline');
+      clearButton.classList.toggle('invisible', id !== 'timeline' && id !== 'server');
       // A panel that grew while hidden couldn't scroll: one that was following its end goes there now it's shown
       if (id === 'timeline' && followTimeline) timelineBox.scrollTop = timelineBox.scrollHeight;
       if (id === 'server') server?.reveal();
@@ -116,8 +137,8 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     }
   });
 
-  // Clear empties the timeline, so it's there only on that tab
-  clearButton.classList.toggle('invisible', tabs.selected() !== 'timeline');
+  // Clear empties the log the tab shows (the timeline, the wire), so it's there only on those tabs
+  clearButton.classList.toggle('invisible', tabs.selected() !== 'timeline' && tabs.selected() !== 'server');
 
   const renderTimeline = () => {
     const entries = session.trace.entries;
@@ -128,6 +149,10 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     followTimeline = session.trace !== shownTrace || keepsFollowing(timelineBox, followTimeline);
     shownTrace = session.trace;
 
+    historyList.replaceChildren(
+      ...history.flatMap(segment => [...segment.rows.map(timelineItem), startedOver(segment.label)])
+    );
+    historyList.hidden = history.length === 0;
     setupFold.hidden = setupEntries.length === 0;
     setupSummaryLine.textContent = setupSummary(setupEntries);
     setupList.replaceChildren(...timelineRows(setupEntries).map(timelineItem));
@@ -186,7 +211,9 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   if (lanesHost) resizes?.observe(lanesHost);
 
   clearButton.addEventListener('click', () => {
+    if (tabs.selected() === 'server') return server?.clear();
     clearedFrom = session.trace.entries.length;
+    history = [];
     announcedRows = 0;
     renderTimeline();
   });
@@ -221,14 +248,16 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   const renderControls = () => {
     controls.replaceChildren(
       ...Object.entries(scenario.controls).map(([name, control]) =>
-        controlField(name, control, session.values[name]!, value => restart(() => session.setValue(name, value)))
+        controlField(name, control, session.values[name]!, value =>
+          restart(() => session.setValue(name, value), describeChange(control, value))
+        )
       )
     );
     controls.disabled = session.edited;
   };
 
   const { createEditor } = await import('../editor');
-  const runEdited = () => restart(() => session.edit(editor.getCode()));
+  const runEdited = () => restart(() => session.edit(editor.getCode()), 'Edited code');
   // The ▶ in the code's margin runs the action with that line's label, like its button
   const editor = createEditor(codeHost, session.code, () => void runEdited(), {
     onRunAction: label => {
@@ -250,7 +279,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   runEditedButton.addEventListener('click', () => void runEdited());
   resetButton.addEventListener('click', () => {
     setEditing(false);
-    void restart(() => session.restoreTemplate());
+    void restart(() => session.restoreTemplate(), 'Reset');
   });
 
   const scenarioCard = el('section', { 'aria-label': 'Scenario' }, [

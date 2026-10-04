@@ -1,9 +1,9 @@
 import { el } from '../dom';
 import type { ScenarioSession, ServerSample } from '../engine/session';
 import { checkLocalServer } from '../fakes/localSseServer';
-import { keepsFollowing } from '../timeline';
-import { BUTTON, WIRE_DIRECTION, wireItem } from './views';
-import type { FakeServer } from '../fakes/wire';
+import { keepHistory, keepsFollowing, type HistorySegment } from '../timeline';
+import { BUTTON, startedOver, WIRE_DIRECTION, wireItem } from './views';
+import type { FakeServer, WireEntry } from '../fakes/wire';
 
 /** How many wire lines the pane keeps on screen */
 const SHOWN = 200;
@@ -29,11 +29,20 @@ export function connectionStatus(open: number, states: readonly string[]): strin
  * drop, refuse, silence, restart with a status). With a local SSE server available (development only), a switch
  * between the simulated server and the local one, which shows how to start it and whether it answers. The controls
  * act on the session's current server, so they keep working when the scenario starts over; `render()` redraws.
+ * `startOver(label)`, called just before the scenario starts over, keeps what the log shows above a divider;
+ * `clear()` empties it.
  */
 export function serverPane(
   session: ScenarioSession,
   onLocalServer: (local: boolean) => Promise<void>
-): { element: HTMLElement; render: () => void; reveal: () => void; log: HTMLElement } {
+): {
+  element: HTMLElement;
+  render: () => void;
+  reveal: () => void;
+  startOver: (label: string) => void;
+  clear: () => void;
+  log: HTMLElement;
+} {
   const { websocket, sse } = session.scenario;
   const samples: ServerSample[] =
     sse?.samples ?? (websocket?.sample ? [{ label: 'Sample', text: websocket.sample }] : []);
@@ -184,12 +193,30 @@ export function serverPane(
   const reveal = () => {
     if (following) logBox.scrollTop = logBox.scrollHeight;
   };
+  // What earlier servers wrote, kept when the scenario starts over, and where the reader last cleared this one's log
+  let history: HistorySegment<WireEntry>[] = [];
+  let clearedFrom = 0;
+  /** The scenario starts over (`label` says why): its server goes, but what it wrote stays, until Clear */
+  const startOver = (label: string) => {
+    const wire = (session.server?.wire ?? []).slice(clearedFrom);
+    if (wire.length > 0) history = keepHistory(history, { label, rows: wire }, SHOWN);
+    clearedFrom = 0;
+  };
+  const clear = () => {
+    history = [];
+    clearedFrom = session.server?.wire.length ?? 0;
+    shown = { server: undefined, length: -1 };
+    render();
+  };
   const render = () => {
     const server = session.server;
-    const wire = server?.wire ?? [];
+    const wire = (server?.wire ?? []).slice(clearedFrom);
     if (server !== shown.server || wire.length !== shown.length) {
       following = server !== shown.server || keepsFollowing(logBox, following);
-      log.replaceChildren(...wire.slice(-SHOWN).map(wireItem));
+      log.replaceChildren(
+        ...history.flatMap(segment => [...segment.rows.map(wireItem), startedOver(segment.label)]),
+        ...wire.slice(-SHOWN).map(wireItem)
+      );
       if (wire.length === 0) log.append(el('li', { class: 'text-base-content/70' }, ['Nothing on the wire yet.']));
       reveal();
       shown = { server, length: wire.length };
@@ -211,5 +238,5 @@ export function serverPane(
   showMode();
   render();
   // The log is what the keyboard scrolls, so the Server tab makes it focusable
-  return { element, render, reveal, log: logBox };
+  return { element, render, reveal, startOver, clear, log: logBox };
 }

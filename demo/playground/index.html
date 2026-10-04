@@ -26,33 +26,24 @@
     <link rel="stylesheet" href="../src/styles.css" />
     <script type="module" src="../src/playground/main.ts"></script>
   </head>
-  <body>
-    <div class="drawer lg:drawer-open">
-      <input id="sidebar" type="checkbox" class="drawer-toggle" />
-      <div class="drawer-content min-h-screen bg-base-200">
-        <header class="navbar bg-base-300 border-b border-base-300 lg:hidden">
-          <label for="sidebar" class="btn btn-ghost btn-square drawer-button" aria-label="Open the feature list"
-            >☰</label
-          >
-          <span class="font-mono font-bold">evem playground</span>
-        </header>
-        <main id="workbench" class="mx-auto flex max-w-7xl flex-col gap-4 p-4 lg:h-dvh lg:p-6"></main>
-      </div>
-      <div class="drawer-side z-20">
-        <label for="sidebar" aria-label="Close the feature list" class="drawer-overlay"></label>
-        <nav class="flex min-h-full w-64 flex-col bg-base-300" aria-label="Features">
-          <a href="../" class="flex items-center gap-2 px-5 pt-5 pb-2 font-mono text-lg font-bold">
-            <span class="inline-block size-3.5 rounded bg-primary" aria-hidden="true"></span>evem
-            <span class="text-xs font-normal text-base-content/70">playground</span>
-          </a>
-          <ul id="scenario-menu" class="menu w-full grow"></ul>
-          <div id="theme-picker" class="p-3"></div>
-          <p class="px-5 pb-4 text-xs text-base-content/70">
-            Runs the library from source: version %EVEM_VERSION%, commit
-            <a class="link" href="%EVEM_COMMIT_URL%">%EVEM_COMMIT%</a>.
-          </p>
-        </nav>
-      </div>
-    </div>
+  <body class="bg-base-200">
+    <!-- The top bar: the scenarios in a megamenu (on phones, the Menu button opens it as a list), and the theme -->
+    <header class="sticky top-0 z-30 bg-base-300">
+      <nav class="mx-auto flex h-14 max-w-7xl items-center gap-2 px-4 lg:px-6" aria-label="Features">
+        <a href="../" class="me-2 flex shrink-0 items-center gap-2 font-mono text-lg font-bold">
+          <span class="inline-block size-3.5 rounded bg-primary" aria-hidden="true"></span>evem
+          <!-- Not on the narrowest phones, where the bar needs its room for the menu and the theme -->
+          <span class="hidden text-xs font-normal text-base-content/70 sm:inline">playground</span>
+        </a>
+        <button type="button" class="btn btn-ghost btn-sm lg:hidden" popovertarget="scenario-menu">Menu ▾</button>
+        <div id="scenario-menu" class="megamenu max-lg:megamenu-vertical border-base-300 max-lg:border-b" popover></div>
+        <p class="ms-auto hidden text-xs whitespace-nowrap text-base-content/70 md:block">
+          Runs the library from source: %EVEM_VERSION%,
+          <a class="link" href="%EVEM_COMMIT_URL%">%EVEM_COMMIT%</a>
+        </p>
+        <div id="theme-picker" class="ms-auto md:ms-0"></div>
+      </nav>
+    </header>
+    <main id="workbench" class="mx-auto flex max-w-7xl flex-col gap-4 p-4 lg:h-[calc(100dvh-3.5rem)] lg:p-6"></main>
   </body>
 </html>
