@@ -1,6 +1,6 @@
 import type { EvEm } from '@jcfigueiredo/evem';
 
-// What the README's samples use without defining: the emitter from the Quick Start, and stand-ins for
+// What the samples of the README and the guide (docs/guide/) use without defining: an emitter, and stand-ins for
 // the reader's own code, typed loosely so the check is about EvEm's API, not about these
 declare global {
   const evem: EvEm;

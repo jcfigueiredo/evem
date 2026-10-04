@@ -6,7 +6,7 @@ export const throttle: Scenario = {
   title: 'Throttle',
   summary:
     'A throttled subscriber runs the first event at once and opens a time window; events during the window are dropped, not delayed. The lanes show which events got through.',
-  docs: 'https://github.com/jcfigueiredo/evem#throttling-events',
+  docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/subscriptions.md#throttling-events',
   controls: {
     throttle: { kind: 'number', label: 'throttleTime (ms)', min: 50, max: 1000, step: 50, default: 250 },
     count: { kind: 'number', label: 'events', min: 2, max: 20, default: 5 },

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+
+- The README is a short landing page (install, a quick start, the features, the adapters and links), and the manual moved, unchanged, into [`docs/`](https://github.com/jcfigueiredo/evem/blob/main/docs/README.md): a guide in five pages (events, subscription options, middleware, errors, history and debugging), the API reference and the comparison with alternatives. Its samples are still type-checked and run by the tests.
+
+### Releasing
+
+- Releases publish with npm's trusted publishing (OIDC) instead of a stored token; see `docs/releasing.md`.
+
 ## 0.3.0 (2026-10-03)
 
 First release published to npm, as `@jcfigueiredo/evem`. Version 0.2.0 was never published; its changes are included here. Behavior changes are relative to 0.1.0, the previous version in this repository.

@@ -6,7 +6,7 @@ export const wildcards: Scenario = {
   title: 'Wildcards',
   summary:
     'Event names are split on dots. * alone matches every event, a * at the end matches one or more segments, and any other * exactly one. Type a pattern and an event to see what matches, and why.',
-  docs: 'https://github.com/jcfigueiredo/evem#using-wildcards-in-event-subscription',
+  docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/events.md#using-wildcards-in-event-subscription',
   controls: {
     pattern: {
       kind: 'text',

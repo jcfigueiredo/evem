@@ -8,7 +8,7 @@ export const priorities: Scenario = {
   title: 'Priorities',
   summary:
     "Subscribers run highest priority first: 'high' is 100, 'normal' 0, 'low' -100, or any number. Equal priorities run in the order they subscribed.",
-  docs: 'https://github.com/jcfigueiredo/evem#prioritizing-events',
+  docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/events.md#prioritizing-events',
   controls: {
     auditPriority: { kind: 'select', label: 'audit priority', options: PRIORITIES, default: 'low' },
     emailPriority: { kind: 'select', label: 'email priority', options: PRIORITIES, default: 'normal' },

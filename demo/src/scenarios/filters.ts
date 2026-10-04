@@ -6,7 +6,7 @@ export const filters: Scenario = {
   title: 'Filters',
   summary:
     'A filter decides, from the data, whether a subscriber runs. Filters can be async, and several in an array must all pass, in order.',
-  docs: 'https://github.com/jcfigueiredo/evem#filtering-events',
+  docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/subscriptions.md#filtering-events',
   controls: {
     total: { kind: 'number', label: 'order total', min: 0, max: 1000, step: 10, default: 250 },
     vip: { kind: 'toggle', label: 'VIP customer', default: false },

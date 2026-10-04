@@ -6,7 +6,7 @@ export const schemaValidation: Scenario = {
   title: 'Schema validation',
   summary:
     "A schema checks the data before a subscriber's filters and callback. Each subscription's schemaErrorPolicy decides what invalid data does.",
-  docs: 'https://github.com/jcfigueiredo/evem#schema-validation',
+  docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/subscriptions.md#schema-validation',
   controls: {
     policy: {
       kind: 'select',

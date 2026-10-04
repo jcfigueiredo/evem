@@ -13,20 +13,32 @@ const MODULES = {
   '@jcfigueiredo/evem/sse/server': sseServer
 };
 
-const samples = extractCodeBlocks(readDoc('README.md'), 'README.md', TYPESCRIPT_LANGUAGES).filter(block =>
-  /\/\/ (Output|Logs)\b/.test(block.code)
+/** The documents whose samples say what they print: the README and the guide */
+const DOCUMENTS = [
+  'README.md',
+  'docs/guide/events.md',
+  'docs/guide/subscriptions.md',
+  'docs/guide/middleware.md',
+  'docs/guide/errors.md',
+  'docs/guide/history-and-debugging.md'
+] as const;
+
+const samples = DOCUMENTS.flatMap(file =>
+  extractCodeBlocks(readDoc(file), file, TYPESCRIPT_LANGUAGES)
+    .filter(block => /\/\/ (Output|Logs)\b/.test(block.code))
+    .map(block => ({ file, block }))
 );
 
-describe('README samples with // Output: or // Logs: comments', () => {
+describe('samples in the README and the guide with // Output: or // Logs: comments', () => {
   it('exist', () => {
     expect(samples.length).toBeGreaterThan(0);
   });
 
-  it.each(samples.map(block => [`README.md:${block.line}`, block] as const))(
+  it.each(samples.map(({ file, block }) => [`${file}:${block.line}`, block] as const))(
     '%s prints what its comments say',
     async (location, block) => {
       const expected = parseExpectations(block.code, location);
-      // Samples that continue an earlier one use the Quick Start's emitter
+      // Samples that continue an earlier one use an emitter of their own, like the Quick Start's
       const scope = /\b(?:const|let|var)\s+evem\b/.test(block.code) ? {} : { evem: new core.EvEm() };
       const run = await runSample(block.code, location, MODULES, scope);
 

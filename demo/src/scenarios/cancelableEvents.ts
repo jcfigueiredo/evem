@@ -6,7 +6,7 @@ export const cancelableEvents: Scenario = {
   title: 'Cancelable events',
   summary:
     "Publish with cancelable: true and subscribers get cancel(), which stops the ones after them. Objects and arrays are copied to carry it; primitives can't.",
-  docs: 'https://github.com/jcfigueiredo/evem#using-cancelable-events',
+  docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/events.md#using-cancelable-events',
   controls: {
     payload: {
       kind: 'select',
