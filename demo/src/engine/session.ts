@@ -77,7 +77,8 @@ export interface Scenario {
    * A fake SSE server for the scenario: how it behaves, and samples for the server pane's send box. The code's
    * `SseHandler` reads from it unless the code passes its own `fetch` or another transport. With `local`, the
    * development server can switch to a real SSE server instead (`/events` is proxied to port 8000), and the Server tab
-   * shows `local.command` to start one.
+   * shows `local.command` to start one. Set it only on a scenario whose simulated server serves what that real server
+   * does (the Python examples' tick stream at `/events`), or the switch would show a different scenario.
    */
   sse?: FakeSseBehavior & { samples?: ServerSample[]; local?: { command: string } };
 }

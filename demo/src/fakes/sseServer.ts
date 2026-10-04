@@ -39,12 +39,6 @@ const STATUS_TEXT: Record<number, string> = {
 
 const encoder = new TextEncoder();
 
-/** The path and query of a request's URL, relative or absolute */
-function pathOf(url: string): string {
-  const parsed = new URL(url, 'http://localhost');
-  return parsed.pathname + parsed.search;
-}
-
 /** Wait `ms`, or reject as `fetch` does if the request is aborted first */
 function wait(ms: number, signal: AbortSignal | null | undefined): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -115,23 +109,37 @@ export class FakeSseServer implements FakeServer {
 
   /** Write text to every open stream, as it is (the blank line that ends an event is up to the text) */
   send(text: string): void {
-    if (!this.anyOpen('nothing sent')) return;
-    for (const stream of this.streams) stream.write(text);
+    if (!this.hasText(text) || !this.anyOpen('nothing sent')) return;
+    for (const stream of this.writable('nothing sent')) stream.write(text);
   }
 
   /** Write text in two chunks: inside its first character of more than one byte, else in the middle */
   sendSplit(text: string): void {
-    if (!this.anyOpen('nothing sent')) return;
+    if (!this.hasText(text) || !this.anyOpen('nothing sent')) return;
     const bytes = encoder.encode(text);
     const lead = bytes.findIndex(byte => byte >= 0xc0);
     const at = lead >= 0 ? lead + 1 : Math.floor(bytes.length / 2);
-    for (const stream of this.streams) stream.writeChunks([bytes.subarray(0, at), bytes.subarray(at)]);
+    for (const stream of this.writable('nothing sent')) stream.writeChunks([bytes.subarray(0, at), bytes.subarray(at)]);
   }
 
   /** A `: ping` comment on every open stream: bytes, but no event */
   ping(): void {
     if (!this.anyOpen('no ping sent')) return;
-    for (const stream of this.streams) stream.write(formatSseComment('ping'));
+    for (const stream of this.writable('no ping sent')) stream.write(formatSseComment('ping'));
+  }
+
+  /** Whether there's text to write; if not, note it rather than writing empty chunks */
+  private hasText(text: string): boolean {
+    if (text === '') this.note('nothing to write: the text is empty');
+    return text !== '';
+  }
+
+  /** The open streams that still take writes, noting that `what` didn't happen on the silenced ones */
+  private writable(what: string): Stream[] {
+    return [...this.streams].filter(stream => {
+      if (stream.silenced) this.note(`connection ${stream.number} is silent: ${what}`);
+      return !stream.silenced;
+    });
   }
 
   /** End every open stream, as a server that's done does */
@@ -175,7 +183,8 @@ export class FakeSseServer implements FakeServer {
   private async request(url: string, init: RequestInit): Promise<Response> {
     const headers = new Headers(init.headers);
     const shown = [...headers].filter(([name]) => name !== 'accept').map(([name, value]) => `${name}: ${value}`);
-    this.log.add('client', [`${init.method ?? 'GET'} ${pathOf(url)}`, ...shown].join(' · '));
+    // The URL as given, like LocalSseServer: an absolute one in edited code shows where it was meant to go
+    this.log.add('client', [`${init.method ?? 'GET'} ${url}`, ...shown].join(' · '));
     await wait(this.latency, init.signal);
     if (this.closed) throw new TypeError('Failed to fetch');
     if (this.refusals > 0) {
@@ -238,6 +247,11 @@ class Stream implements SseStream {
   private state: 'open' | 'ending' | 'gone' = 'open';
   private silent = false;
   private stops: Array<() => void> = [];
+
+  /** Whether the server stopped writing to this stream (*Go silent*), which stays open */
+  get silenced(): boolean {
+    return this.silent;
+  }
 
   constructor(
     private readonly server: FakeSseServer,

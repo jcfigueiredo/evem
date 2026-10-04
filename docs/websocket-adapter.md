@@ -31,6 +31,8 @@ Use **`WebSocketHandler`**. It covers the whole connection:
 
 Server-to-client routing is covered in more depth in [Server Events](websocket-server-events.md), which also includes a matching Node.js server and a React example.
 
+Try it in the [playground](https://jcfigueiredo.github.io/evem/playground/#/websocket/connection-queue), against a server that runs in the page: [Connection & offline queue](https://jcfigueiredo.github.io/evem/playground/#/websocket/connection-queue), [Request–response](https://jcfigueiredo.github.io/evem/playground/#/websocket/requests), [Server events & routing](https://jcfigueiredo.github.io/evem/playground/#/websocket/server-events) and a [chat client](https://jcfigueiredo.github.io/evem/playground/#/recipes/chat).
+
 The [Server-Sent Events adapter](sse-adapter.md) routes incoming messages with the same rules, so a server's `{ "event": …, "data": … }` messages become the same `server.*` events over either connection.
 
 ## Installation

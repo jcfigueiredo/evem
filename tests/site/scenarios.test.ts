@@ -39,14 +39,10 @@ function variants(scenario: Scenario): string[] {
 }
 
 /**
- * Run an action; a command to the scenario's server, `server:<command> <argument>` (what the Server tab's controls
- * do: `server:drop`, `server:send <text>`, …); or `wait:<ms>`, which lets that much time pass
+ * Run an action, or a command to the scenario's server, `server:<command> <argument>` (what the Server tab's
+ * controls do: `server:drop`, `server:send <text>`, …)
  */
 async function step(session: ScenarioSession, action: string): Promise<void> {
-  if (action.startsWith('wait:')) {
-    await vi.advanceTimersByTimeAsync(Number(action.slice('wait:'.length)));
-    return;
-  }
   if (!action.startsWith('server:')) return session.run(action);
   const server = session.server;
   if (!server) throw new Error(`${action}: the scenario has no server`);
@@ -82,6 +78,28 @@ async function settle(step: Promise<void>, bounded = false): Promise<void> {
   }
   await step;
 }
+
+/**
+ * Run a check's step and let it finish: `wait:<ms>` lets exactly that much time pass; anything else is settled.
+ * A wait doesn't go through `settle`, whose bounded steps of 50 ms would add to it.
+ */
+async function runStep(session: ScenarioSession, action: string, bounded: boolean): Promise<void> {
+  if (action.startsWith('wait:')) await vi.advanceTimersByTimeAsync(Number(action.slice('wait:'.length)));
+  else await settle(step(session, action), bounded);
+}
+
+describe('the check runner', () => {
+  it('lets exactly the time a wait: step asks for pass, bounded or not', async () => {
+    vi.useFakeTimers();
+    const session = new ScenarioSession(scenarios[0]!);
+    for (const bounded of [true, false]) {
+      const start = Date.now();
+      await runStep(session, 'wait:120', bounded);
+      expect(Date.now() - start, bounded ? 'bounded' : 'unbounded').toBe(120);
+    }
+    vi.useRealTimers();
+  });
+});
 
 describe('the scenario list', () => {
   it('has unique ids and addresses', () => {
@@ -138,11 +156,11 @@ describe.each(scenarios.map(scenario => [scenario.id, scenario] as const))('scen
       const session = new ScenarioSession(scenario);
       Object.assign(session.values, check.values ?? {});
       await settle(session.restoreTemplate(), bounded);
-      for (const action of check.before ?? []) await settle(step(session, action), bounded);
+      for (const action of check.before ?? []) await runStep(session, action, bounded);
       const before = session.trace.entries.length;
       const wireBefore = session.server?.wire.length ?? 0;
 
-      await settle(step(session, check.action), bounded);
+      await runStep(session, check.action, bounded);
       if (check.wait) await vi.advanceTimersByTimeAsync(check.wait);
 
       const entries = session.trace.entries.slice(before);

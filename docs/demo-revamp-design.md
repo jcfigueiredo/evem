@@ -1,6 +1,6 @@
 # Demo Revamp Design
 
-> **Status: phases 1 (examples audit), 2 (foundation), 3 (playground: 3a core scenarios, 3b flow control, 3c-1 WebSocket and Recipes, 3c-2 SSE and the local server switch), 4 (showcase: 4a navbar, hero, features; 4b-1 adapter cards, Why EvEm, footer, metadata; 4b-2 the playground's follow-ups) and the UX pass after 4a implemented; the 0.3.0 release and phase 5 not started.** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
+> **Status: all five phases implemented: 1 (examples audit), 2 (foundation), 3 (playground), 4 (showcase, with a UX pass after 4a) and 5 (cleanup).** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
 
 ## Summary
 
@@ -178,20 +178,14 @@ Phase 3 ships in three parts, each with its own plan and pull request: **3a**, t
 
 ## Follow-ups
 
-Findings that reviews deferred, with the phase that takes each. A follow-up leaves this list with the pull request that fixes it.
+Findings that reviews deferred, with the phase that takes each. A follow-up leaves this list with the pull request that fixes it. Phase 5 closed the ones planned for the phases; these, from its review, are for whenever the demo is next touched.
 
 | From | Follow-up | Phase |
 |---|---|---|
-| Note, 2026-10-03 | The site runs the library from source (its footer and the playground's sidebar now say which version and commit), and the package isn't on npm yet though the hero says `npm install`: release 0.3.0 (`pnpm release 0.3.0 --dry-run` first, then the user's OK) | after 4b |
-| Phase 2 review | Check narrow layouts below 513 px, with device emulation | 5 |
-| 4b-2 review | After *Drop the stream*, an adapter card announces the drop but not the resume a few seconds later (it announces once per click): announce connection changes too, or keep the window and leave out the stream's own ticks | 5 |
-| 4b-2 review | The workbench sets a hidden tab's count before it resets `seen` for a new trace; harmless while setups are synchronous, but move the reset above the counts | 5 |
-| 4b-2 review | CLAUDE.md's demo status line misses a comma after "the UX pass (code beside output)" | 5 |
-| 3c-2 review | A write after *Go silent* vanishes without a note: the silenced stream still counts as open, and the write is dropped quietly | 5 |
-| 3c-2 review | An empty send box writes empty chunks (one, or two with *Write it in two chunks*) and logs blank lines: note that there's nothing to write instead | 5 |
-| 3c-2 review | The fake SSE server logs a request's path only, so an absolute URL in edited code (`https://api.example.com/events`) looks as if it reached that host: log the URL as given, as `LocalSseServer` does | 5 |
-| 3c-2 review | A check whose `action` is `wait:<ms>` runs inside the bounded `settle()`, whose 50 ms slices add to the wait: deterministic today, but fragile across fake-timer upgrades. Await `wait:` steps directly | 5 |
-| 3c-2 review | `Scenario.sse.local` can be set on any SSE scenario, though only one whose simulated server matches what the Python examples serve should have it: say so on the field | 5 |
+| Phase 5 review | `docs/sse-adapter-design.md` (its decisions and deliverables) still names the SSE demo page `demo/examples/sse-demo.html`, which phase 5 removed: say the playground's SSE scenarios replaced it | next |
+| Phase 5 review | The design doc's Summary and Background describe the old demo in the present tense ("Today's demo is ten static HTML pages") although every phase is done: put them in the past | next |
+| Phase 5 review | The fake SSE server's "nothing to write" note covers only an empty text; a send box holding only whitespace writes that whitespace (harmless: the parser ignores it). Treat whitespace-only as empty if the note means "nothing in the box" | next |
+| Phase 5 review | After a drop, an adapter card announces `Connection: connecting.` and `Connection: connected.` about two frames apart; screen readers usually read the latest, but announcing only `connected`, `reconnecting` and `disconnected` would be calmer | next |
 
 ## UX pass (after 4a)
 
@@ -220,13 +214,11 @@ A scroll tour at the site root:
 
 ## Phase 5: Cleanup
 
-> Not yet discussed section by section; review it here.
+Reviewed with the user on 2026-10-03, against what the earlier phases had already done (the README links the showcase and the playground; CLAUDE.md describes the new demo; there's no Prettier exclusion to remove, since the format command never listed the old pages):
 
-- Delete the old feature pages (`demo/examples/*.html`; the old index is already gone in phase 2) and the tests for their inline copies and code samples (the rest of `tests/demo/`), which phases 2–3 replace with engine and scenario tests.
-- Link the site: a "Try it" section near the top of the README (showcase and playground URLs), the playground's SSE pages from `docs/sse-adapter.md` (replacing the link to `demo/examples/sse-demo.html`), and the matching pages from `docs/websocket-adapter.md`.
-- Update CLAUDE.md: the demo's architecture (engine, scenarios, fakes, themes), `pnpm demo` / `pnpm demo:build`, the docs checks, and the new tests, replacing the inline-copy description.
-- Remove `demo/examples/` from the Prettier exclusions (nothing left to exclude).
-- CHANGELOG: the demo isn't part of the npm package (`files: ["dist"]`), so it gets no entry; library fixes from phase 1 already have theirs.
+- **Retire the old demo:** delete the old feature pages (`demo/examples/*.html`) and the tests for their inline copies and code samples (`tests/demo/`), which the engine and scenario tests replace; link the playground's pages from `docs/sse-adapter.md` (replacing the link to `demo/examples/sse-demo.html`) and from `docs/websocket-adapter.md`; and drop the old demo from CLAUDE.md.
+- **The follow-ups for phase 5:** narrow layouts with device emulation, an adapter card's connection announcements, the order of the workbench's count reset, the fake SSE server's edge cases (writes to a silenced stream, empty writes, the request URL), exact `wait:` steps in the scenario checks, and the doc comment on `Scenario.sse.local`.
+- CHANGELOG: the demo isn't part of the npm package (`files: ["dist"]`), so it gets no entry.
 
 ## Testing
 
