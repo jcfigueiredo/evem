@@ -8,6 +8,11 @@ export const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 /** Documents whose TypeScript samples are type-checked, relative to the repository root */
 export const TYPESCRIPT_DOCS = [
   'README.md',
+  'docs/guide/events.md',
+  'docs/guide/subscriptions.md',
+  'docs/guide/middleware.md',
+  'docs/guide/errors.md',
+  'docs/guide/history-and-debugging.md',
   'docs/examples.md',
   'docs/websocket-adapter.md',
   'docs/websocket-server-events.md',

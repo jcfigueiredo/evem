@@ -6,7 +6,7 @@ export const middleware: Scenario = {
   title: 'Middleware',
   summary:
     'Middleware sees every event before its subscribers, in the order it was added: it can change the data, cancel the event with null, or reroute it. A pattern limits it to matching events.',
-  docs: 'https://github.com/jcfigueiredo/evem#middleware',
+  docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/middleware.md',
   controls: { role: { kind: 'select', label: 'role', options: ['user', 'admin', 'guest'], default: 'user' } },
   helpers: {},
   code: [

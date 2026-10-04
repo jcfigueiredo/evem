@@ -6,7 +6,7 @@ export const throttleDebounce: Scenario = {
   title: 'Throttle + debounce',
   summary:
     'With both, an event runs at once when more than throttleTime has passed since the last immediate run; the others are debounced, so the last event still gets a run. Compare each option alone in the lanes.',
-  docs: 'https://github.com/jcfigueiredo/evem#combining-throttle-and-debounce',
+  docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/subscriptions.md#combining-throttle-and-debounce',
   controls: {
     throttle: { kind: 'number', label: 'throttleTime (ms)', min: 50, max: 1000, step: 50, default: 300 },
     debounce: { kind: 'number', label: 'debounceTime (ms)', min: 50, max: 1000, step: 50, default: 500 },

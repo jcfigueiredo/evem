@@ -6,7 +6,7 @@ export const once: Scenario = {
   title: 'Once',
   summary:
     'A once subscription runs a single time, then unsubscribes. Only an event that gets through its filter uses it up.',
-  docs: 'https://github.com/jcfigueiredo/evem#using-once-only-events',
+  docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/events.md#using-once-only-events',
   controls: { bigOver: { kind: 'number', label: 'a big order is over', min: 0, max: 1000, step: 10, default: 100 } },
   helpers: {},
   code: [

@@ -6,7 +6,7 @@ export const errorPolicies: Scenario = {
   title: 'Error policies & timeouts',
   summary:
     "A publish's errorPolicy decides what a callback's error does: log and go on, ignore it, stop the event, or reject. A callback slower than the timeout is an error too, but it keeps running.",
-  docs: 'https://github.com/jcfigueiredo/evem#error-policy-configuration',
+  docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/errors.md#error-policy-configuration',
   controls: {
     policy: {
       kind: 'select',

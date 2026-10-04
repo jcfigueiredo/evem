@@ -23,7 +23,7 @@ import { throttleDebounce } from './throttleDebounce';
 import { transforms } from './transforms';
 import { wildcards } from './wildcards';
 
-/** Every scenario, in sidebar order: the groups follow the README */
+/** Every scenario, in sidebar order: the groups follow the docs' guide */
 export const scenarios: readonly Scenario[] = [
   publishSubscribe,
   wildcards,

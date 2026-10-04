@@ -6,7 +6,7 @@ export const historyReplay: Scenario = {
   title: 'History & replay',
   summary:
     'With history on, EvEm keeps the last events. A late subscriber can replay the last matching one, or all of them, while it subscribes.',
-  docs: 'https://github.com/jcfigueiredo/evem#using-event-history-and-replay',
+  docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/history-and-debugging.md#using-event-history-and-replay',
   controls: { size: { kind: 'number', label: 'history size', min: 1, max: 10, default: 5 } },
   helpers: {},
   code: [

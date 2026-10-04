@@ -6,7 +6,7 @@ export const memoryLeaks: Scenario = {
   title: 'Memory leaks & info()',
   summary:
     "Leak detection warns when an event collects more subscriptions than a threshold, a sign they aren't unsubscribed. info() lists the subscriptions and middleware, optionally for a pattern.",
-  docs: 'https://github.com/jcfigueiredo/evem#memory-leak-detection',
+  docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/history-and-debugging.md#memory-leak-detection',
   controls: {
     threshold: { kind: 'number', label: 'warn above', min: 1, max: 10, default: 3 },
     handlers: { kind: 'number', label: 'handlers to add', min: 1, max: 10, default: 5 },

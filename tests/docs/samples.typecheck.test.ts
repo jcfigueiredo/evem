@@ -15,6 +15,12 @@ const prelude = (name: string) => fileURLToPath(new URL(`./preludes/${name}`, im
 /** What each document's samples use without defining (see the comments in preludes/) */
 const PRELUDES: Record<TypeScriptDoc, string[]> = {
   'README.md': [prelude('readme.d.ts')],
+  // The guide pages came from the README, and use what its prelude declares
+  'docs/guide/events.md': [prelude('readme.d.ts')],
+  'docs/guide/subscriptions.md': [prelude('readme.d.ts')],
+  'docs/guide/middleware.md': [prelude('readme.d.ts')],
+  'docs/guide/errors.md': [prelude('readme.d.ts')],
+  'docs/guide/history-and-debugging.md': [prelude('readme.d.ts')],
   'docs/examples.md': [prelude('examples.d.ts')],
   'docs/websocket-adapter.md': [],
   'docs/websocket-server-events.md': [prelude('websocket-server-events.d.ts'), prelude('react.d.ts')],
