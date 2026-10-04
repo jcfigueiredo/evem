@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { defaultValues, numberInput, optionLabel, ScenarioSession, type Scenario } from '../../demo/src/engine/session';
+import {
+  defaultValues,
+  describeChange,
+  numberInput,
+  optionLabel,
+  ScenarioSession,
+  type Scenario
+} from '../../demo/src/engine/session';
 
 const scenario: Scenario = {
   id: 'greeting',
@@ -441,6 +448,18 @@ describe('ScenarioSession with a fake SSE server', () => {
     await session.useLocalServer(false);
     expect(session.localServer).toBe(false);
     expect(() => session.server?.run('end')).not.toThrow();
+  });
+});
+
+describe('describeChange', () => {
+  it('names a control and its new value, as the timeline marks where the scenario started over', () => {
+    expect(describeChange({ kind: 'number', label: 'throttleTime (ms)', min: 0, max: 1000, default: 300 }, 400)).toBe(
+      'throttleTime (ms) → 400'
+    );
+    expect(describeChange({ kind: 'toggle', label: 'backoff', default: true }, false)).toBe('backoff → off');
+    expect(describeChange({ kind: 'select', label: 'prefix', options: ['', 'server'], default: 'server' }, '')).toBe(
+      "prefix → '' (empty)"
+    );
   });
 });
 

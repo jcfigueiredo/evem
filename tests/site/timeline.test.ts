@@ -4,6 +4,7 @@ import {
   announcement,
   describeEntry,
   isAtEnd,
+  keepHistory,
   latestConnectionState,
   keepsFollowing,
   liveAnnouncement,
@@ -195,6 +196,32 @@ describe('latestConnectionState', () => {
       latestConnectionState([{ kind: 'publish', id: 1, event: 'server.tick', data: { n: 1 }, ...at }])
     ).toBeUndefined();
     expect(latestConnectionState([state('my.connection.state.extra', 'connected', 1)])).toBeUndefined();
+  });
+});
+
+describe('keepHistory', () => {
+  const rows = (n: number) =>
+    timelineRows(
+      Array.from({ length: n }, (_, at) => ({ kind: 'log', level: 'log', text: `row ${at}`, at }) as TraceEntry)
+    );
+
+  it('keeps what the timeline showed before each restart, in order', () => {
+    const history = keepHistory(keepHistory([], { label: 'a → 1', rows: rows(2) }), { label: 'b → 2', rows: rows(3) });
+    expect(history.map(segment => [segment.label, segment.rows.length])).toEqual([
+      ['a → 1', 2],
+      ['b → 2', 3]
+    ]);
+  });
+
+  it('keeps at most maxRows rows, dropping the oldest, and the segments that empties', () => {
+    const history = keepHistory(keepHistory([], { label: 'old', rows: rows(4) }), { label: 'new', rows: rows(5) }, 6);
+    expect(history.map(segment => [segment.label, segment.rows.map(row => row.text)])).toEqual([
+      ['old', ['row 3']],
+      ['new', ['row 0', 'row 1', 'row 2', 'row 3', 'row 4']]
+    ]);
+    expect(keepHistory(history, { label: 'newest', rows: rows(6) }, 6).map(segment => segment.label)).toEqual([
+      'newest'
+    ]);
   });
 });
 

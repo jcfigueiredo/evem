@@ -146,6 +146,35 @@ export function timelineRows(entries: readonly TraceEntry[]): TimelineRow[] {
 }
 
 /**
+ * What a log (the timeline, the wire) showed before the scenario started over, and what started it over (a control,
+ * Reset, …)
+ */
+export interface HistorySegment<Row = TimelineRow> {
+  label: string;
+  rows: Row[];
+}
+
+/**
+ * The timeline's history after one more restart: the earlier segments, then `segment`, keeping at most `maxRows`
+ * rows in all (the oldest go first, and a segment left empty goes with them), so a long session stays quick
+ */
+export function keepHistory<Row>(
+  history: readonly HistorySegment<Row>[],
+  segment: HistorySegment<Row>,
+  maxRows = 500
+): HistorySegment<Row>[] {
+  let room = maxRows;
+  const kept: HistorySegment<Row>[] = [];
+  for (const each of [...history, segment].reverse()) {
+    if (room <= 0) break;
+    const rows = each.rows.slice(Math.max(0, each.rows.length - room));
+    room -= rows.length;
+    kept.unshift({ label: each.label, rows });
+  }
+  return kept.filter(each => each.rows.length > 0);
+}
+
+/**
  * The state an adapter's connection last moved to among `entries` (the `to` of the latest `ws.connection.state` or
  * `sse.connection.state` publish), or undefined if it didn't change: an adapter's card announces it even when the
  * stream's own ticks aren't
