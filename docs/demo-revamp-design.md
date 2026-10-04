@@ -178,10 +178,14 @@ Phase 3 ships in three parts, each with its own plan and pull request: **3a**, t
 
 ## Follow-ups
 
-Findings that reviews deferred, with the phase that takes each. A follow-up leaves this list with the pull request that fixes it. None are open: phase 5 closed the last of them.
+Findings that reviews deferred, with the phase that takes each. A follow-up leaves this list with the pull request that fixes it. Phase 5 closed the ones planned for the phases; these, from its review, are for whenever the demo is next touched.
 
 | From | Follow-up | Phase |
 |---|---|---|
+| Phase 5 review | `docs/sse-adapter-design.md` (its decisions and deliverables) still names the SSE demo page `demo/examples/sse-demo.html`, which phase 5 removed: say the playground's SSE scenarios replaced it | next |
+| Phase 5 review | The design doc's Summary and Background describe the old demo in the present tense ("Today's demo is ten static HTML pages") although every phase is done: put them in the past | next |
+| Phase 5 review | The fake SSE server's "nothing to write" note covers only an empty text; a send box holding only whitespace writes that whitespace (harmless: the parser ignores it). Treat whitespace-only as empty if the note means "nothing in the box" | next |
+| Phase 5 review | After a drop, an adapter card announces `Connection: connecting.` and `Connection: connected.` about two frames apart; screen readers usually read the latest, but announcing only `connected`, `reconnecting` and `disconnected` would be calmer | next |
 
 ## UX pass (after 4a)
 
