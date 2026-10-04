@@ -32,7 +32,7 @@ SSE is one-way: the server talks, the client listens. To send something to the s
 - [Using the parser directly](#using-the-parser-directly)
 - [Types](#types)
 
-There's also an [interactive demo](../demo/examples/sse-demo.html) that runs in the browser without a server.
+Try it in the [playground](https://jcfigueiredo.github.io/evem/playground/#/sse/stream-routing), against a server that runs in the page: [Stream & routing](https://jcfigueiredo.github.io/evem/playground/#/sse/stream-routing), [Reconnect & resume](https://jcfigueiredo.github.io/evem/playground/#/sse/reconnect-resume) and [Failures](https://jcfigueiredo.github.io/evem/playground/#/sse/failures).
 
 ## Installation
 
