@@ -10,9 +10,27 @@ export const priorities: Scenario = {
     "Subscribers run highest priority first: 'high' is 100, 'normal' 0, 'low' -100, or any number. Equal priorities run in the order they subscribed.",
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/events.md#prioritizing-events',
   controls: {
-    auditPriority: { kind: 'select', label: 'audit priority', options: PRIORITIES, default: 'low' },
-    emailPriority: { kind: 'select', label: 'email priority', options: PRIORITIES, default: 'normal' },
-    metricsPriority: { kind: 'select', label: 'metrics priority', options: PRIORITIES, default: 'high' }
+    auditPriority: {
+      kind: 'select',
+      label: 'audit priority',
+      hint: 'Higher runs first: high is 100, normal 0, low -100, or any number.',
+      options: PRIORITIES,
+      default: 'low'
+    },
+    emailPriority: {
+      kind: 'select',
+      label: 'email priority',
+      hint: 'Equal priorities run in the order they subscribed: audit, email, metrics.',
+      options: PRIORITIES,
+      default: 'normal'
+    },
+    metricsPriority: {
+      kind: 'select',
+      label: 'metrics priority',
+      hint: 'Set it to low and watch metrics move to the end.',
+      options: PRIORITIES,
+      default: 'high'
+    }
   },
   helpers: {
     audit: () => {},

@@ -23,6 +23,12 @@ export type TraceEntry = { at: number; publish?: number } & (
   | { kind: 'action'; label: string }
 );
 
+/** An action's run on the trace's clock: when its `action` entry was recorded, and when its code ended (if it has) */
+export interface ActionRun {
+  at: number;
+  end?: number;
+}
+
 /** A TraceEntry without the fields the trace fills in */
 export type TraceRecord = TraceEntry extends infer Entry
   ? Entry extends TraceEntry
@@ -36,6 +42,8 @@ export type TraceRecord = TraceEntry extends infer Entry
  */
 export class Trace {
   readonly entries: TraceEntry[] = [];
+  /** The actions run on this trace, in order: the timeline keeps what each one caused together */
+  readonly runs: ActionRun[] = [];
   /**
    * The publish whose handler (middleware, callback, filter, schema or transform) is running right now, if any.
    * The traced EvEm sets it while EvEm runs one, so entries recorded meanwhile belong to that publish, even when

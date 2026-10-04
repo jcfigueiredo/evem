@@ -23,8 +23,20 @@ export const sseReconnect: Scenario = {
     "The server streams numbered ticks, each with its number as id, and ends the first stream after 5 (like examples/python/server.py --drop-after 5). SseHandler reconnects after the server's retry: delay and sends Last-Event-ID, so the ticks go on where they stopped. Drop or refuse connections from the Server tab to see the backoff.",
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/sse-adapter.md#resuming-with-last-event-id',
   controls: {
-    backoff: { kind: 'toggle', label: 'backoff', default: true },
-    maxReconnectAttempts: { kind: 'number', label: 'maxReconnectAttempts', min: 1, max: 10, default: 3 }
+    backoff: {
+      kind: 'toggle',
+      label: 'backoff',
+      hint: 'Each failed attempt in a row doubles the delay, with some jitter.',
+      default: true
+    },
+    maxReconnectAttempts: {
+      kind: 'number',
+      label: 'maxReconnectAttempts',
+      hint: 'Failed attempts in a row before it gives up (sse.reconnect.failed).',
+      min: 1,
+      max: 10,
+      default: 3
+    }
   },
   helpers: {},
   code: [
@@ -52,6 +64,7 @@ export const sseReconnect: Scenario = {
     '// It sends the last event id, so the ticks go on where they stopped',
     'sse.connect();'
   ].join('\n'),
+  toggles: [{ label: 'Connected', on: 'Connect', off: 'Disconnect', state: 'connection' }],
   checks: [
     {
       action: 'wait:7300',

@@ -8,8 +8,19 @@ export const sseStream: Scenario = {
     "SseHandler reads a text/event-stream and publishes each event: a named one as server.<name>, an unnamed { event, data } envelope the same way, anything else as sse.message, and data that doesn't parse as sse.parse.error. Write events to the stream from the Server tab.",
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/sse-adapter.md#routing',
   controls: {
-    unwrapEnvelope: { kind: 'toggle', label: 'unwrapEnvelope', default: true },
-    parseData: { kind: 'select', label: 'parseData', options: ['json', 'text'], default: 'json' }
+    unwrapEnvelope: {
+      kind: 'toggle',
+      label: 'unwrapEnvelope',
+      hint: 'On, an { event, data } message is published as server.<event>; off, whole as sse.message.',
+      default: true
+    },
+    parseData: {
+      kind: 'select',
+      label: 'parseData',
+      hint: "json parses each event's data; text keeps it a string.",
+      options: ['json', 'text'],
+      default: 'json'
+    }
   },
   helpers: {},
   code: [

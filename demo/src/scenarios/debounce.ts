@@ -8,8 +8,24 @@ export const debounce: Scenario = {
     'Each event restarts a debounced subscriber’s timer: it runs once the events pause for debounceTime, with the last one. The run comes after its publish has finished.',
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/subscriptions.md#debouncing-events',
   controls: {
-    debounce: { kind: 'number', label: 'debounceTime (ms)', min: 50, max: 1000, step: 50, default: 300 },
-    gap: { kind: 'number', label: 'time between events (ms)', min: 10, max: 600, step: 10, default: 100 }
+    debounce: {
+      kind: 'number',
+      label: 'debounceTime (ms)',
+      hint: 'search runs once the events pause this long, with the last one.',
+      min: 50,
+      max: 1000,
+      step: 50,
+      default: 300
+    },
+    gap: {
+      kind: 'number',
+      label: 'time between events (ms)',
+      hint: 'Longer than debounceTime and every event gets its own run.',
+      min: 10,
+      max: 600,
+      step: 10,
+      default: 100
+    }
   },
   helpers: {},
   code: [

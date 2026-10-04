@@ -6,9 +6,25 @@ import { ScenarioSession, type Scenario } from '../engine/session';
 import type { TraceEntry } from '../engine/trace';
 import { laneChart } from '../lanes';
 import { renderLaneChart } from '../playground/laneChart';
-import { BUTTON, controlField, tabList, timelineItem, wireItem, type Tab } from '../playground/views';
+import {
+  actionControls,
+  BUTTON,
+  controlField,
+  groupItems,
+  replaceKeepingFocus,
+  tabList,
+  wireItem,
+  type Tab
+} from '../playground/views';
 import { scenarioPath } from '../routing';
-import { keepsFollowing, latestConnectionState, liveAnnouncement, sinceLatestAction, timelineRows } from '../timeline';
+import {
+  groupRuns,
+  keepsFollowingTop,
+  latestConnectionState,
+  liveAnnouncement,
+  sinceLatestAction,
+  timelineRows
+} from '../timeline';
 
 /**
  * The height of a widget, which its slot in index.html reserves (as a card of the same size) until it mounts: a
@@ -108,12 +124,12 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
       onSelect: id => {
         if (id === 'code') void showCode();
         // Rows that came while another tab was shown couldn't scroll the hidden panel: it follows its end now
-        else if (id === 'wire' && followingWire) wireBox.scrollTop = wireBox.scrollHeight;
-        else if (id === 'output' && following) output.scrollTop = output.scrollHeight;
+        else if (id === 'wire' && followingWire) wireBox.scrollTop = 0;
+        else if (id === 'output' && following) output.scrollTop = 0;
       }
     }
   );
-  // Whether the output and the wire follow their end (see keepsFollowing)
+  // Whether the output and the wire follow their top, where the newest is (see keepsFollowingTop)
   let following = true;
   let followingWire = true;
 
@@ -122,14 +138,24 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
   let announcedTrace: unknown;
   let announcedEntries = 0;
   let wireShown: { server: unknown; length: number } = { server: undefined, length: -1 };
+  // Which folds the reader opened or closed, per trace (a control's change starts a new one); see groupItems
+  const folds = new Map<string, boolean>();
+  let traces = 0;
+  let foldedTrace: unknown;
   const render = () => {
+    if (session.trace !== foldedTrace) {
+      foldedTrace = session.trace;
+      traces++;
+    }
     const entries = widgetEntries(scenario, session.trace.entries, session.setupEnd);
     const rows = timelineRows(entries);
     if (scenario.lanes) {
       renderLaneChart(output, laneChart(session.trace.entries));
     } else {
-      following = keepsFollowing(output, following);
-      timeline.replaceChildren(...rows.map(timelineItem));
+      // Newest first, like the playground: what's added goes above, so a reader who scrolled down keeps their place
+      following = keepsFollowingTop(output, following);
+      const fromBottom = output.scrollHeight - output.scrollTop;
+      replaceKeepingFocus(timeline, groupItems(groupRuns(rows, session.trace.runs), folds, String(traces)));
       if (rows.length === 0) {
         const first = session.actions[0];
         timeline.append(
@@ -138,16 +164,18 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
           ])
         );
       }
-      if (following) output.scrollTop = output.scrollHeight;
+      output.scrollTop = following ? 0 : output.scrollHeight - fromBottom;
     }
     // The wire is rebuilt only when it grew, or the scenario started over with a new server
     const lines = session.server?.wire ?? [];
     if (adapter && (session.server !== wireShown.server || lines.length !== wireShown.length)) {
-      followingWire = keepsFollowing(wireBox, followingWire);
-      wire.replaceChildren(...lines.slice(-WIRE_SHOWN).map(wireItem));
-      if (followingWire) wireBox.scrollTop = wireBox.scrollHeight;
+      followingWire = keepsFollowingTop(wireBox, followingWire);
+      const fromBottom = wireBox.scrollHeight - wireBox.scrollTop;
+      wire.replaceChildren(...lines.slice(-WIRE_SHOWN).reverse().map(wireItem));
+      wireBox.scrollTop = followingWire ? 0 : wireBox.scrollHeight - fromBottom;
       wireShown = { server: session.server, length: lines.length };
     }
+    refreshSwitches();
     if (adapter) announceStream();
     else if (rows.length > announced) {
       const text = liveAnnouncement(rows.slice(announced), performance.now() - lastInteraction);
@@ -195,29 +223,31 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
     const token = gate.start();
     if (token === undefined) return;
     acted();
-    for (const button of actions.querySelectorAll<HTMLButtonElement>('button:not([data-server-control])'))
-      button.disabled = true;
+    for (const control of actions.querySelectorAll<HTMLButtonElement | HTMLInputElement>(
+      'button:not([data-server-control]), input'
+    ))
+      control.disabled = true;
     void editor?.then(view => view.setRunsEnabled(false));
     if (!adapter) announced = 0;
     try {
       await session.run(id);
     } finally {
       if (gate.end(token)) {
-        for (const button of actions.querySelectorAll<HTMLButtonElement>('button:not([data-server-control])'))
-          button.disabled = false;
+        for (const control of actions.querySelectorAll<HTMLButtonElement | HTMLInputElement>(
+          'button:not([data-server-control]), input'
+        ))
+          control.disabled = false;
         void editor?.then(view => view.setRunsEnabled(true));
       }
     }
   };
+  // The switches show what EvEm did, so they're refreshed with the output (see actionControls)
+  let refreshSwitches = () => {};
   const renderActions = () => {
+    const { buttons, switches, refresh } = actionControls(scenario, session.actions, run, () => session.trace.entries);
+    refreshSwitches = refresh;
     actions.replaceChildren(
-      ...session.actions.map((action, index) => {
-        const button = el('button', { type: 'button', class: index === 0 ? BUTTON.main : BUTTON.other }, [
-          action.label
-        ]);
-        button.addEventListener('click', () => void run(action.id));
-        return button;
-      }),
+      ...buttons,
       // The server's own controls act on whichever server the session has now, outside the action buttons' gate
       ...serverControls(scenario).map(({ label, command }) => {
         const button = el('button', { type: 'button', class: BUTTON.other, 'data-server-control': '' }, [label]);
@@ -226,7 +256,8 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
           session.server?.run(command);
         });
         return button;
-      })
+      }),
+      ...(switches ? [switches] : [])
     );
   };
   const renderControls = () => {
@@ -252,7 +283,9 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
             const first = session.actions[0];
             if (first && !adapter) await run(first.id);
           },
-          prefix
+          prefix,
+          // The card's height is fixed: its controls' hints are tooltips (and read by screen readers)
+          false
         )
       )
     );

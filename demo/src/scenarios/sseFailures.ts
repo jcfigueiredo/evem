@@ -8,7 +8,15 @@ export const sseFailures: Scenario = {
     'How a stream ends decides what SseHandler does: a 401 or 404 stops it, a 503 or 429 reconnects no sooner than Retry-After, a 204 stops it quietly, and a stream that goes silent past heartbeatTimeout is aborted and reconnected. The server sends : ping every second; restart it with a status, or make it go silent, from the Server tab.',
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/sse-adapter.md#how-a-connection-ends',
   controls: {
-    heartbeatTimeout: { kind: 'number', label: 'heartbeatTimeout (ms)', min: 500, max: 10000, step: 500, default: 3000 }
+    heartbeatTimeout: {
+      kind: 'number',
+      label: 'heartbeatTimeout (ms)',
+      hint: 'A stream silent this long is aborted and reconnected: try Go silent on the Server tab.',
+      min: 500,
+      max: 10000,
+      step: 500,
+      default: 3000
+    }
   },
   helpers: {},
   code: [

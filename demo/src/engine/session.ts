@@ -8,16 +8,33 @@ import { FakeSseServer, type FakeSseBehavior } from '../fakes/sseServer';
 import { FakeWebSocketServer, type FakeWebSocketBehavior } from '../fakes/webSocketServer';
 import type { FakeServer, WireEntry } from '../fakes/wire';
 import { compileProgram, renderCode, type Action, type ControlValue, type PackageImport } from './program';
-import { Trace } from './trace';
+import { Trace, type ActionRun } from './trace';
 import { createTracedEvEm } from './tracedEvEm';
 
-export type Control =
+/**
+ * A control: what it's called, and `hint`, one sentence under it on what it changes in this scenario and what to look
+ * for (every scenario's controls have one; the scenario tests check)
+ */
+export type Control = { label: string; hint?: string } &
   /** `raw`: the options are code (`ErrorPolicy.THROW`), written into the code as they are, not as string literals */
-  | { kind: 'select'; label: string; options: readonly ControlValue[]; default: ControlValue; raw?: boolean }
-  | { kind: 'number'; label: string; min: number; max: number; step?: number; default: number }
-  | { kind: 'toggle'; label: string; default: boolean }
-  /** Free text; `suggestions` are offered in the input (and type-checked by the scenario tests) */
-  | { kind: 'text'; label: string; default: string; suggestions?: readonly string[] };
+  (
+    | { kind: 'select'; options: readonly ControlValue[]; default: ControlValue; raw?: boolean }
+    | { kind: 'number'; min: number; max: number; step?: number; default: number }
+    | { kind: 'toggle'; default: boolean }
+    /** Free text; `suggestions` are offered in the input (and type-checked by the scenario tests) */
+    | { kind: 'text'; default: string; suggestions?: readonly string[] }
+  );
+
+/**
+ * Two actions that undo each other, shown as one switch: turning it on runs `on`, off runs `off` (action labels). It
+ * shows `state`, read from what EvEm did: a subscription's (by its name in the timeline), or an adapter's connection.
+ */
+export interface ScenarioToggle {
+  label: string;
+  on: string;
+  off: string;
+  state: { subscription: string } | 'connection';
+}
 
 /** A hand-checked expectation for one action, used by the scenario tests */
 export interface ScenarioCheck {
@@ -68,6 +85,8 @@ export interface Scenario {
   explainMatches?: boolean;
   /** Show the latest action over time: a lane for its publishes and one per subscriber (flow control) */
   lanes?: boolean;
+  /** Pairs of actions that undo each other, shown as switches instead of two buttons */
+  toggles?: readonly ScenarioToggle[];
   /**
    * A fake WebSocket server for the scenario: how it behaves, and a sample frame for the server pane's send box. The
    * code's `WebSocketHandler` connects to it unless the code passes its own `WebSocketConstructor`.
@@ -263,11 +282,17 @@ export class ScenarioSession {
       trace.record({ kind: 'error', message: `No action ${actionId} (the setup failed, or the code changed)` });
       return;
     }
-    trace.record({ kind: 'action', label: this.actions.find(known => known.id === actionId)?.label ?? actionId });
+    const run: ActionRun = {
+      at: trace.record({ kind: 'action', label: this.actions.find(known => known.id === actionId)?.label ?? actionId })
+        .at
+    };
+    trace.runs.push(run);
     try {
       await this.capturingLogs(trace, action);
     } catch (error) {
       trace.record({ kind: 'error', message: messageOf(error) });
+    } finally {
+      run.end = trace.now();
     }
   }
 

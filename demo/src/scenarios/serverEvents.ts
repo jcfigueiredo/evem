@@ -8,7 +8,13 @@ export const serverEvents: Scenario = {
     "Incoming messages are routed by their fields: an event (or the older type field) is published under a prefix, anything else as ws.message, and what doesn't parse as ws.parse.error. Send your own from the Server tab.",
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/websocket-server-events.md',
   controls: {
-    prefix: { kind: 'select', label: 'serverEventPrefix', options: ['server', 'app', ''], default: 'server' }
+    prefix: {
+      kind: 'select',
+      label: 'serverEventPrefix',
+      hint: 'What server events are published under: server.news.posted, app.news.posted, or news.posted.',
+      options: ['server', 'app', ''],
+      default: 'server'
+    }
   },
   helpers: {},
   code: [

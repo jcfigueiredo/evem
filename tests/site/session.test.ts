@@ -79,6 +79,26 @@ describe('ScenarioSession', () => {
     expect(session.setupEnd).toBe(0);
   });
 
+  it('records when each action ran, from its action entry until its code ended, on a new trace each reset', async () => {
+    // The trace's clock is performance.now(), which Vitest's fake timers leave alone unless told
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    const session = new ScenarioSession({
+      ...scenario,
+      code: '// ▶ Wait\nawait new Promise(resolve => setTimeout(resolve, 250));'
+    });
+    await session.reset();
+    expect(session.trace.runs).toEqual([]);
+    const running = session.run('wait');
+    const action = session.trace.entries.find(entry => entry.kind === 'action')!;
+    expect(session.trace.runs).toEqual([{ at: action.at }]);
+    await vi.advanceTimersByTimeAsync(250);
+    await running;
+    expect(session.trace.runs).toEqual([{ at: action.at, end: action.at + 250 }]);
+
+    await session.reset();
+    expect(session.trace.runs).toEqual([]);
+  });
+
   it('runs the setup on reset and an action on run, recording both and the code’s own logs', async () => {
     const session = new ScenarioSession(scenario);
     await session.reset();

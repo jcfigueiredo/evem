@@ -11,6 +11,7 @@ export const errorPolicies: Scenario = {
     policy: {
       kind: 'select',
       label: 'errorPolicy',
+      hint: "What a callback's error does to the publish: log and go on, ignore it, stop the event, or reject.",
       options: [
         'ErrorPolicy.LOG_AND_CONTINUE',
         'ErrorPolicy.SILENT',
@@ -20,7 +21,15 @@ export const errorPolicies: Scenario = {
       default: 'ErrorPolicy.LOG_AND_CONTINUE',
       raw: true
     },
-    timeout: { kind: 'number', label: 'timeout (ms)', min: 100, max: 3000, step: 100, default: 500 }
+    timeout: {
+      kind: 'number',
+      label: 'timeout (ms)',
+      hint: 'How long publish waits for each async callback; the slow report takes 1000 ms.',
+      min: 100,
+      max: 3000,
+      step: 100,
+      default: 500
+    }
   },
   helpers: {},
   code: [

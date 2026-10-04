@@ -11,6 +11,7 @@ export const cancelableEvents: Scenario = {
     payload: {
       kind: 'select',
       label: 'payload',
+      hint: "Over 1000 and fraudCheck cancels it: objects and arrays get cancel(), a plain number can't.",
       options: ['{ amount: 50 }', '{ amount: 5000 }', '[50, 5000]', '5000'],
       default: '{ amount: 5000 }',
       raw: true
