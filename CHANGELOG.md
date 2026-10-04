@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 (unreleased)
+## 0.3.0 (2026-10-03)
 
 First release published to npm, as `@jcfigueiredo/evem`. Version 0.2.0 was never published; its changes are included here. Behavior changes are relative to 0.1.0, the previous version in this repository.
 
