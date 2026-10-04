@@ -1,6 +1,6 @@
 {
   "name": "@jcfigueiredo/evem",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Lightweight TypeScript event emitter with wildcards, priorities, middleware, filters, throttle/debounce, schema validation, event history, and optional WebSocket and Server-Sent Events adapters",
   "keywords": [
     "event-emitter",
