@@ -37,7 +37,7 @@ describe('FakeSseServer', () => {
 
     expect(published).toEqual(['state connecting', 'state connected', 'server.hello']);
     expect(wire()).toEqual([
-      'client: GET /events',
+      'client: GET https://api.test/events',
       'note: connection 1 opened (200, text/event-stream)',
       'server: event: hello\nid: 1\ndata: {"n":1}\n\n'
     ]);
@@ -95,18 +95,18 @@ describe('FakeSseServer', () => {
 
     expect(published.filter(event => event === 'server.tick')).toHaveLength(3);
     expect(wire()).toEqual([
-      'client: GET /events',
+      'client: GET https://api.test/events',
       'note: connection 1 opened (200, text/event-stream)',
       'server: event: tick\nid: 1\ndata: 1\n\n',
       'note: connection 1 ended by the server',
-      'client: GET /events · last-event-id: 1',
+      'client: GET https://api.test/events · last-event-id: 1',
       'note: connection 2 opened (200, text/event-stream)',
       'server: event: tick\nid: 2\ndata: 2\n\n',
       'note: will refuse the next connection',
       'note: connection 2 dropped (network error)',
-      'client: GET /events · last-event-id: 2',
+      'client: GET https://api.test/events · last-event-id: 2',
       'note: refused a connection (network error)',
-      'client: GET /events · last-event-id: 2',
+      'client: GET https://api.test/events · last-event-id: 2',
       'note: connection 3 opened (200, text/event-stream)',
       'server: event: tick\nid: 3\ndata: 3\n\n'
     ]);
@@ -121,7 +121,7 @@ describe('FakeSseServer', () => {
     expect(wire().slice(-4)).toEqual([
       'note: will answer the next request with 503 Service Unavailable · Retry-After: 1',
       'note: connection 1 ended by the server',
-      'client: GET /events',
+      'client: GET https://api.test/events',
       'note: connection 2 answered 503 Service Unavailable · Retry-After: 1'
     ]);
     expect(published).toContain('sse.error');
@@ -156,13 +156,38 @@ describe('FakeSseServer', () => {
     server.run('send', 'data: 1\n\n');
     server.run('end');
     expect(wire()).toEqual([
-      'client: GET /events · authorization: Bearer t0ken',
+      'client: GET https://api.test/events · authorization: Bearer t0ken',
       'note: connection 1 opened (200, text/event-stream)',
       'note: connection 1 closed by the client',
       'note: no open stream: nothing sent',
       'note: no open stream: nothing to end'
     ]);
     expect(() => server.run('explode')).toThrow('The SSE server has no command explode');
+  });
+
+  it("logs a request's URL as given, so an absolute URL in edited code shows where it was meant to go", async () => {
+    const { wire } = setup();
+    await vi.advanceTimersByTimeAsync(20);
+    expect(wire()[0]).toBe('client: GET https://api.test/events');
+  });
+
+  it('notes a write to a silenced stream, and an empty write, instead of writing nothing quietly', async () => {
+    const { server, wire } = setup();
+    await vi.advanceTimersByTimeAsync(20);
+    server.run('silent');
+    server.run('send', 'event: note\ndata: "lost"\n\n');
+    server.run('ping');
+    expect(wire().slice(-2)).toEqual([
+      'note: connection 1 is silent: nothing sent',
+      'note: connection 1 is silent: no ping sent'
+    ]);
+
+    server.run('send', '');
+    server.run('split', '');
+    expect(wire().slice(-2)).toEqual([
+      'note: nothing to write: the text is empty',
+      'note: nothing to write: the text is empty'
+    ]);
   });
 
   it('closes quietly when the scenario starts over: its streams end, nothing more is logged', async () => {
