@@ -35,7 +35,25 @@
           <!-- Not on the narrowest phones, where the bar needs its room for the menu and the theme -->
           <span class="hidden text-xs font-normal text-base-content/70 sm:inline">playground</span>
         </a>
-        <button type="button" class="btn btn-ghost btn-sm lg:hidden" popovertarget="scenario-menu">Menu ▾</button>
+        <button
+          type="button"
+          class="btn btn-ghost btn-square btn-sm lg:hidden"
+          popovertarget="scenario-menu"
+          aria-label="Scenarios"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            class="size-5"
+            aria-hidden="true"
+          >
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
         <div id="scenario-menu" class="megamenu max-lg:megamenu-vertical border-base-300 max-lg:border-b" popover></div>
         <p class="ms-auto hidden text-xs whitespace-nowrap text-base-content/70 md:block">
           Runs the library from source: %EVEM_VERSION%,
