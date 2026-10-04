@@ -148,20 +148,23 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     if (lanesHost) renderLaneChart(lanesHost, laneChart(entries));
     server?.render();
 
-    // Counts on the tabs the reader isn't looking at
+    // A new trace means the reader started over (a control, Reset, edited code): what it holds isn't news (seen is an
+    // entry index, so the rest of a setup still running drops out once its end is known). Reset before the counts
     const wire = server ? (session.server?.wire.length ?? 0) : 0;
+    const newTrace = session.trace !== announcedTrace;
+    if (newTrace) {
+      announcedTrace = session.trace;
+      seen.timeline = entries.length;
+      seen.server = wire;
+    }
+
+    // Counts on the tabs the reader isn't looking at
     if (tabs.selected() === 'timeline') seen.timeline = entries.length;
     if (tabs.selected() === 'server') seen.server = wire;
     tabs.setCount('timeline', unseenRows(entries.length, from, seen.timeline));
     if (server) tabs.setCount('server', wire - seen.server);
 
-    // A new trace means the reader started over (a control, Reset, edited code): what it holds isn't news (seen is an
-    // entry index, so the rest of a setup still running drops out once its end is known)
-    if (session.trace !== announcedTrace) {
-      announcedTrace = session.trace;
-      seen.timeline = entries.length;
-      seen.server = wire;
-    } else if (rows.length > announcedRows) {
+    if (!newTrace && rows.length > announcedRows) {
       const text = liveAnnouncement(rows.slice(announcedRows), performance.now() - lastInteraction);
       if (text !== undefined) announcer.textContent = text;
     }
