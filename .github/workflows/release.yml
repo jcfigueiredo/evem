@@ -2,15 +2,15 @@ name: Release
 
 # Publishes to npm when a GitHub release is published; `pnpm release <version>`
 # creates the release (see docs/releasing.md). The release tag must be `v` + the
-# version in package.json (e.g. v0.3.0). Needs an npm token with write access in
-# the NPM_TOKEN repository secret.
+# version in package.json (e.g. v0.3.0). npm trusts this workflow directly
+# (trusted publishing, OIDC): no token is stored anywhere.
 on:
   release:
     types: [published]
 
 permissions:
   contents: read
-  id-token: write # Lets npm attach provenance to the published package
+  id-token: write # Proves to npm that this workflow is publishing (trusted publishing), and signs the provenance
 
 jobs:
   publish:
@@ -23,6 +23,8 @@ jobs:
           node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or later; Node.js 22 (the version CI tests) ships npm 10
+      - run: npm install --global npm@^11.5.1
       - run: pnpm install --frozen-lockfile
       - name: Check the release tag matches package.json
         run: |
@@ -32,6 +34,5 @@ jobs:
             exit 1
           fi
       # prepublishOnly runs the typecheck, the tests and the package check before publishing
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # npm signs the provenance by itself with trusted publishing
+      - run: npm publish --access public

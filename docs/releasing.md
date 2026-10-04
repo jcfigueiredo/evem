@@ -4,10 +4,10 @@ Publishing a GitHub release tagged `v<version>` starts the [Release workflow](..
 
 ## One-time setup
 
-- **npm:** the `@jcfigueiredo` scope belongs to the npm user `jcfigueiredo`. Create a granular access token with read and write access to packages, and save it as the `NPM_TOKEN` repository secret (Settings → Secrets and variables → Actions). npm write tokens expire: after 7 days by default, 90 days at most.
+- **npm:** the `@jcfigueiredo` scope belongs to the npm user `jcfigueiredo`. The package uses [trusted publishing](https://docs.npmjs.com/trusted-publishers/): on npmjs.com, the package's Settings list this repository's `release.yml` as a trusted publisher (GitHub Actions, `jcfigueiredo` / `evem`, no environment) allowed to `npm publish`. npm then accepts publishes from that workflow without a token, and signs their provenance. The workflow needs npm 11.5.1 or later, which it installs over the npm that comes with Node.js 22. No secret is stored; to change the trusted publisher, delete it on npmjs.com and add a new one.
 - **GitHub CLI:** install [`gh`](https://cli.github.com) and run `gh auth login`.
 
-Once the package exists on npm, [trusted publishing](https://docs.npmjs.com/trusted-publishers/) can replace the token: npm then accepts publishes from this repository's Release workflow without a secret. It isn't set up yet; it needs a trusted publisher added on npmjs.com, and the workflow needs npm 11.5.1 or later.
+Version 0.3.0 was the first publish, made with a granular access token (`NPM_TOKEN`), since npm sets up trusted publishing per package, once the package exists.
 
 ## Recording changes
 
@@ -38,4 +38,4 @@ Versions are `major.minor.patch`. Pre-releases (`1.0.0-rc.1`) aren't supported: 
 - **A check before the release commit fails:** nothing was changed. If `pnpm check` failed, `package.json` and `CHANGELOG.md` are put back as they were.
 - **The push fails:** the release commit is only local. Undo it with `git reset --hard origin/main`, fix the problem and run `pnpm release` again.
 - **Creating the GitHub release fails:** the release commit is on `main`, and the script prints the `gh release create` command that finishes the release.
-- **The Release workflow fails** (an expired `NPM_TOKEN`, for example): the GitHub release exists but nothing was published. Fix the cause, then re-run the workflow from the Actions tab.
+- **The Release workflow fails** (a trusted publisher that doesn't match the workflow, for example: npm answers 404 or 403 to the publish): the GitHub release exists but nothing was published. Fix the cause, then re-run the workflow from the Actions tab.
