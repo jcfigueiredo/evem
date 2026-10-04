@@ -146,6 +146,21 @@ export function timelineRows(entries: readonly TraceEntry[]): TimelineRow[] {
 }
 
 /**
+ * The state an adapter's connection last moved to among `entries` (the `to` of the latest `ws.connection.state` or
+ * `sse.connection.state` publish), or undefined if it didn't change: an adapter's card announces it even when the
+ * stream's own ticks aren't
+ */
+export function latestConnectionState(entries: readonly TraceEntry[]): string | undefined {
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const entry = entries[index]!;
+    if (entry.kind !== 'publish' || !/^(ws|sse)\.connection\.state$/.test(entry.event)) continue;
+    const to = (entry.data as { to?: unknown } | null)?.to;
+    if (typeof to === 'string') return to;
+  }
+  return undefined;
+}
+
+/**
  * The rows of the entries from `from` on (after the setup, or after the reader cleared the timeline), computed over
  * the whole trace, so a row still nests under its publish and is timed from its action when those come before `from`
  */

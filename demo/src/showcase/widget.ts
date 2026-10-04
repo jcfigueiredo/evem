@@ -8,7 +8,7 @@ import { laneChart } from '../lanes';
 import { renderLaneChart } from '../playground/laneChart';
 import { BUTTON, controlField, tabList, timelineItem, wireItem, type Tab } from '../playground/views';
 import { scenarioPath } from '../routing';
-import { keepsFollowing, liveAnnouncement, sinceLatestAction, timelineRows } from '../timeline';
+import { keepsFollowing, latestConnectionState, liveAnnouncement, sinceLatestAction, timelineRows } from '../timeline';
 
 /**
  * The height of a widget, which its slot in index.html reserves (as a card of the same size) until it mounts: a
@@ -114,6 +114,9 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
   let followingWire = true;
 
   let announced = 0;
+  // An adapter's card announces by trace entry, not by row: its rows stop growing at OUTPUT_SHOWN
+  let announcedTrace: unknown;
+  let announcedEntries = 0;
   let wireShown: { server: unknown; length: number } = { server: undefined, length: -1 };
   const render = () => {
     const entries = widgetEntries(scenario, session.trace.entries, session.setupEnd);
@@ -141,15 +144,34 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
       if (followingWire) wireBox.scrollTop = wireBox.scrollHeight;
       wireShown = { server: session.server, length: lines.length };
     }
-    if (rows.length > announced) {
+    if (adapter) announceStream();
+    else if (rows.length > announced) {
       const text = liveAnnouncement(rows.slice(announced), performance.now() - lastInteraction);
-      if (text !== undefined) {
-        announcer.textContent = text;
-        // A stream never stops: an adapter's card says once what followed the reader's click, not every tick after
-        if (adapter) lastInteraction = Number.NEGATIVE_INFINITY;
-      }
+      if (text !== undefined) announcer.textContent = text;
     }
     announced = rows.length;
+  };
+  /**
+   * A stream never stops, so an adapter's card says once what followed the reader's click, not every tick after it;
+   * and when its connection changes (a drop, the reconnect), it says so, click or not
+   */
+  const announceStream = () => {
+    const all = session.trace.entries;
+    if (session.trace !== announcedTrace) {
+      announcedTrace = session.trace;
+      announcedEntries = 0;
+    }
+    const fresh = all.slice(Math.max(announcedEntries, session.setupEnd));
+    announcedEntries = all.length;
+    if (fresh.length === 0) return;
+    const text = liveAnnouncement(timelineRows(fresh), performance.now() - lastInteraction);
+    if (text !== undefined) {
+      announcer.textContent = text;
+      lastInteraction = Number.NEGATIVE_INFINITY;
+      return;
+    }
+    const state = latestConnectionState(fresh);
+    if (state !== undefined) announcer.textContent = `Connection: ${state}.`;
   };
   // One render per frame, however many entries, wire lines or resizes came in it
   let pending = false;

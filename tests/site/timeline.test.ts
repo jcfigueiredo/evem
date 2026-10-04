@@ -4,6 +4,7 @@ import {
   announcement,
   describeEntry,
   isAtEnd,
+  latestConnectionState,
   keepsFollowing,
   liveAnnouncement,
   preview,
@@ -170,6 +171,30 @@ describe('timelineRows times and kinds', () => {
       ['action', 0],
       ['log', 40]
     ]);
+  });
+});
+
+describe('latestConnectionState', () => {
+  it("is the state an adapter's connection last moved to among the entries, for either adapter", () => {
+    const at = { at: 0 };
+    const state = (event: string, to: string, id: number): TraceEntry => ({
+      kind: 'publish',
+      id,
+      event,
+      data: { from: 'x', to, timestamp: 0 },
+      ...at
+    });
+    expect(
+      latestConnectionState([
+        state('sse.connection.state', 'reconnecting', 1),
+        state('sse.connection.state', 'connected', 2)
+      ])
+    ).toBe('connected');
+    expect(latestConnectionState([state('ws.connection.state', 'disconnected', 1)])).toBe('disconnected');
+    expect(
+      latestConnectionState([{ kind: 'publish', id: 1, event: 'server.tick', data: { n: 1 }, ...at }])
+    ).toBeUndefined();
+    expect(latestConnectionState([state('my.connection.state.extra', 'connected', 1)])).toBeUndefined();
   });
 });
 
