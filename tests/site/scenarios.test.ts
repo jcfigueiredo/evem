@@ -107,7 +107,17 @@ describe('the scenario list', () => {
     expect(new Set(scenarios.map(scenarioPath)).size).toBe(scenarios.length);
   });
 
-  it('keeps each group together, so the sidebar shows it once', () => {
+  it('explains every control in a sentence short enough to read at a glance', () => {
+    for (const scenario of scenarios) {
+      for (const [name, control] of Object.entries(scenario.controls)) {
+        const where = `${scenario.id}: ${name}`;
+        expect(control.hint, where).toMatch(/^\S.*[.)]$/);
+        expect(control.hint!.length, where).toBeLessThanOrEqual(110);
+      }
+    }
+  });
+
+  it('keeps each group together, so the menu shows it once', () => {
     const groups = scenarios.map(scenario => scenario.group);
     const runs = groups.filter((group, index) => group !== groups[index - 1]);
     expect(runs).toEqual([...new Set(groups)]);

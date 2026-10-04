@@ -1,8 +1,10 @@
 import { el } from '../dom';
-import type { ControlValue } from '../engine/program';
-import { numberInput, optionLabel, type Control } from '../engine/session';
+import type { Action, ControlValue } from '../engine/program';
+import { numberInput, optionLabel, type Control, type Scenario } from '../engine/session';
+import type { TraceEntry } from '../engine/trace';
 import type { WireEntry } from '../fakes/wire';
-import type { TimelineRow, Tone } from '../timeline';
+import { groupFacts, openByDefault, type RowGroup, type TimelineRow, type Tone } from '../timeline';
+import { toggleState } from '../toggles';
 
 // Full class names, so Tailwind finds them in the source
 const TONE_CLASS: Record<Tone, string> = {
@@ -15,21 +17,41 @@ const TONE_CLASS: Record<Tone, string> = {
 };
 
 /**
- * A control's field: a toggle, a number, a text input with suggestions, or a select. `idPrefix` keeps the ids of
- * suggestion lists apart when several scenarios share a page (the showcase)
+ * A scenario control, every kind laid out the same way: its label (bold, naming the input), the input, and its hint,
+ * one sentence on what it changes (`showHint: false` keeps it for screen readers and a tooltip only, where room is
+ * short). `onChange` hears a new value: numbers when they're committed and within bounds (see numberInput), text on
+ * Enter or when the input loses focus. `idPrefix` keeps ids apart when several scenarios share a page (the showcase).
  */
 export function controlField(
   name: string,
   control: Control,
   value: ControlValue,
   onChange: (value: ControlValue) => void,
-  idPrefix = 'control'
+  idPrefix = 'control',
+  showHint = true
 ): HTMLElement {
+  const labelId = `${idPrefix}-${name}-label`;
+  const hintId = `${idPrefix}-${name}-hint`;
+  const named = {
+    'aria-labelledby': labelId,
+    ...(control.hint ? { 'aria-describedby': hintId } : {}),
+    // A hidden hint is still a tooltip
+    ...(control.hint && !showHint ? { title: control.hint } : {})
+  };
+  const field = (input: HTMLElement, ...extra: HTMLElement[]) =>
+    el('fieldset', { class: 'fieldset py-1' }, [
+      el('legend', { class: 'fieldset-legend', id: labelId }, [control.label]),
+      input,
+      ...extra,
+      control.hint
+        ? el('p', { id: hintId, class: showHint ? 'text-xs text-base-content/70' : 'sr-only' }, [control.hint])
+        : null
+    ]);
   if (control.kind === 'toggle') {
-    const input = el('input', { type: 'checkbox', class: 'toggle toggle-sm', name });
+    const input = el('input', { type: 'checkbox', role: 'switch', class: 'toggle toggle-sm', name, ...named });
     input.checked = value === true;
     input.addEventListener('change', () => onChange(input.checked));
-    return el('label', { class: 'label justify-between w-full py-1' }, [el('span', {}, [control.label]), input]);
+    return field(input);
   }
   if (control.kind === 'number') {
     const input = el('input', {
@@ -39,7 +61,8 @@ export function controlField(
       min: String(control.min),
       max: String(control.max),
       step: String(control.step ?? 1),
-      value: String(value)
+      value: String(value),
+      ...named
     });
     let current = Number(value);
     input.addEventListener('change', () => {
@@ -49,10 +72,7 @@ export function controlField(
       current = next;
       onChange(next);
     });
-    return el('fieldset', { class: 'fieldset py-1' }, [
-      el('legend', { class: 'fieldset-legend' }, [control.label]),
-      input
-    ]);
+    return field(input);
   }
   if (control.kind === 'text') {
     const listId = `${idPrefix}-${name}-suggestions`;
@@ -63,23 +83,23 @@ export function controlField(
       value: String(value),
       list: listId,
       autocomplete: 'off',
-      spellcheck: 'false'
+      spellcheck: 'false',
+      ...named
     });
     // change fires on Enter and when the input loses focus, not on every key
     input.addEventListener('change', () => onChange(input.value));
-    return el('fieldset', { class: 'fieldset py-1' }, [
-      el('legend', { class: 'fieldset-legend' }, [control.label]),
+    return field(
       input,
       el(
         'datalist',
         { id: listId },
         (control.suggestions ?? []).map(suggestion => el('option', { value: suggestion }))
       )
-    ]);
+    );
   }
   const select = el(
     'select',
-    { class: 'select select-sm w-full', name },
+    { class: 'select select-sm w-full', name, ...named },
     control.options.map(option => {
       const element = el('option', { value: JSON.stringify(option) }, [optionLabel(option)]);
       element.selected = option === value;
@@ -87,10 +107,7 @@ export function controlField(
     })
   );
   select.addEventListener('change', () => onChange(JSON.parse(select.value) as ControlValue));
-  return el('fieldset', { class: 'fieldset py-1' }, [
-    el('legend', { class: 'fieldset-legend' }, [control.label]),
-    select
-  ]);
+  return field(select);
 }
 
 /**
@@ -117,9 +134,9 @@ function timeOf(row: TimelineRow): string {
  * One timeline row: a status dot in its tone, the text, its detail (data, in short) and its time. What the code
  * logged (a plain log) reads as console output, set apart from EvEm's own steps.
  */
-export function timelineItem(row: TimelineRow): HTMLElement {
+export function timelineItem(row: TimelineRow, scope = ''): HTMLElement {
   const indent = `margin-inline-start: ${row.depth * 1.25}rem`;
-  const time = el('span', { class: 'text-xs text-base-content/60 ms-2' }, [timeOf(row)]);
+  const time = el('span', { class: 'text-xs whitespace-nowrap text-base-content/60 ms-2' }, [timeOf(row)]);
   if (row.kind === 'log' && row.tone === 'neutral') {
     return el('li', { class: 'relative ps-4', style: indent }, [
       el(
@@ -139,9 +156,46 @@ export function timelineItem(row: TimelineRow): HTMLElement {
       'aria-hidden': 'true'
     }),
     el('span', { class: 'font-mono text-sm break-words whitespace-pre-wrap' }, [row.text]),
-    row.detail ? el('span', { class: 'font-mono text-xs text-base-content/60 ms-2 break-all' }, [row.detail]) : null,
+    row.detail ? detailButton(row, scope) : null,
     time
   ]);
+}
+
+/** The rows whose data the reader opened, by `rowKey`: the timeline is rebuilt as it grows */
+const openDetails = new Set<string>();
+const rowKey = (row: TimelineRow) => `${row.at}:${row.publish ?? ''}:${row.kind}:${row.subject ?? ''}:${row.text}`;
+
+/**
+ * A row's data, on one line cut off with an ellipsis (JSON breaking mid-word is hard to read on a phone); pressing it
+ * shows all of it, wrapped, and pressing it again folds it back
+ */
+function detailButton(row: TimelineRow, scope: string): HTMLElement {
+  // By scope too: a restarted scenario's clock and publish ids start again, so rows of two runs could look alike
+  const key = `detail:${scope}:${rowKey(row)}`;
+  const open = openDetails.has(key);
+  const button = el(
+    'button',
+    {
+      type: 'button',
+      'data-key': key,
+      'aria-expanded': String(open),
+      class: `ms-2 max-w-full cursor-pointer rounded text-start align-bottom font-mono text-xs text-base-content/70 ${
+        open ? 'inline break-all whitespace-pre-wrap' : 'inline-block truncate'
+      }`
+    },
+    [row.detail ?? '']
+  );
+  button.addEventListener('click', () => {
+    const opening = !openDetails.has(key);
+    if (opening) openDetails.add(key);
+    else openDetails.delete(key);
+    button.setAttribute('aria-expanded', String(opening));
+    button.className = button.className.replace(
+      opening ? 'inline-block truncate' : 'inline break-all whitespace-pre-wrap',
+      opening ? 'inline break-all whitespace-pre-wrap' : 'inline-block truncate'
+    );
+  });
+  return button;
 }
 
 /**
@@ -269,7 +323,201 @@ export const WIRE_DIRECTION: Record<WireEntry['direction'], { mark: string; labe
 /** A wire entry's text with its line breaks visible (`↵`), since in an event stream they're the syntax */
 const visible = (text: string): string => text.replace(/\r/g, '␍').replace(/\n/g, '↵\n');
 
-/** One line of a server's wire log: its direction's mark, its text, and its time; for the Server tab and the cards */
+/** What each dot color means in the timeline, for its legend */
+const TONE_MEANING: ReadonlyArray<[Tone, string]> = [
+  ['primary', 'an action you ran, or a publish'],
+  ['success', 'a subscriber ran, or the publish resolved true'],
+  ['info', 'middleware, a filter, a schema or a transform passed it on'],
+  ['warning', 'canceled, rejected by a filter or schema, or resolved false'],
+  ['error', 'an error: a callback threw, or the publish rejected'],
+  ['neutral', 'a subscription came or went, or a subscriber was skipped']
+];
+
+/**
+ * "How to read this": a button, and the popover it opens, explaining the timeline's notation (the dots' colors, what
+ * the code printed, the times, the folds and the dividers)
+ */
+export function outputLegend(id: string): { button: HTMLElement; popover: HTMLElement } {
+  const button = el(
+    'button',
+    { type: 'button', class: 'btn btn-ghost btn-xs btn-circle', popovertarget: id, 'aria-label': 'How to read this' },
+    ['ⓘ']
+  );
+  const item = (marker: HTMLElement, text: string) =>
+    el('li', { class: 'flex items-baseline gap-2' }, [
+      el('span', { class: 'w-8 shrink-0 text-center' }, [marker]),
+      text
+    ]);
+  const popover = el(
+    'div',
+    {
+      id,
+      popover: '',
+      class:
+        'm-auto w-[min(26rem,calc(100vw-2rem))] rounded-box border border-base-300 bg-base-100 p-4 text-sm text-base-content shadow-lg'
+    },
+    [
+      el('h3', { class: 'mb-2 font-semibold' }, ['How to read What EvEm did']),
+      el('p', { class: 'mb-3 text-base-content/70' }, [
+        'Newest first: each action you run and everything it caused, in order, with the latest open.'
+      ]),
+      el('ul', { class: 'space-y-1.5' }, [
+        ...TONE_MEANING.map(([tone, meaning]) =>
+          item(el('span', { class: `status ${TONE_CLASS[tone]}`, 'aria-hidden': 'true' }), meaning)
+        ),
+        item(el('span', { class: 'font-mono', 'aria-hidden': 'true' }, ['›']), 'what the code printed (console.log)'),
+        item(
+          el('span', { class: 'font-mono text-xs', 'aria-hidden': 'true' }, ['+N']),
+          'milliseconds since the action'
+        ),
+        item(
+          el('span', { 'aria-hidden': 'true' }, ['▸']),
+          'an earlier run, folded: what it caused, in one line; press it to open it'
+        ),
+        item(
+          el('span', { 'aria-hidden': 'true' }, ['─']),
+          'a divider: the scenario started over there (a control, Reset, edited code)'
+        )
+      ]),
+      el('p', { class: 'mt-3 text-base-content/70' }, ['Press the data after a row to see all of it.'])
+    ]
+  );
+  return { button, popover };
+}
+
+/** Put keyboard focus back on `element` after a run disabled it, unless the reader has moved on (or it's gone) */
+export function restoreFocus(element: Element | null): void {
+  if (element instanceof HTMLElement && element.isConnected && document.activeElement === document.body)
+    element.focus();
+}
+
+/**
+ * A scenario's actions as controls: a button per action (the first one the main one), except the pairs its switches
+ * run (`Scenario.toggles`, while the code still has both actions), which are switches in a row of their own.
+ * `run(id)` runs an action; `refresh()` shows each switch's state, read from `entries()` (also once its run is over,
+ * or refused because another one holds the buttons).
+ */
+export function actionControls(
+  scenario: Scenario,
+  actions: readonly Action[],
+  run: (id: string) => unknown,
+  entries: () => readonly TraceEntry[]
+): { buttons: HTMLElement[]; switches?: HTMLElement; refresh: () => void } {
+  const byLabel = new Map(actions.map(action => [action.label, action]));
+  const toggles = (scenario.toggles ?? []).filter(toggle => byLabel.has(toggle.on) && byLabel.has(toggle.off));
+  const switched = new Set(toggles.flatMap(toggle => [toggle.on, toggle.off]));
+  const buttons = actions
+    .filter(action => !switched.has(action.label))
+    .map((action, index) => {
+      const button = el('button', { type: 'button', class: index === 0 ? BUTTON.main : BUTTON.other }, [action.label]);
+      button.addEventListener('click', () => run(action.id));
+      return button;
+    });
+  const inputs = toggles.map(toggle => {
+    const input = el('input', { type: 'checkbox', role: 'switch', class: 'toggle toggle-sm toggle-primary' });
+    input.addEventListener('change', () => {
+      void Promise.resolve(run(byLabel.get(input.checked ? toggle.on : toggle.off)!.id)).finally(refresh);
+    });
+    return { toggle, input };
+  });
+  const refresh = () => {
+    for (const { toggle, input } of inputs) input.checked = toggleState(toggle, entries());
+  };
+  refresh();
+  if (inputs.length === 0) return { buttons, refresh };
+  const switches = el(
+    'div',
+    { class: 'flex basis-full flex-wrap gap-x-5 gap-y-2' },
+    inputs.map(({ toggle, input }) =>
+      el('label', { class: 'flex cursor-pointer items-center gap-2 text-sm' }, [input, toggle.label])
+    )
+  );
+  return { buttons, switches, refresh };
+}
+
+/**
+ * Timeline groups (chronological, as `groupRuns` makes them) as list items, newest first. A group of one row is that
+ * row; a longer one is a fold: its header, and when folded, what it caused. With `openNewest`, folds are open as
+ * `openByDefault` says (the latest action's, and the newest), closed otherwise, unless the reader changed one: `folds`
+ * remembers that by `scope` and the group's header, so the list can be rebuilt as it grows.
+ */
+export function groupItems(
+  groups: readonly RowGroup[],
+  folds: Map<string, boolean>,
+  scope: string,
+  openNewest = true
+): HTMLElement[] {
+  const opened = openNewest ? openByDefault(groups) : new Set<number>();
+  return groups
+    .map((group, index) => {
+      const [header, ...rest] = group.rows;
+      if (!header) return undefined;
+      if (rest.length === 0) return timelineItem(header, scope);
+      const key = `${scope}:${header.at}:${header.publish ?? ''}:${header.text}`;
+      const byDefault = opened.has(index);
+      // A highlight on hover says it opens; the chevron at its end says which way
+      const summary = el('summary', { class: 'cursor-pointer list-none rounded hover:bg-base-200', 'data-key': key }, [
+        el('span', {
+          class: `status ${TONE_CLASS[header.tone]} absolute -start-[0.3rem] top-[0.45rem] signal-glow`,
+          'aria-hidden': 'true'
+        }),
+        el('span', { class: 'font-mono text-sm break-words whitespace-pre-wrap' }, [header.text]),
+        // Not a button: a fold's header is one already. Cut off while folded, all of it once open
+        header.detail
+          ? el(
+              'span',
+              {
+                class:
+                  'ms-2 inline-block max-w-full truncate align-bottom font-mono text-xs text-base-content/70 group-open:break-all group-open:whitespace-pre-wrap',
+                title: header.detail
+              },
+              [header.detail]
+            )
+          : null,
+        el('span', { class: 'text-xs whitespace-nowrap text-base-content/70 ms-2' }, [timeOf(header)]),
+        el('span', { class: 'text-xs text-base-content/70 ms-2 group-open:hidden' }, [
+          groupFacts(group.rows).join(' · ')
+        ]),
+        el(
+          'span',
+          { class: 'ms-2 inline-block text-xs text-base-content/70 group-open:rotate-90', 'aria-hidden': 'true' },
+          ['▸']
+        )
+      ]);
+      const details = el('details', { class: 'group', 'data-fold': key }, [
+        summary,
+        el(
+          'ol',
+          { class: 'mt-1.5 space-y-1.5' },
+          rest.map(row => timelineItem(row, scope))
+        )
+      ]);
+      details.open = folds.get(key) ?? byDefault;
+      // Only the reader's own changes are kept (setting `open` above fires toggle too, with the value just set)
+      details.addEventListener('toggle', () => {
+        if (details.open === byDefault) folds.delete(key);
+        else folds.set(key, details.open);
+      });
+      return el('li', { class: 'relative ps-4' }, [details]);
+    })
+    .filter((item): item is HTMLElement => item !== undefined)
+    .reverse();
+}
+
+/**
+ * Replace a list's items, keeping keyboard focus on the fold or the data it was on (`data-key`): the list is rebuilt
+ * as it grows, and a stream grows it every second
+ */
+export function replaceKeepingFocus(list: HTMLElement, items: readonly Node[]): void {
+  const focused = document.activeElement?.closest<HTMLElement>('[data-key]');
+  const key = focused && list.contains(focused) ? focused.dataset['key'] : undefined;
+  list.replaceChildren(...items);
+  if (key === undefined) return;
+  for (const element of list.querySelectorAll<HTMLElement>('[data-key]')) {
+    if (element.dataset['key'] === key) element.focus({ preventScroll: true });
+  }
+}
+
 /**
  * Where a log's history ends: the scenario started over there, and why (`backoff → off`, `Reset`). A list item, not a
  * `separator`, which screen readers name only from attributes: its text is what they should read
@@ -280,6 +528,7 @@ export function startedOver(label: string): HTMLElement {
   ]);
 }
 
+/** One line of a server's wire log: its direction's mark, its text, and its time; for the Server tab and the cards */
 export function wireItem(entry: WireEntry): HTMLElement {
   const direction = WIRE_DIRECTION[entry.direction];
   return el('li', { class: 'flex gap-2' }, [

@@ -7,7 +7,16 @@ export const recursionProtection: Scenario = {
   summary:
     'A handler that publishes the event it is handling would loop forever. EvEm stops it at a maximum nesting depth: the publish over the limit rejects.',
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/errors.md#recursion-protection',
-  controls: { depth: { kind: 'number', label: 'maximum depth', min: 1, max: 6, default: 3 } },
+  controls: {
+    depth: {
+      kind: 'number',
+      label: 'maximum depth',
+      hint: 'How deep an event may publish itself (new EvEm(depth)); one level more rejects.',
+      min: 1,
+      max: 6,
+      default: 3
+    }
+  },
   helpers: {},
   code: [
     "import { EvEm } from '@jcfigueiredo/evem';",

@@ -5,8 +5,9 @@ import { describeChange, ScenarioSession, type Scenario } from '../engine/sessio
 import { laneChart } from '../lanes';
 import { browserStorage } from '../theme';
 import {
+  groupRuns,
   keepHistory,
-  keepsFollowing,
+  keepsFollowingTop,
   liveAnnouncement,
   rowsFrom,
   setupSummary,
@@ -17,7 +18,19 @@ import {
 import { renderLaneChart } from './laneChart';
 import { GRID_ROWS, LAYOUTS, readCodeLayout, saveCodeLayout, type CodeLayout } from './layout';
 import { serverPane } from './serverPane';
-import { BUTTON, controlField, startedOver, tabList, timelineItem, type Tab } from './views';
+import {
+  actionControls,
+  BUTTON,
+  controlField,
+  groupItems,
+  outputLegend,
+  replaceKeepingFocus,
+  restoreFocus,
+  startedOver,
+  tabList,
+  timelineItem,
+  type Tab
+} from './views';
 
 const CARD = 'card bg-base-100 border border-base-300';
 const HEADING = 'text-xs uppercase tracking-widest text-base-content/70';
@@ -35,16 +48,22 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   // One action at a time; starting over (a control, Reset, edited code) frees the buttons from earlier runs
   const gate = new ActionGate();
 
-  // What EvEm did: the setup folded away, then everything after it (from where the reader last cleared it)
+  // What EvEm did, newest first: each run (an action and what it caused) a fold, the newest open, then the setup,
+  // folded away, then what earlier runs of the scenario showed (from where the reader last cleared it)
   const setupList = el('ol', { class: 'relative ms-2 mt-2 space-y-1.5 border-s border-base-300' });
   const setupSummaryLine = el('summary', { class: 'cursor-pointer text-sm text-base-content/70' });
-  const setupFold = el('details', { class: 'mb-3' }, [setupSummaryLine, setupList]);
+  const setupFold = el('details', { class: 'mt-3' }, [setupSummaryLine, setupList]);
   const timeline = el('ol', { class: 'relative ms-2 space-y-1.5 border-s border-base-300' });
   // What the timeline showed before the scenario started over (a control, Reset, edited code): kept until Clear
   const historyList = el('ol', { class: 'relative ms-2 space-y-1.5 border-s border-base-300' });
   let history: HistorySegment[] = [];
-  const timelineBox = el('div', { class: 'min-h-0 flex-1 overflow-y-auto pe-2' }, [historyList, setupFold, timeline]);
+  // Which folds the reader opened or closed, by scope (one per trace) and header; see groupItems
+  const folds = new Map<string, boolean>();
+  let traces = 0;
+  let scope = 't0';
+  const timelineBox = el('div', { class: 'min-h-0 flex-1 overflow-y-auto pe-2' }, [timeline, setupFold, historyList]);
   const clearButton = el('button', { type: 'button', class: BUTTON.minorSmall }, ['Clear']);
+  const legend = outputLegend('output-legend');
   // The list is rebuilt on every render, so screen readers hear only what's new, from this status line
   const announcer = el('p', { class: 'sr-only', 'aria-live': 'polite' });
   let announcedTrace = session.trace;
@@ -62,10 +81,39 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   // Whether the timeline follows its end (see keepsFollowing)
   let followTimeline = true;
 
-  const summary = el('p', { class: 'text-sm text-base-content/70' }, [
-    scenario.summary,
-    ' ',
-    el('a', { class: 'link link-primary', href: scenario.docs, target: '_blank', rel: 'noopener' }, ['Docs ↗'])
+  // On phones the summary is two lines, with More, so the output starts on the first screen
+  const summaryText = el('p', { id: 'scenario-summary', class: 'text-sm text-base-content/70 max-lg:line-clamp-2' }, [
+    scenario.summary
+  ]);
+  const moreButton = el(
+    'button',
+    {
+      type: 'button',
+      class: `${BUTTON.minorSmall} lg:hidden`,
+      'aria-expanded': 'false',
+      'aria-controls': summaryText.id
+    },
+    ['More']
+  );
+  moreButton.addEventListener('click', () => {
+    const open = !summaryText.classList.toggle('max-lg:line-clamp-2');
+    moreButton.textContent = open ? 'Less' : 'More';
+    moreButton.setAttribute('aria-expanded', String(open));
+  });
+  // More only when the two lines cut something off (and Less once it's open)
+  const summaryResizes = new ResizeObserver(() => {
+    const clamped = summaryText.classList.contains('max-lg:line-clamp-2');
+    moreButton.hidden = clamped && summaryText.scrollHeight <= summaryText.clientHeight + 1;
+  });
+  summaryResizes.observe(summaryText);
+  const summary = el('div', { class: 'flex flex-col gap-1' }, [
+    summaryText,
+    el('div', { class: 'flex items-center gap-3' }, [
+      moreButton,
+      el('a', { class: 'link link-primary text-sm', href: scenario.docs, target: '_blank', rel: 'noopener' }, [
+        'Docs ↗'
+      ])
+    ])
   ]);
   const controls = el('fieldset', { class: 'grid gap-x-3 sm:grid-cols-2' });
   const actions = el('div', { class: 'flex flex-wrap gap-2' });
@@ -85,7 +133,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
    */
   const restart = async (change: () => Promise<void>, label: string) => {
     const shown = rowsFrom(session.trace.entries, Math.max(session.setupEnd, clearedFrom));
-    if (shown.length > 0) history = keepHistory(history, { label, rows: shown });
+    if (shown.length > 0) history = keepHistory(history, { label, rows: shown, runs: [...session.trace.runs], scope });
     server?.startOver(label);
     gate.reset();
     clearedFrom = 0;
@@ -131,7 +179,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     onSelect: id => {
       clearButton.classList.toggle('invisible', id !== 'timeline' && id !== 'server');
       // A panel that grew while hidden couldn't scroll: one that was following its end goes there now it's shown
-      if (id === 'timeline' && followTimeline) timelineBox.scrollTop = timelineBox.scrollHeight;
+      if (id === 'timeline' && followTimeline) timelineBox.scrollTop = 0;
       if (id === 'server') server?.reveal();
       scheduleRender();
     }
@@ -146,17 +194,26 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     const from = Math.max(setupEnd, clearedFrom);
     const setupEntries = clearedFrom === 0 ? entries.slice(0, setupEnd) : [];
     const rows = rowsFrom(entries, from);
-    followTimeline = session.trace !== shownTrace || keepsFollowing(timelineBox, followTimeline);
+    if (session.trace !== shownTrace) scope = `t${++traces}`;
+    followTimeline = session.trace !== shownTrace || keepsFollowingTop(timelineBox, followTimeline);
     shownTrace = session.trace;
+    // Newest first: what's added goes above, so a reader who scrolled down keeps their place (from the bottom)
+    const fromBottom = timelineBox.scrollHeight - timelineBox.scrollTop;
 
-    historyList.replaceChildren(
-      ...history.flatMap(segment => [...segment.rows.map(timelineItem), startedOver(segment.label)])
+    replaceKeepingFocus(
+      historyList,
+      [...history]
+        .reverse()
+        .flatMap(segment => [
+          startedOver(segment.label),
+          ...groupItems(groupRuns(segment.rows, segment.runs ?? []), folds, segment.scope ?? segment.label, false)
+        ])
     );
     historyList.hidden = history.length === 0;
     setupFold.hidden = setupEntries.length === 0;
     setupSummaryLine.textContent = setupSummary(setupEntries);
-    setupList.replaceChildren(...timelineRows(setupEntries).map(timelineItem));
-    timeline.replaceChildren(...rows.map(timelineItem));
+    setupList.replaceChildren(...timelineRows(setupEntries).map(row => timelineItem(row, `${scope}:setup`)));
+    replaceKeepingFocus(timeline, groupItems(groupRuns(rows, session.trace.runs), folds, scope));
     if (rows.length === 0) {
       const first = session.actions[0];
       timeline.append(
@@ -169,7 +226,8 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
         ])
       );
     }
-    if (followTimeline) timelineBox.scrollTop = timelineBox.scrollHeight;
+    timelineBox.scrollTop = followTimeline ? 0 : timelineBox.scrollHeight - fromBottom;
+    refreshSwitches();
     if (lanesHost) renderLaneChart(lanesHost, laneChart(entries));
     server?.render();
 
@@ -221,28 +279,34 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   const runAction = async (id: string) => {
     const token = gate.start();
     if (token === undefined) return;
-    for (const button of actions.querySelectorAll('button')) button.disabled = true;
+    // Disabling the control the reader used drops keyboard focus: it goes back there after the run
+    const focused = document.activeElement;
+    for (const control of actions.querySelectorAll<HTMLButtonElement | HTMLInputElement>('button, input'))
+      control.disabled = true;
     editor.setRunsEnabled(false);
     try {
       await session.run(id);
     } finally {
       if (gate.end(token)) {
-        for (const button of actions.querySelectorAll('button')) button.disabled = false;
+        for (const control of actions.querySelectorAll<HTMLButtonElement | HTMLInputElement>('button, input'))
+          control.disabled = false;
         editor.setRunsEnabled(true);
+        restoreFocus(focused);
       }
     }
   };
 
+  // The switches show what EvEm did, so they're refreshed with the timeline (see actionControls)
+  let refreshSwitches = () => {};
   const renderActions = () => {
-    actions.replaceChildren(
-      ...session.actions.map((action, index) => {
-        const button = el('button', { type: 'button', class: index === 0 ? BUTTON.main : BUTTON.other }, [
-          action.label
-        ]);
-        button.addEventListener('click', () => void runAction(action.id));
-        return button;
-      })
+    const { buttons, switches, refresh } = actionControls(
+      scenario,
+      session.actions,
+      runAction,
+      () => session.trace.entries
     );
+    refreshSwitches = refresh;
+    actions.replaceChildren(...buttons, ...(switches ? [switches] : []));
   };
 
   const renderControls = () => {
@@ -287,7 +351,11 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   ]);
   const outputCard = el('section', { 'aria-label': 'Output' }, [
     el('div', { class: 'card-body min-h-0 flex-1 gap-3 p-4' }, [
-      el('div', { class: 'flex items-center justify-between gap-2' }, [tabs.element, clearButton]),
+      el('div', { class: 'flex items-center justify-between gap-2' }, [
+        tabs.element,
+        el('div', { class: 'flex items-center gap-1' }, [legend.button, clearButton])
+      ]),
+      legend.popover,
       ...outputTabs.map(tab => tab.panel),
       announcer
     ])
@@ -354,6 +422,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     bus.unsubscribeById(traceSubscription);
     bus.unsubscribeById(wireSubscription);
     resizes?.disconnect();
+    summaryResizes.disconnect();
     editor.destroy();
     // Leaving the scenario ends its connections, which would otherwise keep reconnecting
     session.stop();

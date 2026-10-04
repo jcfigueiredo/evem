@@ -1,7 +1,7 @@
 import { el } from '../dom';
 import type { ScenarioSession, ServerSample } from '../engine/session';
 import { checkLocalServer } from '../fakes/localSseServer';
-import { keepHistory, keepsFollowing, type HistorySegment } from '../timeline';
+import { keepHistory, keepsFollowingTop, type HistorySegment } from '../timeline';
 import { BUTTON, startedOver, WIRE_DIRECTION, wireItem } from './views';
 import type { FakeServer, WireEntry } from '../fakes/wire';
 
@@ -186,12 +186,12 @@ export function serverPane(
     )
   );
 
-  // The log is rebuilt only when it changed, and kept at its end unless the reader scrolled up
+  // The log is rebuilt only when it changed, and kept at its top (the newest line) unless the reader scrolled down
   let shown: { server: FakeServer | undefined; length: number } = { server: undefined, length: -1 };
-  // Whether the log follows its end (see keepsFollowing); `reveal` scrolls there when its tab is shown again
+  // Whether the log follows its top (see keepsFollowingTop); `reveal` scrolls there when its tab is shown again
   let following = true;
   const reveal = () => {
-    if (following) logBox.scrollTop = logBox.scrollHeight;
+    if (following) logBox.scrollTop = 0;
   };
   // What earlier servers wrote, kept when the scenario starts over, and where the reader last cleared this one's log
   let history: HistorySegment<WireEntry>[] = [];
@@ -212,13 +212,17 @@ export function serverPane(
     const server = session.server;
     const wire = (server?.wire ?? []).slice(clearedFrom);
     if (server !== shown.server || wire.length !== shown.length) {
-      following = server !== shown.server || keepsFollowing(logBox, following);
+      // Newest first, like the timeline: what's added goes above, so a reader who scrolled down keeps their place
+      following = server !== shown.server || keepsFollowingTop(logBox, following);
+      const fromBottom = logBox.scrollHeight - logBox.scrollTop;
       log.replaceChildren(
-        ...history.flatMap(segment => [...segment.rows.map(wireItem), startedOver(segment.label)]),
-        ...wire.slice(-SHOWN).map(wireItem)
+        ...(wire.length === 0 ? [el('li', { class: 'text-base-content/70' }, ['Nothing on the wire yet.'])] : []),
+        ...wire.slice(-SHOWN).reverse().map(wireItem),
+        ...[...history]
+          .reverse()
+          .flatMap(segment => [startedOver(segment.label), ...[...segment.rows].reverse().map(wireItem)])
       );
-      if (wire.length === 0) log.append(el('li', { class: 'text-base-content/70' }, ['Nothing on the wire yet.']));
-      reveal();
+      logBox.scrollTop = following ? 0 : logBox.scrollHeight - fromBottom;
       shown = { server, length: wire.length };
     }
     status.textContent = connectionStatus(server?.openConnections ?? 0, session.connectionStates());

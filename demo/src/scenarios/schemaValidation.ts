@@ -11,6 +11,7 @@ export const schemaValidation: Scenario = {
     policy: {
       kind: 'select',
       label: "sendWelcome's schemaErrorPolicy",
+      hint: 'What invalid data does: skip sendWelcome, log and run it anyway, skip quietly, or reject the publish.',
       options: [
         'ErrorPolicy.CANCEL_ON_ERROR',
         'ErrorPolicy.LOG_AND_CONTINUE',

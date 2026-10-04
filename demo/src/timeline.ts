@@ -1,4 +1,4 @@
-import type { SkipReason, TraceEntry } from './engine/trace';
+import type { ActionRun, SkipReason, TraceEntry } from './engine/trace';
 
 export type Tone = 'primary' | 'neutral' | 'info' | 'success' | 'warning' | 'error';
 
@@ -16,6 +16,10 @@ export interface TimelineRow {
   since?: number;
   /** The kind of trace entry the line shows (what the code logged reads differently from EvEm's own steps) */
   kind: TraceEntry['kind'];
+  /** The subscription the line is about (who ran, was skipped, threw, subscribed or left), if any */
+  subject?: string;
+  /** The publish the line belongs to (a publish's own line and its result included), if any */
+  publish?: number;
 }
 
 const SKIP_TEXT: Record<SkipReason, string> = {
@@ -129,7 +133,13 @@ export function timelineRows(entries: readonly TraceEntry[]): TimelineRow[] {
   const shown = (at: number) => (actionAt === undefined ? `${at} ms` : `+${at - actionAt} ms`);
   return entries.map(entry => {
     if (entry.kind === 'action') actionAt = entry.at;
-    const since = actionAt === undefined ? {} : { since: entry.at - actionAt };
+    const publish =
+      entry.kind === 'publish' || entry.kind === 'result' || entry.kind === 'rejected' ? entry.id : entry.publish;
+    const since = {
+      ...(actionAt === undefined ? {} : { since: entry.at - actionAt }),
+      ...('subscription' in entry && entry.subscription !== undefined ? { subject: entry.subscription } : {}),
+      ...(publish === undefined ? {} : { publish })
+    };
     if (entry.kind === 'call' && entry.later) {
       // A call that comes after its publish ended (debounce) stands on its own, and says which publish it came from
       const at = entry.publish === undefined ? undefined : publishedAt.get(entry.publish);
@@ -145,6 +155,115 @@ export function timelineRows(entries: readonly TraceEntry[]): TimelineRow[] {
   });
 }
 
+/** Timeline rows the reader takes in together; the first one is the group's header */
+export interface RowGroup {
+  rows: TimelineRow[];
+}
+
+/**
+ * The rows in groups, in order: an action with everything that happened until its run ended (`runs`), so a run reads
+ * from cause to effect; outside an action, each top-level row with the rows under it. Rows that belong to a publish
+ * (its subscribers, its result, a debounced call) join its group, even when other rows came in between, and what the
+ * code printed outside any publish after an action's run joins that action.
+ */
+export function groupRuns(rows: readonly TimelineRow[], runs: readonly ActionRun[]): RowGroup[] {
+  const groups: RowGroup[] = [];
+  const byPublish = new Map<number, RowGroup>();
+  let action: { group: RowGroup; end: number } | undefined;
+  // The latest action's group, even after its run ended: what the code prints later (a debounced callback, the rest of
+  // an async one after its timeout) belongs to it, since only its code could have printed it
+  let latestAction: RowGroup | undefined;
+  const place = (group: RowGroup, row: TimelineRow) => {
+    group.rows.push(row);
+    if (row.kind === 'publish' && row.publish !== undefined) byPublish.set(row.publish, group);
+  };
+  const start = (row: TimelineRow) => {
+    const group: RowGroup = { rows: [] };
+    groups.push(group);
+    place(group, row);
+    return group;
+  };
+  for (const row of rows) {
+    const owner = row.publish === undefined ? undefined : byPublish.get(row.publish);
+    if (row.kind === 'action') {
+      const run = runs.find(candidate => candidate.at === row.at);
+      action = { group: start(row), end: run?.end ?? Number.POSITIVE_INFINITY };
+      latestAction = action.group;
+    } else if (owner && row.kind !== 'publish') {
+      place(owner, row);
+    } else if (row.depth > 0 && groups.length > 0) {
+      place(groups.at(-1)!, row);
+    } else if (action && row.at <= action.end) {
+      place(action.group, row);
+    } else if (latestAction && row.publish === undefined && (row.kind === 'log' || row.kind === 'error')) {
+      place(latestAction, row);
+    } else {
+      action = undefined;
+      start(row);
+    }
+  }
+  return groups;
+}
+
+/**
+ * Which groups (indexes) are open until the reader says otherwise: the latest action's, until the next action, and
+ * the newest group that has something to fold (a stream's latest event, a response that came late). A single row
+ * isn't a fold, so it never closes the run above it.
+ */
+export function openByDefault(groups: readonly RowGroup[]): Set<number> {
+  const last = (matches: (group: RowGroup) => boolean) => {
+    for (let index = groups.length - 1; index >= 0; index--) if (matches(groups[index]!)) return [index];
+    return [];
+  };
+  return new Set([...last(group => group.rows[0]?.kind === 'action'), ...last(group => group.rows.length > 1)]);
+}
+
+/** Names as a sentence lists them: `a`, `a and b`, `a, b and c`, `a, b, c and 2 more` */
+function listNames(names: readonly string[]): string {
+  if (names.length > 3) return `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
+/**
+ * A folded group in one line: its header, then what it caused (how many publishes, who ran, was skipped, left or
+ * joined, how many errors, and how the publishes resolved), e.g.
+ * `▶ Publish user.registered · welcome, sendEmail and afterEmail ran · resolved true`
+ */
+export function groupSummary(rows: readonly TimelineRow[]): string {
+  const [header] = rows;
+  if (!header) return '';
+  return [header.detail ? `${header.text} ${header.detail}` : header.text, ...groupFacts(rows)].join(' · ');
+}
+
+/** What a group's rows after its header caused, as `groupSummary` lists it */
+export function groupFacts(rows: readonly TimelineRow[]): string[] {
+  const [, ...rest] = rows;
+  const subjects = (kind: TimelineRow['kind']) => [
+    ...new Set(rest.flatMap(row => (row.kind === kind && row.subject !== undefined ? [row.subject] : [])))
+  ];
+  const publishes = rows.filter(row => row.kind === 'publish').length;
+  const errors = rest.filter(row => row.kind === 'error' || row.kind === 'rejected').length;
+  const results = [
+    ...new Set(rest.flatMap(row => (row.kind === 'result' ? [row.text.replace(/^resolved /, '')] : [])))
+  ];
+  return [
+    publishes > 1 ? `${publishes} publishes` : '',
+    ...(
+      [
+        ['call', 'ran'],
+        ['skip', 'skipped'],
+        ['unsubscribe', 'unsubscribed'],
+        ['subscribe', 'subscribed']
+      ] as const
+    ).map(([kind, verb]) => {
+      const names = subjects(kind);
+      return names.length > 0 ? `${listNames(names)} ${verb}` : '';
+    }),
+    errors > 0 ? `${errors} ${errors === 1 ? 'error' : 'errors'}` : '',
+    results.length > 0 ? `resolved ${results.join(', ')}` : ''
+  ].filter(fact => fact !== '');
+}
+
 /**
  * What a log (the timeline, the wire) showed before the scenario started over, and what started it over (a control,
  * Reset, …)
@@ -152,6 +271,10 @@ export function timelineRows(entries: readonly TraceEntry[]): TimelineRow[] {
 export interface HistorySegment<Row = TimelineRow> {
   label: string;
   rows: Row[];
+  /** The actions run in it, to group its rows as they were (see groupRuns) */
+  runs?: ActionRun[];
+  /** What names its folds, so the reader's opened ones stay open (see groupItems) */
+  scope?: string;
 }
 
 /**
@@ -169,7 +292,7 @@ export function keepHistory<Row>(
     if (room <= 0) break;
     const rows = each.rows.slice(Math.max(0, each.rows.length - room));
     room -= rows.length;
-    kept.unshift({ label: each.label, rows });
+    kept.unshift({ ...each, rows });
   }
   return kept.filter(each => each.rows.length > 0);
 }
@@ -256,6 +379,17 @@ export function liveAnnouncement(rows: readonly TimelineRow[], msSinceInteractio
  */
 export function isAtEnd(box: { scrollTop: number; scrollHeight: number; clientHeight: number }): boolean {
   return box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+}
+
+/**
+ * Whether a newest-first list that grew should keep following its top: while its reader is there; a hidden one
+ * (0 all round) keeps what it was doing. One that doesn't is held where its reader is (see `holdScroll`).
+ */
+export function keepsFollowingTop(
+  box: { scrollTop: number; scrollHeight: number; clientHeight: number },
+  wasFollowing: boolean
+): boolean {
+  return box.clientHeight === 0 ? wasFollowing : box.scrollTop < 24;
 }
 
 /**

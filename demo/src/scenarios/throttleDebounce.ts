@@ -8,9 +8,33 @@ export const throttleDebounce: Scenario = {
     'With both, an event runs at once when more than throttleTime has passed since the last immediate run; the others are debounced, so the last event still gets a run. Compare each option alone in the lanes.',
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/subscriptions.md#combining-throttle-and-debounce',
   controls: {
-    throttle: { kind: 'number', label: 'throttleTime (ms)', min: 50, max: 1000, step: 50, default: 300 },
-    debounce: { kind: 'number', label: 'debounceTime (ms)', min: 50, max: 1000, step: 50, default: 500 },
-    gap: { kind: 'number', label: 'time between events (ms)', min: 10, max: 600, step: 10, default: 100 }
+    throttle: {
+      kind: 'number',
+      label: 'throttleTime (ms)',
+      hint: 'throttled and suggest run at once when this long has passed since their last run.',
+      min: 50,
+      max: 1000,
+      step: 50,
+      default: 300
+    },
+    debounce: {
+      kind: 'number',
+      label: 'debounceTime (ms)',
+      hint: 'debounced runs once typing pauses this long; so does suggest, for what it held back.',
+      min: 50,
+      max: 1000,
+      step: 50,
+      default: 500
+    },
+    gap: {
+      kind: 'number',
+      label: 'time between events (ms)',
+      hint: 'Time between keystrokes: compare it with the two times above.',
+      min: 10,
+      max: 600,
+      step: 10,
+      default: 100
+    }
   },
   helpers: {},
   code: [

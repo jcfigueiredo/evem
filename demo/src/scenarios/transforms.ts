@@ -7,7 +7,15 @@ export const transforms: Scenario = {
   summary:
     "A subscriber's transform turns the data the subscribers after it receive. It only applies when its subscriber ran.",
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/subscriptions.md#event-transformation',
-  controls: { sender: { kind: 'select', label: 'sender', options: ['ada', 'bot'], default: 'ada' } },
+  controls: {
+    sender: {
+      kind: 'select',
+      label: 'sender',
+      hint: "count skips the bot, so its transform doesn't apply: no word count.",
+      options: ['ada', 'bot'],
+      default: 'ada'
+    }
+  },
   helpers: {},
   code: [
     "import { EvEm } from '@jcfigueiredo/evem';",

@@ -3,17 +3,22 @@ import type { TraceEntry } from '../../demo/src/engine/trace';
 import {
   announcement,
   describeEntry,
+  groupRuns,
+  groupSummary,
+  openByDefault,
   isAtEnd,
   keepHistory,
   latestConnectionState,
   keepsFollowing,
+  keepsFollowingTop,
   liveAnnouncement,
   preview,
   rowsFrom,
   setupSummary,
   sinceLatestAction,
   timelineRows,
-  unseenRows
+  unseenRows,
+  type TimelineRow
 } from '../../demo/src/timeline';
 
 describe('preview', () => {
@@ -213,6 +218,11 @@ describe('keepHistory', () => {
     ]);
   });
 
+  it('keeps what else a segment carries (its runs, its scope)', () => {
+    const runs = [{ at: 0, end: 5 }];
+    expect(keepHistory([], { label: 'a', rows: rows(1), runs, scope: 't1' })[0]).toMatchObject({ runs, scope: 't1' });
+  });
+
   it('keeps at most maxRows rows, dropping the oldest, and the segments that empties', () => {
     const history = keepHistory(keepHistory([], { label: 'old', rows: rows(4) }), { label: 'new', rows: rows(5) }, 6);
     expect(history.map(segment => [segment.label, segment.rows.map(row => row.text)])).toEqual([
@@ -322,5 +332,181 @@ describe('announcement', () => {
     ]);
     expect(announcement(rows)).toBe('publish order.created. audit ran. resolved true.');
     expect(announcement([])).toBe('');
+  });
+});
+
+/** A timeline row, for the grouping tests: what it is, where and when, and whose */
+const row = (kind: TimelineRow['kind'], text: string, depth: number, at: number, subject?: string): TimelineRow => ({
+  kind,
+  text,
+  depth,
+  at,
+  tone: 'neutral',
+  ...(subject === undefined ? {} : { subject })
+});
+
+describe('timelineRows: whose row it is', () => {
+  it('names the subscription a row is about, and the publish it belongs to', () => {
+    const entries: TraceEntry[] = [
+      { kind: 'subscribe', subscription: 'welcome', pattern: 'user.*', options: [], at: 0 },
+      { kind: 'publish', id: 1, event: 'user.new', data: 1, at: 1 },
+      { kind: 'call', subscription: 'welcome', data: 1, publish: 1, at: 1 },
+      { kind: 'skip', subscription: 'audit', reason: 'filtered', publish: 1, at: 1 },
+      { kind: 'error', subscription: 'mailer', message: 'down', publish: 1, at: 1 },
+      { kind: 'result', id: 1, result: true, at: 2 },
+      { kind: 'unsubscribe', subscription: 'welcome', at: 3 }
+    ];
+    expect(timelineRows(entries).map(each => each.publish)).toEqual([undefined, 1, 1, 1, 1, 1, undefined]);
+    expect(timelineRows(entries).map(each => each.subject)).toEqual([
+      'welcome',
+      undefined,
+      'welcome',
+      'audit',
+      'mailer',
+      undefined,
+      'welcome'
+    ]);
+  });
+});
+
+describe('groupRuns', () => {
+  const texts = (groups: ReturnType<typeof groupRuns>) => groups.map(group => group.rows.map(each => each.text));
+
+  it('keeps an action with what happened until its run ended, in order', () => {
+    const rows = [
+      row('action', '▶ Publish', 0, 100),
+      row('publish', 'publish a', 0, 100),
+      row('call', 'x ran', 1, 100, 'x'),
+      row('result', 'resolved true', 0, 400),
+      row('publish', 'publish server.tick', 0, 900),
+      row('call', 'tick ran', 1, 900, 'tick')
+    ];
+    expect(texts(groupRuns(rows, [{ at: 100, end: 400 }]))).toEqual([
+      ['▶ Publish', 'publish a', 'x ran', 'resolved true'],
+      ['publish server.tick', 'tick ran']
+    ]);
+  });
+
+  it('gives each top-level row outside an action, with the rows under it and its result, a group of its own', () => {
+    const rows = [
+      { ...row('publish', 'publish t1', 0, 10), publish: 1 },
+      { ...row('call', 'tick ran', 1, 10, 'tick'), publish: 1 },
+      { ...row('publish', 'publish t2', 0, 11), publish: 2 },
+      { ...row('result', 'resolved true', 0, 12), publish: 1 },
+      { ...row('result', 'resolved false', 0, 13), publish: 2 },
+      row('call', 'save ran later', 0, 20, 'save')
+    ];
+    expect(texts(groupRuns(rows, []))).toEqual([
+      ['publish t1', 'tick ran', 'resolved true'],
+      ['publish t2', 'resolved false'],
+      ['save ran later']
+    ]);
+  });
+
+  it('keeps everything after an action that is still running in its group', () => {
+    const rows = [
+      row('action', '▶ Scroll', 0, 0),
+      row('publish', 'publish s', 0, 0),
+      row('publish', 'publish s', 0, 99)
+    ];
+    expect(texts(groupRuns(rows, [{ at: 0 }]))).toEqual([['▶ Scroll', 'publish s', 'publish s']]);
+  });
+
+  it("keeps what the code printed after its action's run with that action: only its code could have", () => {
+    const rows = [
+      row('action', '▶ Type', 0, 0),
+      { ...row('publish', 'publish typed', 0, 0), publish: 1 },
+      row('call', 'search ran later', 0, 300, 'search'),
+      row('log', 'searching', 0, 300),
+      row('error', 'error: late', 0, 310),
+      { ...row('publish', 'publish server.tick', 0, 900), publish: 2 }
+    ];
+    const later = { ...rows[2]!, publish: 1 };
+    expect(texts(groupRuns([rows[0]!, rows[1]!, later, ...rows.slice(3)], [{ at: 0, end: 10 }]))).toEqual([
+      ['▶ Type', 'publish typed', 'search ran later', 'searching', 'error: late'],
+      ['publish server.tick']
+    ]);
+  });
+
+  it('leaves what was printed before any action on its own', () => {
+    expect(texts(groupRuns([row('log', 'starting', 0, 0)], []))).toEqual([['starting']]);
+  });
+
+  it('starts with what is left of a publish the reader cleared the top of', () => {
+    const rows = [row('call', 'x ran', 1, 5, 'x'), row('publish', 'publish b', 0, 6)];
+    expect(texts(groupRuns(rows, []))).toEqual([['x ran'], ['publish b']]);
+  });
+});
+
+describe('groupSummary', () => {
+  it('says what an action caused: who ran, who was skipped and how the publish ended', () => {
+    const rows = [
+      row('action', '▶ Publish user.registered', 0, 0),
+      row('publish', 'publish user.registered', 0, 0),
+      row('call', 'welcome ran', 1, 0, 'welcome'),
+      row('skip', 'audit skipped: filtered out', 1, 0, 'audit'),
+      row('call', 'sendEmail ran', 1, 0, 'sendEmail'),
+      row('call', 'afterEmail ran', 1, 300, 'afterEmail'),
+      row('result', 'resolved true', 0, 300)
+    ];
+    expect(groupSummary(rows)).toBe(
+      '▶ Publish user.registered · welcome, sendEmail and afterEmail ran · audit skipped · resolved true'
+    );
+  });
+
+  it('counts publishes, names a few subscribers and counts the rest, and counts errors', () => {
+    const rows = [
+      row('action', '▶ Scroll', 0, 0),
+      ...['a', 'b', 'c', 'd', 'e'].flatMap(name => [
+        row('publish', 'publish s', 0, 0),
+        row('call', `${name} ran`, 1, 0, name)
+      ]),
+      row('error', 'e threw: boom', 1, 0, 'e'),
+      row('rejected', 'rejected: boom', 0, 0),
+      row('result', 'resolved false', 0, 0)
+    ];
+    expect(groupSummary(rows)).toBe('▶ Scroll · 5 publishes · a, b, c and 2 more ran · 2 errors · resolved false');
+  });
+
+  it('names a stream event with its data, and who left or joined', () => {
+    const rows = [
+      { ...row('publish', 'publish server.tick', 0, 0), detail: '{"n":3}' },
+      row('call', 'tick ran', 1, 0, 'tick'),
+      row('unsubscribe', 'tick unsubscribed', 1, 0, 'tick'),
+      row('subscribe', 'tock subscribed to server.*', 1, 0, 'tock')
+    ];
+    expect(groupSummary(rows)).toBe('publish server.tick {"n":3} · tick ran · tick unsubscribed · tock subscribed');
+  });
+
+  it('is the row itself when nothing followed it', () => {
+    expect(groupSummary([row('action', '▶ Clear the history', 0, 0)])).toBe('▶ Clear the history');
+  });
+});
+
+describe('keepsFollowingTop', () => {
+  it('follows a newest-first list while its reader is at the top, and keeps what a hidden one was doing', () => {
+    expect(keepsFollowingTop({ scrollTop: 0, scrollHeight: 900, clientHeight: 300 }, false)).toBe(true);
+    expect(keepsFollowingTop({ scrollTop: 10, scrollHeight: 900, clientHeight: 300 }, false)).toBe(true);
+    expect(keepsFollowingTop({ scrollTop: 200, scrollHeight: 900, clientHeight: 300 }, true)).toBe(false);
+    expect(keepsFollowingTop({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 }, false)).toBe(false);
+  });
+});
+
+describe('openByDefault', () => {
+  const group = (...rows: TimelineRow[]) => ({ rows });
+  const action = group(row('action', '▶ Run', 0, 0), row('publish', 'publish a', 0, 0));
+  const tick = (at: number) => group(row('publish', 'publish tick', 0, at), row('call', 'tick ran', 1, at, 'tick'));
+  const alone = group(row('log', 'later', 0, 50));
+
+  it('opens the latest action until the next one, and the newest of what came after it', () => {
+    expect([...openByDefault([tick(1), action, tick(60), tick(70)])].sort()).toEqual([1, 3]);
+  });
+
+  it("doesn't let a single row (nothing to fold) close the run above it", () => {
+    expect([...openByDefault([action, alone])]).toEqual([0]);
+  });
+
+  it('opens only the newest group of a stream with no action yet', () => {
+    expect([...openByDefault([tick(1), tick(2), tick(3)])]).toEqual([2]);
   });
 });

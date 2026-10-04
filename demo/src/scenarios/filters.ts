@@ -8,9 +8,27 @@ export const filters: Scenario = {
     'A filter decides, from the data, whether a subscriber runs. Filters can be async, and several in an array must all pass, in order.',
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/guide/subscriptions.md#filtering-events',
   controls: {
-    total: { kind: 'number', label: 'order total', min: 0, max: 1000, step: 10, default: 250 },
-    vip: { kind: 'toggle', label: 'VIP customer', default: false },
-    test: { kind: 'toggle', label: 'test order', default: false }
+    total: {
+      kind: 'number',
+      label: 'order total',
+      hint: 'bigOrders and realBigOrders run only for orders over 100.',
+      min: 0,
+      max: 1000,
+      step: 10,
+      default: 250
+    },
+    vip: {
+      kind: 'toggle',
+      label: 'VIP customer',
+      hint: "vipOrders' filter is async: publish waits for its answer.",
+      default: false
+    },
+    test: {
+      kind: 'toggle',
+      label: 'test order',
+      hint: "realBigOrders' first filter rejects test orders, so its second never runs.",
+      default: false
+    }
   },
   helpers: {},
   code: [

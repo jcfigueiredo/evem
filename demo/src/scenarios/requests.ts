@@ -9,7 +9,17 @@ export const requests: Scenario = {
   summary:
     "handler.request() sends a request and resolves with the server's result: it rejects with the server's error, or with a RequestTimeoutError when no answer comes in time. Requests are independent and can run at once.",
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/websocket-adapter.md#request-response',
-  controls: { timeout: { kind: 'number', label: 'timeout (ms)', min: 500, max: 5000, step: 500, default: 1000 } },
+  controls: {
+    timeout: {
+      kind: 'number',
+      label: 'timeout (ms)',
+      hint: 'How long a request waits for its answer; the slow report takes 3000 ms.',
+      min: 500,
+      max: 5000,
+      step: 500,
+      default: 1000
+    }
+  },
   helpers: {},
   code: [
     "import { EvEm } from '@jcfigueiredo/evem';",

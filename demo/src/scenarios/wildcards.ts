@@ -11,12 +11,14 @@ export const wildcards: Scenario = {
     pattern: {
       kind: 'text',
       label: 'your pattern',
+      hint: 'What your subscriber listens to: a * in the middle matches one segment; at the end, one or more.',
       default: 'user.*',
       suggestions: ['*', 'user.*', '*.created', 'system.*.error', 'user.login']
     },
     event: {
       kind: 'text',
       label: 'event to publish',
+      hint: 'The event published: see which patterns match it, and why.',
       default: 'user.login',
       suggestions: [
         'user.login',

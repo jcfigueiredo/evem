@@ -8,9 +8,29 @@ export const connectionQueue: Scenario = {
     'WebSocketHandler connects EvEm to a socket: ws.send messages go out while connected, and wait in a queue while not. Drop the connection or refuse the next one from the Server tab to see it reconnect and flush.',
   docs: 'https://github.com/jcfigueiredo/evem/blob/main/docs/websocket-adapter.md#offline-queue',
   controls: {
-    reconnect: { kind: 'toggle', label: 'reconnect', default: true },
-    reconnectDelay: { kind: 'number', label: 'reconnectDelay (ms)', min: 200, max: 3000, step: 100, default: 1000 },
-    queueSize: { kind: 'number', label: 'queueSize', min: 1, max: 10, default: 3 }
+    reconnect: {
+      kind: 'toggle',
+      label: 'reconnect',
+      hint: 'Whether the handler connects again after the server drops it (Server tab).',
+      default: true
+    },
+    reconnectDelay: {
+      kind: 'number',
+      label: 'reconnectDelay (ms)',
+      hint: 'How long it waits before each new attempt.',
+      min: 200,
+      max: 3000,
+      step: 100,
+      default: 1000
+    },
+    queueSize: {
+      kind: 'number',
+      label: 'queueSize',
+      hint: 'Messages kept while offline; past it the oldest is dropped (ws.queue.overflow).',
+      min: 1,
+      max: 10,
+      default: 3
+    }
   },
   helpers: {},
   code: [
