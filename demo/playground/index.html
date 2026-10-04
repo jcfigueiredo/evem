@@ -32,7 +32,8 @@
       <nav class="mx-auto flex h-14 max-w-7xl items-center gap-2 px-4 lg:px-6" aria-label="Features">
         <a href="../" class="me-2 flex shrink-0 items-center gap-2 font-mono text-lg font-bold">
           <span class="inline-block size-3.5 rounded bg-primary" aria-hidden="true"></span>evem
-          <span class="text-xs font-normal text-base-content/70">playground</span>
+          <!-- Not on the narrowest phones, where the bar needs its room for the menu and the theme -->
+          <span class="hidden text-xs font-normal text-base-content/70 sm:inline">playground</span>
         </a>
         <button type="button" class="btn btn-ghost btn-sm lg:hidden" popovertarget="scenario-menu">Menu ▾</button>
         <div id="scenario-menu" class="megamenu max-lg:megamenu-vertical border-base-300 max-lg:border-b" popover></div>

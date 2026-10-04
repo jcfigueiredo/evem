@@ -29,6 +29,12 @@ window.addEventListener('hashchange', () => void bus.publish('playground.navigat
 // Choosing a scenario closes the menu's panels (and, on phones, the menu), the current one too: its link doesn't
 // change the hash, so there's no navigate
 menu.addEventListener('click', event => {
+  // On phones the menu lists every section, whose buttons are only headings: one pressed from the keyboard would open
+  // its panel again, over the list (cancelling the click cancels that)
+  if (menu.matches(':popover-open') && (event.target as Element).closest('[popovertarget]')) {
+    event.preventDefault();
+    return;
+  }
   if (!(event.target as Element).closest('a')) return;
   for (const open of menu.querySelectorAll<HTMLElement>(':popover-open')) open.hidePopover();
   if (menu.matches(':popover-open')) menu.hidePopover();

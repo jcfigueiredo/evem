@@ -270,9 +270,12 @@ export const WIRE_DIRECTION: Record<WireEntry['direction'], { mark: string; labe
 const visible = (text: string): string => text.replace(/\r/g, '␍').replace(/\n/g, '↵\n');
 
 /** One line of a server's wire log: its direction's mark, its text, and its time; for the Server tab and the cards */
-/** Where a log's history ends: the scenario started over there, and why (`backoff → off`, `Reset`) */
+/**
+ * Where a log's history ends: the scenario started over there, and why (`backoff → off`, `Reset`). A list item, not a
+ * `separator`, which screen readers name only from attributes: its text is what they should read
+ */
 export function startedOver(label: string): HTMLElement {
-  return el('li', { class: 'divider my-3 font-sans text-xs text-base-content/70', role: 'separator' }, [
+  return el('li', { class: 'divider my-3 font-sans text-xs text-base-content/70', 'data-started-over': '' }, [
     `${label}: started over`
   ]);
 }
