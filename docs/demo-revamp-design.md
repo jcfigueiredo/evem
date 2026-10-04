@@ -1,6 +1,6 @@
 # Demo Revamp Design
 
-> **Status: all five phases implemented: 1 (examples audit), 2 (foundation), 3 (playground), 4 (showcase, with a UX pass after 4a) and 5 (cleanup).** This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
+> **Status: all five phases implemented: 1 (examples audit), 2 (foundation), 3 (playground), 4 (showcase, with a UX pass after 4a) and 5 (cleanup).** Since then, the playground's sidebar has become a top bar with a megamenu (Features and Adapters), and starting a scenario over keeps the output above a divider until Clear; where this document says sidebar, read the menu. This document replaces the demo suite in `demo/` with a local playground and a public showcase that run the real library, and makes every published code sample correct. It's built in five phases, each with its own implementation plan and pull request. Sections 1–6 were agreed one by one; [Phase 5](#phase-5-cleanup) was written straight into this document and is open for review here.
 
 ## Summary
 

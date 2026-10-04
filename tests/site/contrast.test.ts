@@ -98,10 +98,13 @@ describe('theme colors', () => {
       expect(contrast(codeColors.get(token)!, color('neutral'))).toBeGreaterThanOrEqual(4.5);
     });
 
-    // The sidebar (base-300): where you are, and where keyboard focus is, must show (WCAG 1.4.11: 3:1 for non-text)
-    it("the sidebar's current link stands out from the sidebar, and its text reads on it", () => {
+    // Menus (the megamenu's panels and the theme picker, base-100; the top bar, base-300): where you are, and where
+    // keyboard focus is, must show (WCAG 1.4.11: 3:1 for non-text)
+    it("a menu's current link stands out from the menu, and its text reads on it", () => {
       const background = color(menuColor('menu-active-bg', 'neutral'));
-      expect(contrast(background, color('base-300'))).toBeGreaterThanOrEqual(3);
+      for (const base of ['base-100', 'base-300']) {
+        expect(contrast(background, color(base)), `on ${base}`).toBeGreaterThanOrEqual(3);
+      }
       expect(contrast(color(menuColor('menu-active-fg', 'neutral-content')), background)).toBeGreaterThanOrEqual(4.5);
     });
 
@@ -127,9 +130,11 @@ describe('theme colors', () => {
       expect(contrast(codeColors.get(runFocusRing!)!, color('neutral'))).toBeGreaterThanOrEqual(3);
     });
 
-    it('menu items show keyboard focus with a ring that stands out from the sidebar', () => {
+    it('menu items show keyboard focus with a ring that stands out from the menu', () => {
       expect(focusRing, 'a :focus-visible outline for menu items in styles.css').toBeDefined();
-      expect(contrast(color(focusRing!), color('base-300'))).toBeGreaterThanOrEqual(3);
+      for (const base of ['base-100', 'base-300']) {
+        expect(contrast(color(focusRing!), color(base)), `on ${base}`).toBeGreaterThanOrEqual(3);
+      }
     });
   });
 });

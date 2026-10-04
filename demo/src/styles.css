@@ -95,7 +95,7 @@
   box-shadow: 0 0 8px currentColor;
 }
 
-/* The current sidebar link: a primary pill. daisyUI's default, neutral, is the sidebar's own color in Signal */
+/* The current link in a menu: a primary pill. daisyUI's default, neutral, is the top bar's own color in Signal */
 .menu {
   --menu-active-bg: var(--color-primary);
   --menu-active-fg: var(--color-primary-content);
