@@ -182,6 +182,10 @@ Findings that reviews deferred, with the phase that takes each. A follow-up leav
 
 | From | Follow-up | Phase |
 |---|---|---|
+| Playground UX review | The timeline's kept history and setup lists are rebuilt on every trace entry, though they change only on a restart, Clear or the setup's end: rebuild them then | next |
+| Playground UX review | A reader scrolled down in What EvEm did who visits another tab comes back a couple of lines off (rows arrived above meanwhile): keep the distance from the bottom while the tab is hidden | next |
+| Playground UX review | The ⓘ legend is a centered popover that leaves focus on its button: anchor it next to the button, or make it a dialog that takes focus and gives it back | next |
+| Playground UX review | With Connect / Disconnect in a switch, Reconnect & resume's main (primary) button is "Show the last event id", its least important action: let a scenario name its main action | next |
 | Playground menu review | The timeline's kept history is rebuilt on every render (up to 500 rows each frame a stream produces), though it changes only on a restart or Clear: render it there | next |
 | Playground menu review | Browsers without CSS anchor positioning (Firefox before 147) open the menu's panels at the viewport's top-left and the phone menu over the bar; still usable. Position them from the invoker when `position-area` isn't supported | next |
 | Playground menu review | The phone menu is anchored to the Menu button, 12 px above the bar's bottom edge: seat it under the bar (`mt-3` below `lg`) | next |

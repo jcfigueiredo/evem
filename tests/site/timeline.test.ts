@@ -5,6 +5,7 @@ import {
   describeEntry,
   groupRuns,
   groupSummary,
+  openByDefault,
   isAtEnd,
   keepHistory,
   latestConnectionState,
@@ -411,6 +412,26 @@ describe('groupRuns', () => {
     expect(texts(groupRuns(rows, [{ at: 0 }]))).toEqual([['▶ Scroll', 'publish s', 'publish s']]);
   });
 
+  it("keeps what the code printed after its action's run with that action: only its code could have", () => {
+    const rows = [
+      row('action', '▶ Type', 0, 0),
+      { ...row('publish', 'publish typed', 0, 0), publish: 1 },
+      row('call', 'search ran later', 0, 300, 'search'),
+      row('log', 'searching', 0, 300),
+      row('error', 'error: late', 0, 310),
+      { ...row('publish', 'publish server.tick', 0, 900), publish: 2 }
+    ];
+    const later = { ...rows[2]!, publish: 1 };
+    expect(texts(groupRuns([rows[0]!, rows[1]!, later, ...rows.slice(3)], [{ at: 0, end: 10 }]))).toEqual([
+      ['▶ Type', 'publish typed', 'search ran later', 'searching', 'error: late'],
+      ['publish server.tick']
+    ]);
+  });
+
+  it('leaves what was printed before any action on its own', () => {
+    expect(texts(groupRuns([row('log', 'starting', 0, 0)], []))).toEqual([['starting']]);
+  });
+
   it('starts with what is left of a publish the reader cleared the top of', () => {
     const rows = [row('call', 'x ran', 1, 5, 'x'), row('publish', 'publish b', 0, 6)];
     expect(texts(groupRuns(rows, []))).toEqual([['x ran'], ['publish b']]);
@@ -468,5 +489,24 @@ describe('keepsFollowingTop', () => {
     expect(keepsFollowingTop({ scrollTop: 10, scrollHeight: 900, clientHeight: 300 }, false)).toBe(true);
     expect(keepsFollowingTop({ scrollTop: 200, scrollHeight: 900, clientHeight: 300 }, true)).toBe(false);
     expect(keepsFollowingTop({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 }, false)).toBe(false);
+  });
+});
+
+describe('openByDefault', () => {
+  const group = (...rows: TimelineRow[]) => ({ rows });
+  const action = group(row('action', '▶ Run', 0, 0), row('publish', 'publish a', 0, 0));
+  const tick = (at: number) => group(row('publish', 'publish tick', 0, at), row('call', 'tick ran', 1, at, 'tick'));
+  const alone = group(row('log', 'later', 0, 50));
+
+  it('opens the latest action until the next one, and the newest of what came after it', () => {
+    expect([...openByDefault([tick(1), action, tick(60), tick(70)])].sort()).toEqual([1, 3]);
+  });
+
+  it("doesn't let a single row (nothing to fold) close the run above it", () => {
+    expect([...openByDefault([action, alone])]).toEqual([0]);
+  });
+
+  it('opens only the newest group of a stream with no action yet', () => {
+    expect([...openByDefault([tick(1), tick(2), tick(3)])]).toEqual([2]);
   });
 });

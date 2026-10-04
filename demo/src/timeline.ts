@@ -163,12 +163,16 @@ export interface RowGroup {
 /**
  * The rows in groups, in order: an action with everything that happened until its run ended (`runs`), so a run reads
  * from cause to effect; outside an action, each top-level row with the rows under it. Rows that belong to a publish
- * (its subscribers, its result) join its group, even when other rows came in between.
+ * (its subscribers, its result, a debounced call) join its group, even when other rows came in between, and what the
+ * code printed outside any publish after an action's run joins that action.
  */
 export function groupRuns(rows: readonly TimelineRow[], runs: readonly ActionRun[]): RowGroup[] {
   const groups: RowGroup[] = [];
   const byPublish = new Map<number, RowGroup>();
   let action: { group: RowGroup; end: number } | undefined;
+  // The latest action's group, even after its run ended: what the code prints later (a debounced callback, the rest of
+  // an async one after its timeout) belongs to it, since only its code could have printed it
+  let latestAction: RowGroup | undefined;
   const place = (group: RowGroup, row: TimelineRow) => {
     group.rows.push(row);
     if (row.kind === 'publish' && row.publish !== undefined) byPublish.set(row.publish, group);
@@ -184,18 +188,34 @@ export function groupRuns(rows: readonly TimelineRow[], runs: readonly ActionRun
     if (row.kind === 'action') {
       const run = runs.find(candidate => candidate.at === row.at);
       action = { group: start(row), end: run?.end ?? Number.POSITIVE_INFINITY };
+      latestAction = action.group;
     } else if (owner && row.kind !== 'publish') {
       place(owner, row);
     } else if (row.depth > 0 && groups.length > 0) {
       place(groups.at(-1)!, row);
     } else if (action && row.at <= action.end) {
       place(action.group, row);
+    } else if (latestAction && row.publish === undefined && (row.kind === 'log' || row.kind === 'error')) {
+      place(latestAction, row);
     } else {
       action = undefined;
       start(row);
     }
   }
   return groups;
+}
+
+/**
+ * Which groups (indexes) are open until the reader says otherwise: the latest action's, until the next action, and
+ * the newest group that has something to fold (a stream's latest event, a response that came late). A single row
+ * isn't a fold, so it never closes the run above it.
+ */
+export function openByDefault(groups: readonly RowGroup[]): Set<number> {
+  const last = (matches: (group: RowGroup) => boolean) => {
+    for (let index = groups.length - 1; index >= 0; index--) if (matches(groups[index]!)) return [index];
+    return [];
+  };
+  return new Set([...last(group => group.rows[0]?.kind === 'action'), ...last(group => group.rows.length > 1)]);
 }
 
 /** Names as a sentence lists them: `a`, `a and b`, `a, b and c`, `a, b, c and 2 more` */

@@ -25,6 +25,7 @@ import {
   groupItems,
   outputLegend,
   replaceKeepingFocus,
+  restoreFocus,
   startedOver,
   tabList,
   timelineItem,
@@ -211,7 +212,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     historyList.hidden = history.length === 0;
     setupFold.hidden = setupEntries.length === 0;
     setupSummaryLine.textContent = setupSummary(setupEntries);
-    setupList.replaceChildren(...timelineRows(setupEntries).map(timelineItem));
+    setupList.replaceChildren(...timelineRows(setupEntries).map(row => timelineItem(row, `${scope}:setup`)));
     replaceKeepingFocus(timeline, groupItems(groupRuns(rows, session.trace.runs), folds, scope));
     if (rows.length === 0) {
       const first = session.actions[0];
@@ -278,6 +279,8 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   const runAction = async (id: string) => {
     const token = gate.start();
     if (token === undefined) return;
+    // Disabling the control the reader used drops keyboard focus: it goes back there after the run
+    const focused = document.activeElement;
     for (const control of actions.querySelectorAll<HTMLButtonElement | HTMLInputElement>('button, input'))
       control.disabled = true;
     editor.setRunsEnabled(false);
@@ -288,6 +291,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
         for (const control of actions.querySelectorAll<HTMLButtonElement | HTMLInputElement>('button, input'))
           control.disabled = false;
         editor.setRunsEnabled(true);
+        restoreFocus(focused);
       }
     }
   };

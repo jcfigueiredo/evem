@@ -3,7 +3,7 @@ import type { Action, ControlValue } from '../engine/program';
 import { numberInput, optionLabel, type Control, type Scenario } from '../engine/session';
 import type { TraceEntry } from '../engine/trace';
 import type { WireEntry } from '../fakes/wire';
-import { groupFacts, type RowGroup, type TimelineRow, type Tone } from '../timeline';
+import { groupFacts, openByDefault, type RowGroup, type TimelineRow, type Tone } from '../timeline';
 import { toggleState } from '../toggles';
 
 // Full class names, so Tailwind finds them in the source
@@ -134,7 +134,7 @@ function timeOf(row: TimelineRow): string {
  * One timeline row: a status dot in its tone, the text, its detail (data, in short) and its time. What the code
  * logged (a plain log) reads as console output, set apart from EvEm's own steps.
  */
-export function timelineItem(row: TimelineRow): HTMLElement {
+export function timelineItem(row: TimelineRow, scope = ''): HTMLElement {
   const indent = `margin-inline-start: ${row.depth * 1.25}rem`;
   const time = el('span', { class: 'text-xs whitespace-nowrap text-base-content/60 ms-2' }, [timeOf(row)]);
   if (row.kind === 'log' && row.tone === 'neutral') {
@@ -156,7 +156,7 @@ export function timelineItem(row: TimelineRow): HTMLElement {
       'aria-hidden': 'true'
     }),
     el('span', { class: 'font-mono text-sm break-words whitespace-pre-wrap' }, [row.text]),
-    row.detail ? detailButton(row) : null,
+    row.detail ? detailButton(row, scope) : null,
     time
   ]);
 }
@@ -169,8 +169,9 @@ const rowKey = (row: TimelineRow) => `${row.at}:${row.publish ?? ''}:${row.kind}
  * A row's data, on one line cut off with an ellipsis (JSON breaking mid-word is hard to read on a phone); pressing it
  * shows all of it, wrapped, and pressing it again folds it back
  */
-function detailButton(row: TimelineRow): HTMLElement {
-  const key = `detail:${rowKey(row)}`;
+function detailButton(row: TimelineRow, scope: string): HTMLElement {
+  // By scope too: a restarted scenario's clock and publish ids start again, so rows of two runs could look alike
+  const key = `detail:${scope}:${rowKey(row)}`;
   const open = openDetails.has(key);
   const button = el(
     'button',
@@ -384,6 +385,12 @@ export function outputLegend(id: string): { button: HTMLElement; popover: HTMLEl
   return { button, popover };
 }
 
+/** Put keyboard focus back on `element` after a run disabled it, unless the reader has moved on (or it's gone) */
+export function restoreFocus(element: Element | null): void {
+  if (element instanceof HTMLElement && element.isConnected && document.activeElement === document.body)
+    element.focus();
+}
+
 /**
  * A scenario's actions as controls: a button per action (the first one the main one), except the pairs its switches
  * run (`Scenario.toggles`, while the code still has both actions), which are switches in a row of their own.
@@ -430,9 +437,9 @@ export function actionControls(
 
 /**
  * Timeline groups (chronological, as `groupRuns` makes them) as list items, newest first. A group of one row is that
- * row; a longer one is a fold: its header, and when folded, what it caused. Folds are open for the newest group (with
- * `openNewest`) and closed for the others, unless the reader changed one: `folds` remembers that by `scope` and the
- * group's header, so the list can be rebuilt as it grows.
+ * row; a longer one is a fold: its header, and when folded, what it caused. With `openNewest`, folds are open as
+ * `openByDefault` says (the latest action's, and the newest), closed otherwise, unless the reader changed one: `folds`
+ * remembers that by `scope` and the group's header, so the list can be rebuilt as it grows.
  */
 export function groupItems(
   groups: readonly RowGroup[],
@@ -440,25 +447,28 @@ export function groupItems(
   scope: string,
   openNewest = true
 ): HTMLElement[] {
+  const opened = openNewest ? openByDefault(groups) : new Set<number>();
   return groups
     .map((group, index) => {
       const [header, ...rest] = group.rows;
       if (!header) return undefined;
-      if (rest.length === 0) return timelineItem(header);
+      if (rest.length === 0) return timelineItem(header, scope);
       const key = `${scope}:${header.at}:${header.publish ?? ''}:${header.text}`;
-      const byDefault = openNewest && index === groups.length - 1;
-      const summary = el('summary', { class: 'cursor-pointer list-none rounded', 'data-key': key }, [
+      const byDefault = opened.has(index);
+      // A highlight on hover says it opens; the chevron at its end says which way
+      const summary = el('summary', { class: 'cursor-pointer list-none rounded hover:bg-base-200', 'data-key': key }, [
         el('span', {
           class: `status ${TONE_CLASS[header.tone]} absolute -start-[0.3rem] top-[0.45rem] signal-glow`,
           'aria-hidden': 'true'
         }),
         el('span', { class: 'font-mono text-sm break-words whitespace-pre-wrap' }, [header.text]),
-        // Not a button: a fold's header is one already
+        // Not a button: a fold's header is one already. Cut off while folded, all of it once open
         header.detail
           ? el(
               'span',
               {
-                class: 'ms-2 inline-block max-w-full truncate align-bottom font-mono text-xs text-base-content/70',
+                class:
+                  'ms-2 inline-block max-w-full truncate align-bottom font-mono text-xs text-base-content/70 group-open:break-all group-open:whitespace-pre-wrap',
                 title: header.detail
               },
               [header.detail]
@@ -476,7 +486,11 @@ export function groupItems(
       ]);
       const details = el('details', { class: 'group', 'data-fold': key }, [
         summary,
-        el('ol', { class: 'mt-1.5 space-y-1.5' }, rest.map(timelineItem))
+        el(
+          'ol',
+          { class: 'mt-1.5 space-y-1.5' },
+          rest.map(row => timelineItem(row, scope))
+        )
       ]);
       details.open = folds.get(key) ?? byDefault;
       // Only the reader's own changes are kept (setting `open` above fires toggle too, with the value just set)

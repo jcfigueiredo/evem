@@ -12,6 +12,7 @@ import {
   controlField,
   groupItems,
   replaceKeepingFocus,
+  restoreFocus,
   tabList,
   wireItem,
   type Tab
@@ -223,6 +224,8 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
     const token = gate.start();
     if (token === undefined) return;
     acted();
+    // Disabling the control the reader used drops keyboard focus: it goes back there after the run
+    const focused = document.activeElement;
     for (const control of actions.querySelectorAll<HTMLButtonElement | HTMLInputElement>(
       'button:not([data-server-control]), input'
     ))
@@ -238,6 +241,7 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
         ))
           control.disabled = false;
         void editor?.then(view => view.setRunsEnabled(true));
+        restoreFocus(focused);
       }
     }
   };
