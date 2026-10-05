@@ -20,6 +20,7 @@
 - [Server events over WebSocket](websocket-server-events.md): the message format servers send, with examples
 - [Server-Sent Events adapter](sse-adapter.md): `SseHandler`, its transports, reconnection, resuming, heartbeats, backpressure, and the server helpers
 - [SSE servers in Python](sse-python.md): a copy-in helper for the standard library, FastAPI and Flask
+- [DOM bridge](dom.md): EvEm events to and from DOM events, for Alpine, htmx and `addEventListener`
 
 ## Working on EvEm
 
