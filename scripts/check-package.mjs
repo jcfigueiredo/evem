@@ -52,7 +52,9 @@ try {
       'dist/sse/server.js',
       'dist/sse/server.d.ts',
       'dist/dom/index.js',
-      'dist/dom/index.d.ts'
+      'dist/dom/index.d.ts',
+      'dist/alpine/index.js',
+      'dist/alpine/index.d.ts'
     ]) {
       if (!files.includes(required)) throw new Error(`missing ${required}; packed: ${files.join(', ')}`);
     }
@@ -74,6 +76,7 @@ try {
       import { SseHandler, SseParser } from "${pkg.name}/sse";
       import { formatSseMessage, SSE_HEADERS } from "${pkg.name}/sse/server";
       import { bridgeToDom, bridgeFromDom } from "${pkg.name}/dom";
+      import { evemAlpine } from "${pkg.name}/alpine";
       const evem = new EvEm();
       let received;
       evem.subscribe("user.*", data => { received = data; });
@@ -92,6 +95,10 @@ try {
       bridgeFromDom(evem, "ui.ready", { target });
       await evem.publish("user.login", { id: 2 });
       if (bridged[0]?.id !== 2) throw new Error("DOM bridge did not dispatch");
+      const magics = {};
+      evemAlpine(evem)({ magic: (name, build) => { magics[name] = build; }, store: () => undefined });
+      const sub = magics.evem(null, { cleanup: () => {} }).on("user.*", () => {});
+      if (typeof sub.unsubscribe !== "function") throw new Error("Alpine plugin did not subscribe");
     `;
     run(process.execPath, ['--input-type=module', '-e', script], consumer);
   });
@@ -103,7 +110,8 @@ try {
       const { SseHandler } = require("${pkg.name}/sse");
       const { formatSseMessage } = require("${pkg.name}/sse/server");
       const { bridgeToDom } = require("${pkg.name}/dom");
-      for (const value of [EvEm, WebSocketHandler, SseHandler, formatSseMessage, bridgeToDom]) {
+      const { evemAlpine } = require("${pkg.name}/alpine");
+      for (const value of [EvEm, WebSocketHandler, SseHandler, formatSseMessage, bridgeToDom, evemAlpine]) {
         if (typeof value !== "function") throw new Error("missing export");
       }
     `;
@@ -128,9 +136,12 @@ try {
         import { SseHandler, type SseEvents, type SseHandlerOptions } from "${pkg.name}/sse";
         import { formatSseMessage, type SseMessage } from "${pkg.name}/sse/server";
         import { bridgeToDom, type DomBridgeOptions } from "${pkg.name}/dom";
+        import { evemAlpine, type AlpineLike, type EvemStore } from "${pkg.name}/alpine";
         const evem = new EvEm();
         const bridgeOptions: DomBridgeOptions = { target: new EventTarget(), rename: name => name.replaceAll(".", ":") };
         const stopBridge: () => void = bridgeToDom(evem, ["server.*"], bridgeOptions);
+        const plugin: (Alpine: AlpineLike) => void = evemAlpine(evem, { sse: new SseHandler("/live", evem, { autoConnect: false }) });
+        const storeShape: EvemStore = { state: "connected", ready: true };
         evem.subscribe<{ id: number }>("user.login", user => { user.id.toFixed(); });
         const history: EventRecord<{ id: number }>[] = evem.getEventHistory();
         const leakOptions: Partial<MemoryLeakOptions> = { threshold: 20 };
@@ -145,7 +156,7 @@ try {
           { fetch: async (input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init) },
           { fetch: async (url: string) => new Response(url) },
         ];
-        export { history, leakOptions, options, sse, wire, failure, fetches, ErrorPolicy, WebSocketHandler, stopBridge };
+        export { history, leakOptions, options, sse, wire, failure, fetches, ErrorPolicy, WebSocketHandler, stopBridge, plugin, storeShape };
       `
         );
         writeFileSync(

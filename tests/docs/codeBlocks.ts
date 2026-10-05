@@ -18,7 +18,8 @@ export const TYPESCRIPT_DOCS = [
   'docs/websocket-server-events.md',
   'docs/sse-adapter.md',
   'docs/sse-python.md',
-  'docs/dom.md'
+  'docs/dom.md',
+  'docs/alpine.md'
 ] as const;
 
 export type TypeScriptDoc = (typeof TYPESCRIPT_DOCS)[number];

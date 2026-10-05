@@ -21,6 +21,7 @@
 - [Server-Sent Events adapter](sse-adapter.md): `SseHandler`, its transports, reconnection, resuming, heartbeats, backpressure, and the server helpers
 - [SSE servers in Python](sse-python.md): a copy-in helper for the standard library, FastAPI and Flask
 - [DOM bridge](dom.md): EvEm events to and from DOM events, for Alpine, htmx and `addEventListener`
+- [Alpine.js plugin](alpine.md): `$evem` in templates, with subscriptions that end with their element, and the connection in `$store.evem`
 
 ## Working on EvEm
 
