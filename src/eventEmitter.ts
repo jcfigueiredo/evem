@@ -29,9 +29,12 @@ const SCHEMA_THROW = Symbol('schemaThrow');
 
 const isSchemaThrow = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && (error as Record<symbol, unknown>)[SCHEMA_THROW] === true;
-/** A subscription's priority as a number: 'high' is 100, 'normal' 0, 'low' -100; numbers as they are */
+/**
+ * A subscription's priority as a number: 'high' is 100, 'normal' 0, 'low' -100; numbers as they are, except NaN,
+ * which counts as normal (it can't be ordered)
+ */
 function priorityValue(priority: number | PriorityLevel | Priority | undefined): number {
-  if (typeof priority === 'number') return priority;
+  if (typeof priority === 'number') return Number.isNaN(priority) ? 0 : priority;
   return priority === 'high' ? 100 : priority === 'low' ? -100 : 0;
 }
 
