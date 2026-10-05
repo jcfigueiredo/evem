@@ -145,9 +145,15 @@ Medium–large: about a day of types and type tests, plus the docs (a guide page
 
 Order: after the separator option, since the types take the separator as a parameter.
 
-## Open questions
+## Decisions
 
-1. **The separator in types:** given twice (`EvEm<AppEvents, ':'>` and the option), or declared in the map so the constructor needs it once?
-2. **Cancelable events:** subscribers annotate, or the map declares them (`Cancelable<T>`) and `publish` requires `{ cancelable: true }` for them? I recommend the map.
-3. **Events without data:** keep `{}` (typed as such), or deliver `undefined` (a behavior change; `{}` stays for cancelable publishes)? I recommend `undefined`.
-4. **The runtime list:** `defineEvents` as proposed, or a plain array of names checked against the interface (`eventNames<AppEvents>()(['task.opened', …])`, with a type error if one is missing)? The first declares everything once; the second keeps interfaces as the source.
+Agreed in review, as recommended:
+
+1. **The separator is declared once, and the compiler keeps it in step.**
+   - **With `defineEvents`** (the recommended path), the separator is a runtime value given with the events: `defineEvents({ … }, { separator: ':' })`. `new EvEm({ events: appEvents })` infers both the map and the separator from it, so there's one source and nothing to keep in sync.
+   - **With an interface**, the map declares it (`[separator]: ':'`). The constructor's `separator` option is then required, and must equal it: `new EvEm<AppEvents>()` is a compile error when the map says `':'`. It's written twice, but it can't be forgotten or drift.
+   - **Without a map**, `new EvEm({ separator: ':' })` infers it.
+   - **The adapters' maps** (`SseEvents`, `WebSocketEvents`) are written with dots. With another separator, their keys are rewritten at the type level, since the adapters then publish `sse:error` rather than `sse.error`.
+2. **Cancelable events are declared in the map** (`Cancelable<T>`). Their subscribers get `cancel()` and `canceled` typed, and `publish` requires `{ cancelable: true }` for them.
+3. **Events without data are delivered as `undefined`.** `{}` stays only for cancelable publishes, which need an object to cancel. This is a behavior change, for the changelog.
+4. **The runtime list comes from `defineEvents`.** Interfaces stay supported without it, and the development warnings then can't run.
