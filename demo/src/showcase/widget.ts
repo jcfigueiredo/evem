@@ -143,6 +143,7 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
   const folds = new Map<string, boolean>();
   let traces = 0;
   let foldedTrace: unknown;
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- an adapter's card and a feature's render different outputs; to split
   const render = () => {
     if (session.trace !== foldedTrace) {
       foldedTrace = session.trace;

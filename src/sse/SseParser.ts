@@ -55,6 +55,7 @@ export class SseParser {
   /**
    * Parse the next chunk of the stream
    */
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- the WHATWG line loop, kept as the spec's algorithm reads
   feed(chunk: string): void {
     // An empty chunk changes nothing (and mustn't forget a CR that ended the previous chunk)
     if (chunk.length === 0) {

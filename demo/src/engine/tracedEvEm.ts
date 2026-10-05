@@ -411,6 +411,7 @@ export function createTracedEvEm(
     }
 
     /** For every subscription that matched the (final) event but didn't run, say why */
+    // eslint-disable-next-line sonarjs/cognitive-complexity -- one reason per kind of skip, each with its own condition
     private recordSkips(state: PublishState, result: boolean | 'rejected'): void {
       for (const subscription of state.live) {
         if (state.called.has(subscription.id) || !matchesPattern(this, state.event, subscription.pattern)) continue;

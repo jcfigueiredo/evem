@@ -32,6 +32,7 @@ export function connectionStatus(open: number, states: readonly string[]): strin
  * `startOver(label)`, called just before the scenario starts over, keeps what the log shows above a divider;
  * `clear()` empties it.
  */
+// eslint-disable-next-line complexity -- builds the whole tab; each optional control (samples, local server, statuses) is a branch
 export function serverPane(
   session: ScenarioSession,
   onLocalServer: (local: boolean) => Promise<void>

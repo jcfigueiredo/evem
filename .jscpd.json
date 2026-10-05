@@ -1,0 +1,9 @@
+{
+  "path": ["src", "demo/src", "scripts"],
+  "format": ["typescript", "javascript"],
+  "minTokens": 50,
+  "threshold": 1,
+  "reporters": ["console"],
+  "gitignore": true,
+  "absolute": false
+}

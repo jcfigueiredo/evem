@@ -165,6 +165,7 @@ async function confirm(question) {
   }
 }
 
+// eslint-disable-next-line complexity, sonarjs/cognitive-complexity -- the release steps in order, each with the check that stops it
 async function main(argv) {
   const options = argv.filter(arg => arg.startsWith('-'));
   const positional = argv.filter(arg => !arg.startsWith('-'));

@@ -609,22 +609,35 @@ class EvEm implements IEventEmitter {
   ): WrappedCallback<T> {
     return (args: T) => {
       const timerId = `debounce_${event}_${subscriptionId}`;
-
-      // Clear any existing timer for this callback
-      if (this.debounceTimers.has(timerId)) {
-        clearTimeout(this.debounceTimers.get(timerId));
-      }
-
-      // Set a new timer
-      const timer = setTimeout(() => {
-        this.debounceTimers.delete(timerId);
-        // Execute the callback directly; there's no publish to report errors to anymore
-        this.invokeDetached(callback, args, `Error in debounced handler for "${event}":`);
-      }, debounceTime);
-
-      this.debounceTimers.set(timerId, timer);
-      return SKIPPED;
+      this.clearDebounce(timerId);
+      return this.scheduleDebounce(timerId, callback, args, event, debounceTime);
     };
+  }
+
+  /** Cancel a debounced call that hasn't run yet, if there is one */
+  private clearDebounce(timerId: string): void {
+    if (this.debounceTimers.has(timerId)) {
+      clearTimeout(this.debounceTimers.get(timerId));
+    }
+  }
+
+  /**
+   * Run the callback with `args` after `debounceTime`, unless another event restarts the timer first. It runs
+   * detached: there's no publish to report its errors to anymore, so they're logged. The publish skips it for now.
+   */
+  private scheduleDebounce<T>(
+    timerId: string,
+    callback: WrappedCallback<T>,
+    args: T,
+    event: string,
+    debounceTime: number
+  ): typeof SKIPPED {
+    const timer = setTimeout(() => {
+      this.debounceTimers.delete(timerId);
+      this.invokeDetached(callback, args, `Error in debounced handler for "${event}":`);
+    }, debounceTime);
+    this.debounceTimers.set(timerId, timer);
+    return SKIPPED;
   }
 
   /**
@@ -654,24 +667,14 @@ class EvEm implements IEventEmitter {
         shouldProcessNow = true;
       }
 
-      // Clear any existing debounce timer
-      if (this.debounceTimers.has(timerId)) {
-        clearTimeout(this.debounceTimers.get(timerId));
-      }
+      // A pending debounced call is replaced, whether this event runs now or later
+      this.clearDebounce(timerId);
 
-      // If it should process now due to throttle, do it immediately
+      // If it should process now due to throttle, do it immediately; otherwise, debounce it
       if (shouldProcessNow) {
         return callback(args);
       }
-
-      // Otherwise, debounce it
-      const timer = setTimeout(() => {
-        this.debounceTimers.delete(timerId);
-        this.invokeDetached(callback, args, `Error in debounced handler for "${event}":`);
-      }, debounceTime);
-
-      this.debounceTimers.set(timerId, timer);
-      return SKIPPED;
+      return this.scheduleDebounce(timerId, callback, args, event, debounceTime);
     };
   }
 
@@ -982,6 +985,7 @@ class EvEm implements IEventEmitter {
     return keys.length === 2 && 'event' in result && 'data' in result && typeof result.event === 'string';
   }
 
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- the subscriber loop stays here so only promises are awaited (see the comment in it)
   async publish<T = unknown>(event: string, args?: T, options?: PublishOptions | number): Promise<boolean> {
     if (!event) {
       return Promise.reject(new Error('Event name cannot be empty.'));
@@ -1037,6 +1041,7 @@ class EvEm implements IEventEmitter {
           // An async transform is awaited here, as the callback is, so the next subscriber runs as soon as it settles
           const transforming = this.applyTransform(transform, run);
           if (transforming) {
+            // eslint-disable-next-line max-depth -- an async transform's errors are the transform's (see publish)
             try {
               this.settleTransform(await transforming, run);
             } catch (error) {

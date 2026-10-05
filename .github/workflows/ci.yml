@@ -21,6 +21,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
+      # Complexity and repeated code (eslint.config.js), and duplication between files (.jscpd.json)
+      - run: pnpm lint
+      - run: pnpm duplication
       - run: pnpm typecheck
       - run: pnpm test:nowatch
       # Builds, packs and installs the package, then imports and type-checks it like a user would
