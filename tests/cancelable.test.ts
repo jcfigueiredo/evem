@@ -251,3 +251,17 @@ describe('Cancelable events - preserving the payload', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('Cancelable events - objects that are proxied', () => {
+  test("answer 'cancel' in data and 'canceled' in data, as plain objects do", async () => {
+    const emitter = new EvEm();
+    const seen: boolean[] = [];
+    emitter.subscribe('when', (data: Date) => {
+      seen.push('cancel' in data, 'canceled' in data, 'getTime' in data, 'nope' in data);
+    });
+
+    await emitter.publish('when', new Date(0), { cancelable: true });
+
+    expect(seen).toEqual([true, true, true, false]);
+  });
+});

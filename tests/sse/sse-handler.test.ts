@@ -632,3 +632,69 @@ describe('SseHandler', () => {
     });
   });
 });
+
+describe('SseHandler - setup and connection edge cases', () => {
+  const tick = async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('throws a TypeError when there is no global fetch and no fetch option', () => {
+    vi.stubGlobal('fetch', undefined);
+    expect(() => new SseHandler('https://api.test/events', new EvEm(), { autoConnect: false })).toThrow(TypeError);
+    expect(() => new SseHandler('https://api.test/events', new EvEm(), { autoConnect: false })).toThrow(
+      'There is no global fetch: pass the fetch option.'
+    );
+  });
+
+  it('reports an EventSource connection that failed for good as sse.error, with what failed', async () => {
+    const evem = new EvEm();
+    const transport = new FakeTransport();
+    const errors: Array<{ reason: string; error: Error }> = [];
+    evem.subscribe('sse.error', (error: { reason: string; error: Error }) => {
+      errors.push(error);
+    });
+    const handler = new SseHandler('https://api.test/events', evem, { transport, reconnect: false });
+    await tick();
+    transport.open();
+    transport.end({ reason: 'failed' });
+    await tick();
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.reason).toBe('failed');
+    expect(errors[0]!.error.message).toBe('EventSource connection failed');
+    await handler.disconnect();
+  });
+
+  it('does nothing on connect() while it is already connecting or connected', async () => {
+    const transport = new FakeTransport();
+    const handler = new SseHandler('https://api.test/events', new EvEm(), { transport });
+    await tick();
+    transport.open();
+
+    handler.connect();
+    await tick();
+
+    expect(transport.connections).toHaveLength(1);
+    await handler.disconnect();
+  });
+
+  it('makes no request when a state handler disconnects it as it starts connecting', async () => {
+    const evem = new EvEm();
+    const transport = new FakeTransport();
+    const handler = new SseHandler('https://api.test/events', evem, { transport, autoConnect: false });
+    evem.subscribe('sse.connection.state', ({ to }: { to: string }) => {
+      if (to === 'connecting') void handler.disconnect();
+    });
+
+    handler.connect();
+    await tick();
+
+    expect(transport.connections).toHaveLength(0);
+    expect(handler.getConnectionState()).toBe('disconnected');
+  });
+});

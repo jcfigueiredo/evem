@@ -210,3 +210,33 @@ describe('FetchSseTransport - id-only messages', () => {
     expect(order).toEqual(['event a (5)', 'id 6', 'event b (7)']);
   });
 });
+
+describe('FetchSseTransport - Retry-After as an HTTP date', () => {
+  it.each([
+    ['30 s from now', 30_000, 30_000],
+    ['in the past', -60_000, 0]
+  ])('waits until the date: %s', async (_case, offset, expected) => {
+    const now = Date.UTC(2026, 9, 4, 12, 0, 0);
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    const retryAfter = new Date(now + offset).toUTCString();
+    const { fetch } = createFakeFetch(() => ({ status: 503, headers: { 'retry-after': retryAfter } }));
+    const { listener } = recordingListener();
+
+    await expect(
+      new FetchSseTransport({ fetch }).connect({ url: 'https://api.test/events' }, listener)
+    ).resolves.toEqual({
+      reason: 'http-error',
+      status: 503,
+      retryAfter: expected
+    });
+    vi.restoreAllMocks();
+  });
+
+  it('ignores a Retry-After that is neither seconds nor a date', async () => {
+    const { fetch } = createFakeFetch(() => ({ status: 503, headers: { 'retry-after': 'soon' } }));
+    const { listener } = recordingListener();
+    const closed = await new FetchSseTransport({ fetch }).connect({ url: 'https://api.test/events' }, listener);
+    expect(closed).toEqual({ reason: 'http-error', status: 503 });
+    expect('retryAfter' in closed && closed.retryAfter !== undefined).toBe(false);
+  });
+});

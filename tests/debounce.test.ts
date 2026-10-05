@@ -166,3 +166,20 @@ describe('Event debouncing - filters run first and errors are contained', () => 
     expect(consoleErrorSpy).toHaveBeenCalled();
   });
 });
+
+describe('Throttle and debounce together - unsubscribing', () => {
+  test('cancels the debounced call still waiting, so it never runs', async () => {
+    vi.useFakeTimers();
+    const emitter = new EvEm();
+    const callback = vi.fn();
+    const id = emitter.subscribe('typing', callback, { throttleTime: 100, debounceTime: 50 });
+
+    await emitter.publish('typing', 'a'); // runs at once, opening the throttle window
+    await emitter.publish('typing', 'b'); // inside the window: debounced
+    emitter.unsubscribeById(id);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(callback.mock.calls).toEqual([['a']]);
+    vi.useRealTimers();
+  });
+});

@@ -1549,3 +1549,89 @@ describe.skipIf(typeof WebSocket === 'undefined')("WebSocketHandler with Node.js
     await handler.disconnect();
   }, 10_000);
 });
+
+describe('WebSocketHandler - errors from its options, and closing', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const openSocket = () => {
+    const socket = new MockWebSocket('wss://test.example.com');
+    socket.simulateOpen();
+    return socket;
+  };
+
+  it('calls onError when a socket cannot be created while reconnecting', async () => {
+    vi.useFakeTimers();
+    const onError = vi.fn();
+    const creationError = new Error('Cannot create socket');
+    const initial = openSocket();
+    const handler = new WebSocketHandler(initial, new EvEm(), {
+      reconnect: true,
+      reconnectDelay: 100,
+      maxReconnectAttempts: 1,
+      onError,
+      WebSocketConstructor: class {
+        constructor() {
+          throw creationError;
+        }
+      } as unknown as new (url: string) => MockWebSocket
+    });
+
+    initial.simulateClose(1006);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(onError).toHaveBeenCalledWith(creationError);
+    await handler.disconnect();
+  });
+
+  it('logs a messageFormatter that throws, and sends the next message', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const socket = openSocket();
+    let calls = 0;
+    const evem = new EvEm();
+    const handler = new WebSocketHandler(socket, evem, {
+      messageFormatter: data => {
+        if (calls++ === 0) throw new Error('cannot format');
+        return JSON.stringify(data);
+      }
+    });
+
+    await evem.publish('ws.send', { n: 1 });
+    await evem.publish('ws.send', { n: 2 });
+
+    expect(error).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ message: 'cannot format' }));
+    expect(socket.sentMessages).toEqual(['{"n":2}']);
+    await handler.disconnect();
+  });
+
+  it('calls onError with the parse error when an incoming message cannot be parsed', async () => {
+    const onError = vi.fn();
+    const socket = openSocket();
+    const handler = new WebSocketHandler(socket, new EvEm(), { onError });
+
+    socket.simulateMessage('not json');
+
+    expect(onError).toHaveBeenCalledWith(expect.any(SyntaxError));
+    await handler.disconnect();
+  });
+
+  it('rejects a request made after disconnect()', async () => {
+    const handler = new WebSocketHandler(openSocket(), new EvEm());
+    await handler.disconnect();
+
+    await expect(handler.request('users.get')).rejects.toThrow('WebSocketHandler is disconnected');
+  });
+
+  it('finishes disconnecting when the socket throws on close()', async () => {
+    const socket = openSocket();
+    socket.close = () => {
+      throw new Error('cannot close');
+    };
+    const handler = new WebSocketHandler(socket, new EvEm());
+
+    await expect(handler.disconnect()).resolves.toBeUndefined();
+    expect(handler.getConnectionState()).toBe('disconnected');
+  });
+});
