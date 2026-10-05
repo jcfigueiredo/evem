@@ -377,3 +377,17 @@ describe('Middleware - payloads shaped like a reroute', () => {
     expect(newHandler).toHaveBeenCalledWith({ value: 1 });
   });
 });
+
+describe('Middleware - results that are not objects', () => {
+  it('replaces the data with a primitive result instead of rerouting', async () => {
+    const evem = new EvEm();
+    const received: unknown[] = [];
+    evem.use(() => 42);
+    evem.subscribe('count', data => {
+      received.push(data);
+    });
+
+    expect(await evem.publish('count', { n: 1 })).toBe(true);
+    expect(received).toEqual([42]);
+  });
+});

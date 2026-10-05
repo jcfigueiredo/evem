@@ -488,3 +488,16 @@ describe('RequestResponseManager - cleanup', () => {
     consoleWarnSpy.mockRestore();
   });
 });
+
+describe('RequestResponseManager - cleanup', () => {
+  it('rejects the requests still waiting for an answer', async () => {
+    const manager = new RequestResponseManager(new EvEm());
+    const first = manager.request('users.get', { id: 1 });
+    const second = manager.request('users.get', { id: 2 });
+
+    manager.cleanup();
+
+    await expect(first).rejects.toThrow('RequestResponseManager cleanup');
+    await expect(second).rejects.toThrow('RequestResponseManager cleanup');
+  });
+});

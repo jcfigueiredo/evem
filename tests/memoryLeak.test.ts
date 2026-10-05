@@ -192,3 +192,23 @@ describe('Memory Leak Detection', () => {
     expect(logged.filter(line => line.startsWith('- '))).toEqual(ids.map(id => `- ${id} (priority: 0)`));
   });
 });
+
+describe('Memory leak detection - turning it off', () => {
+  it('stops the warnings, and turned on again, warns again about an event it already warned about', () => {
+    const evem = new EvEm();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    evem.enableMemoryLeakDetection({ threshold: 2 });
+    for (let i = 0; i < 3; i++) evem.subscribe('click', () => {});
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    evem.disableMemoryLeakDetection();
+    evem.subscribe('click', () => {});
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    evem.enableMemoryLeakDetection({ threshold: 2 });
+    evem.subscribe('click', () => {});
+    expect(warn).toHaveBeenCalledTimes(2);
+    vi.restoreAllMocks();
+  });
+});

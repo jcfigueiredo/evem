@@ -102,3 +102,24 @@ describe('EventSourceSseTransport', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('EventSourceSseTransport - an EventSource that cannot be created', () => {
+  it('ends the connection as a network error, with what the constructor threw', async () => {
+    const thrown = new SyntaxError('Invalid URL');
+    class Throwing {
+      constructor() {
+        throw thrown;
+      }
+    }
+    const { listener } = recordingListener();
+    const transport = new EventSourceSseTransport({
+      EventSourceConstructor: Throwing as unknown as typeof MockEventSource
+    });
+
+    await expect(transport.connect({ url: 'not a url' }, listener)).resolves.toEqual({
+      reason: 'network-error',
+      error: thrown
+    });
+    expect(listener.open).not.toHaveBeenCalled();
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { EvEm } from '../../src/eventEmitter';
+import { ErrorPolicy, EvEm } from '../../src/eventEmitter';
 import { ConnectionManager } from '../../src/websocket/ConnectionManager';
 import type { ConnectionState, ConnectionStateChangeEvent } from '../../src/websocket/types';
 
@@ -383,5 +383,26 @@ describe('ConnectionManager - stateEvent option', () => {
 
     expect(sseHandler).toHaveBeenCalledWith(expect.objectContaining({ from: 'disconnected', to: 'connecting' }));
     expect(wsHandler).not.toHaveBeenCalled();
+  });
+});
+
+describe('ConnectionManager - disconnecting, and a state publish that rejects', () => {
+  it('says whether it is disconnecting', async () => {
+    const manager = new ConnectionManager(new EvEm());
+    expect(manager.isDisconnecting()).toBe(false);
+    await manager.transitionTo('disconnecting');
+    expect(manager.isDisconnecting()).toBe(true);
+    await manager.transitionTo('disconnected');
+    expect(manager.isDisconnecting()).toBe(false);
+  });
+
+  it('completes the transition even when publishing the state event rejects', async () => {
+    const evem = new EvEm();
+    const manager = new ConnectionManager(evem);
+    // A schema error with schemaErrorPolicy THROW always rejects the publish
+    evem.subscribe('ws.connection.state', () => {}, { schema: () => false, schemaErrorPolicy: ErrorPolicy.THROW });
+
+    await expect(manager.transitionTo('connected')).resolves.toBeUndefined();
+    expect(manager.getState()).toBe('connected');
   });
 });
