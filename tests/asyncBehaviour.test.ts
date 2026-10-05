@@ -9,8 +9,8 @@ describe('EvEm - Asynchronous Behavior Tests', () => {
   });
 
   test('should wait for all asynchronous callbacks to complete before resolving publish', async () => {
-    const asyncCallback1 = vi.fn<void[]>(async () => new Promise(resolve => setTimeout(resolve, 100)));
-    const asyncCallback2 = vi.fn<void[]>(async () => new Promise(resolve => setTimeout(resolve, 200)));
+    const asyncCallback1 = vi.fn<() => void>(async () => new Promise(resolve => setTimeout(resolve, 100)));
+    const asyncCallback2 = vi.fn<() => void>(async () => new Promise(resolve => setTimeout(resolve, 200)));
 
     emitter.subscribe('async.event', asyncCallback1);
     emitter.subscribe('async.event', asyncCallback2);
@@ -27,8 +27,8 @@ describe('EvEm - Asynchronous Behavior Tests', () => {
   test('should execute callbacks sequentially with cancelable events support', async () => {
     const callOrder: string[] = [];
 
-    const syncCallback = vi.fn<void[]>(() => callOrder.push('sync'));
-    const asyncCallback = vi.fn<void[]>(async () => {
+    const syncCallback = vi.fn<() => void>(() => callOrder.push('sync'));
+    const asyncCallback = vi.fn<() => void>(async () => {
       callOrder.push('before async');
       await new Promise(resolve => setTimeout(resolve, 100));
       callOrder.push('after async');
@@ -46,17 +46,17 @@ describe('EvEm - Asynchronous Behavior Tests', () => {
   test('should now execute callbacks sequentially with cancelable events support', async () => {
     const callOrder: string[] = [];
 
-    const syncCallback1 = vi.fn<void[]>(() => {
+    const syncCallback1 = vi.fn<() => void>(() => {
       callOrder.push('sync1');
     });
 
-    const asyncCallback = vi.fn<void[]>(async () => {
+    const asyncCallback = vi.fn<() => void>(async () => {
       callOrder.push('before async');
       await new Promise(resolve => setTimeout(resolve, 100));
       callOrder.push('after async');
     });
 
-    const syncCallback2 = vi.fn<void[]>(() => {
+    const syncCallback2 = vi.fn<() => void>(() => {
       callOrder.push('sync2');
     });
 

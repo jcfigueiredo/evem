@@ -39,10 +39,10 @@ The [Server-Sent Events adapter](sse-adapter.md) routes incoming messages with t
 
 ```bash
 npm install @jcfigueiredo/evem
-npm install ws   # Node.js 20 only: it has no global WebSocket (see Node.js below)
+npm install ws   # optional, in Node.js: for socket options the global WebSocket doesn't take (see Node.js below)
 ```
 
-The package is ES modules only and needs Node.js 20+ or a modern browser/bundler.
+The package is ES modules only and needs Node.js 22+ or a modern browser/bundler.
 
 ```typescript
 import { EvEm } from '@jcfigueiredo/evem';
@@ -101,7 +101,7 @@ Use **one `WebSocketHandler` per `EvEm` instance**. Two handlers on the same emi
 | `reconnect` | `false` | Reconnect after an unexpected close. Never happens after `disconnect()`. |
 | `reconnectDelay` | `1000` | Milliseconds to wait before each reconnection attempt. The delay is fixed; there is no backoff. |
 | `maxReconnectAttempts` | `5` | How many consecutive failed attempts are allowed before giving up. The count resets when a socket opens. |
-| `WebSocketConstructor` | global `WebSocket` | Class used to create sockets from a URL: for the URL you pass, and for every reconnection. Required in Node.js 20 when you pass a URL or enable `reconnect`. |
+| `WebSocketConstructor` | global `WebSocket` | Class used to create sockets from a URL: for the URL you pass, and for every reconnection. Set it when sockets need options the global `WebSocket` doesn't take, such as headers (see [Node.js](#nodejs)). |
 | `onError` | none | Called with an `Error` for socket errors, sockets that can't be created while reconnecting, and incoming messages that fail to parse. These are also published as `ws.error` / `ws.parse.error`. |
 | `messageParser` | `JSON.parse` | Turns each incoming `event.data` into a message object. |
 | `messageFormatter` | `JSON.stringify` | Turns each outgoing payload into the string that is sent. |
@@ -294,7 +294,7 @@ Two things to watch for:
 
 ## Node.js
 
-Node.js 22 and later have a global `WebSocket`, so a URL works as-is. Node.js 20 doesn't. On Node.js 20, a URL without `WebSocketConstructor` throws `ReferenceError: WebSocket is not defined`. Use the [`ws`](https://www.npmjs.com/package/ws) package instead:
+Node.js 22.4 and later have a global `WebSocket`, so a URL works as-is. For socket options it doesn't take, such as headers, use the [`ws`](https://www.npmjs.com/package/ws) package:
 
 ```typescript
 import WebSocket from 'ws';
@@ -326,7 +326,7 @@ process.on('SIGINT', async () => {
 });
 ```
 
-You can also pass a `ws` socket you created yourself: `new WebSocketHandler(socket, evem)`. If you also want reconnection, set `reconnect: true` and `WebSocketConstructor`. Reconnections create new sockets with `new WebSocketConstructor(socket.url)` (or the global `WebSocket` if it isn't set, and Node.js 20 has no global `WebSocket`), so options you gave your socket, like headers or protocols, aren't reused: use a subclass like `AuthenticatedSocket` above.
+You can also pass a `ws` socket you created yourself: `new WebSocketHandler(socket, evem)`. If you also want reconnection, set `reconnect: true` and `WebSocketConstructor`. Reconnections create new sockets with `new WebSocketConstructor(socket.url)` (or the global `WebSocket` if it isn't set), so options you gave your socket, like headers or protocols, aren't reused: use a subclass like `AuthenticatedSocket` above.
 
 ## Example: browser chat
 

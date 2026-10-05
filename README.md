@@ -1,6 +1,6 @@
 # EvEm 📢
 
-A small TypeScript event emitter with wildcards, priorities, middleware, flow control, schema validation and history, plus optional WebSocket and Server-Sent Events adapters. No dependencies; ESM; Node.js 20+ and modern browsers.
+A small TypeScript event emitter with wildcards, priorities, middleware, flow control, schema validation and history, plus optional WebSocket and Server-Sent Events adapters. No dependencies; ESM; Node.js 22+ and modern browsers.
 
 **[Showcase](https://jcfigueiredo.github.io/evem/)** · **[Playground](https://jcfigueiredo.github.io/evem/playground/)** (try every feature against the real library) · [Documentation](https://github.com/jcfigueiredo/evem/blob/main/docs/README.md) · [Changelog](https://github.com/jcfigueiredo/evem/blob/main/CHANGELOG.md)
 

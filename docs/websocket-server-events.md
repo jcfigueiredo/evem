@@ -299,7 +299,7 @@ wss.on('connection', (socket) => {
 });
 ```
 
-The client below works in browsers and in Node.js 22+. For Node.js 20, see [Node.js](websocket-adapter.md#nodejs).
+The client below works in browsers and in Node.js 22.4+. For socket options such as headers, see [Node.js](websocket-adapter.md#nodejs).
 
 ```typescript
 // client.ts

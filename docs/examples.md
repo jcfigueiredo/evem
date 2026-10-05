@@ -8,7 +8,7 @@ This document provides examples for the features of the EvEm library, illustrati
 npm install @jcfigueiredo/evem
 ```
 
-The package is ESM only, has no runtime dependencies and needs Node.js 20+ or a modern browser.
+The package is ESM only, has no runtime dependencies and needs Node.js 22+ or a modern browser.
 
 ```typescript
 import { EvEm } from "@jcfigueiredo/evem";
@@ -350,7 +350,7 @@ The adapter has its own entry point, `@jcfigueiredo/evem/websocket`. **`WebSocke
 - **Requests**: `handler.request(method, params?, options?)` sends a request and resolves with the server's response.
 - **Incoming messages**: `{ "event": "chat.message", "data": ... }` (or the older `{ "type": "chat.message", "data": ... }`) is published as `server.chat.message`, with `data` as the payload, and responses to requests settle `request()`. Messages with neither field go to `ws.message`, messages that aren't valid JSON to `ws.parse.error`, and socket errors to `ws.error`.
 
-In a browser, pass a URL. Node.js 20 has no global `WebSocket`, so there pass a socket (for example from the `ws` package) or a `WebSocketConstructor` option.
+Pass a URL: browsers and Node.js 22.4+ have a global `WebSocket`. To give the socket options the global one doesn't take (headers, say), pass a socket from the `ws` package, or a `WebSocketConstructor` option.
 
 ### Connecting with WebSocketHandler
 

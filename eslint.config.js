@@ -3,7 +3,7 @@ import sonarjs from 'eslint-plugin-sonarjs';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist/', 'demo/dist/', 'coverage/', 'node_modules/'] },
+  { ignores: ['dist/', 'demo/dist/', 'coverage/', 'node_modules/', '.stryker-tmp/', 'reports/'] },
   {
     files: ['src/**/*.ts', 'demo/src/**/*.ts', 'scripts/**/*.mjs'],
     languageOptions: { parser: tseslint.parser },

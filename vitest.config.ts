@@ -24,6 +24,8 @@ export default defineConfig({
       provider: 'v8',
       // The library's code, which the package ships (the demo's DOM code is checked in a browser, not by tests)
       include: ['src/**'],
+      // Vitest 4 matches include anywhere in the path, so demo/src/ would count too
+      exclude: ['demo/**'],
       // The HTML report goes to coverage/; the summary prints when the run ends
       reporter: ['html', 'text-summary']
     }

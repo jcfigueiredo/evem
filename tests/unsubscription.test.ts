@@ -1,5 +1,5 @@
 import { EvEm } from '~/eventEmitter';
-import { describe, test, expect, beforeEach, afterEach, vi, SpyInstance } from 'vitest';
+import { describe, test, expect, beforeEach, afterEach, vi, type MockInstance } from 'vitest';
 
 describe('EvEm - Unsubscription Tests', () => {
   let evem: EvEm;
@@ -98,7 +98,7 @@ describe('EvEm - Unsubscription Tests', () => {
 
   describe('EvEm - Unsubscription Tests for nonexistent events ', () => {
     let evem: EvEm;
-    let consoleWarnSpy: SpyInstance;
+    let consoleWarnSpy: MockInstance;
 
     beforeEach(() => {
       evem = new EvEm();
