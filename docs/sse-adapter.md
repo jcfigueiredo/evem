@@ -165,6 +165,7 @@ The `eventTypes`, `EventSourceConstructor` and `lastEventIdParam` options apply 
 | `maxReconnectAttempts` | `Infinity` | Reconnection attempts without a successful connection before giving up and publishing `sse.reconnect.failed`. |
 | `shouldReconnect` | [the defaults](#how-a-connection-ends) | `(info: SseReconnectInfo) => boolean`. Replaces the default decision of whether to reconnect. |
 | `heartbeatTimeout` | `0` (off) | Reconnect if the server takes longer than this many ms to respond, or if no bytes (comments included) arrive for this long once the stream is open. Not available with the EventSource transport. |
+| `readyEvent` | none | The event that shows the stream is live: its name as the server sends it (`'keepalive'`), or `(event) => boolean` on the raw event. After every (re)connection, the handler is ready once it arrives; without it, as soon as the stream opens. See [Waiting until the stream is live](#waiting-until-the-stream-is-live). |
 | `serverEventPrefix` | `'server'` | Prefix for server events (`order.updated` → `server.order.updated`). With `''`, events are published under their own names. |
 | `parseData` | `'json'` | How to read each event's data: `'json'`, `'text'`, or `(data, eventType) => unknown`. Failures are published as `sse.parse.error`. |
 | `unwrapEnvelope` | `true` | Publish unnamed `{ event, data }` messages as `<prefix>.<event>`. With `false`, all unnamed messages go to `sse.message`. |
@@ -183,6 +184,8 @@ With your own transport, the transport makes the request, so passing `headers`, 
 | `disconnect(): Promise<void>` | Aborts the connection and cancels any pending reconnect or heartbeat timer. Unless the state is already `disconnected`, it moves through `disconnecting` to `disconnected`, and the promise resolves once those state changes have been handled. The handler registers no subscriptions or middleware, so there's nothing else to remove. `connect()` works again afterwards. |
 | `isConnected(): boolean` | `true` while the state is `connected`. |
 | `getConnectionState(): ConnectionState` | `'disconnected'`, `'connecting'`, `'connected'`, `'reconnecting'` or `'disconnecting'`. |
+| `isReady(): boolean` | `true` while the stream is live: open, and with `readyEvent`, that event has arrived since it opened. `false` again while reconnecting. |
+| `whenReady(timeoutMs?): Promise<boolean>` | Resolves `true` once the stream is live (at once if it is), `false` if the handler stops first, isn't running, or `timeoutMs` passes. Without a timeout it waits through reconnections. |
 | `getLastEventId(): string \| undefined` | The id of the last event received (or the `lastEventId` option, until an event brings one). It's sent when reconnecting; see [Resuming](#resuming-with-last-event-id). |
 
 ## Events reference
@@ -190,6 +193,7 @@ With your own transport, the transport makes the request, so passing `headers`, 
 | Event | Payload | When |
 |-------|---------|------|
 | `sse.connection.state` | `{ from, to, timestamp }` | On every state change (see [Lifecycle](#connection-lifecycle-and-reconnection)). |
+| `sse.ready` | `{ timestamp }` | The stream is live (see [Waiting until the stream is live](#waiting-until-the-stream-is-live)), after every (re)connection. With `readyEvent`, just before that event is published. |
 | `server.<name>` | the parsed data | A named event, or an unnamed `{ event, data }` envelope (see [Routing](#routing)). |
 | `sse.message` | the parsed data | An unnamed event that isn't an envelope. |
 | `sse.event` | `{ type, data, rawData, lastEventId }` | Only with `rawEvents: true`: every event whose data parsed, just before its routed event. `data` is the parsed data, `rawData` the text. |
@@ -242,7 +246,7 @@ The rules in detail:
 - **Named events win.** An event with an `event:` field is published under that name, and its data isn't checked for an envelope. `event: message` counts as unnamed: `message` is the default type.
 - **Envelopes** are the same `{ event, data }` messages the WebSocket adapter routes, so one server protocol works over both. `event` must be a non-empty string; it's checked before the legacy `type`. A `{ type: 'response' }` message goes to `sse.message`, since the SSE adapter has no request-response. If `data` is missing, subscribers receive `{}`. With `unwrapEnvelope: false`, every unnamed event goes to `sse.message` as it is.
 - **Prefix:** `serverEventPrefix` is added unless the name already starts with it and a dot (`serverless.deploy` still becomes `server.serverless.deploy`). With `serverEventPrefix: ''`, events are published under the server's own names; the server could then also publish names like `sse.error`.
-- **`parseData: 'json'`** (the default) is strict: `data: hello` is a parse error. Send strings JSON-encoded (`data: "hello"`), which `formatSseMessage` does. An event whose data is empty (`data:` with nothing after it) is a parse error too; an event with no `data:` line at all is never dispatched, as the SSE format requires.
+- **`parseData: 'json'`** (the default) is strict: `data: hello` is a parse error. Send strings JSON-encoded (`data: "hello"`), which `formatSseMessage` does. An event whose data is empty (`data:` with nothing after it), a common heartbeat, is published with `null`; an event with no `data:` line at all is never dispatched, as the SSE format requires.
 - **`parseData: 'text'`** delivers the data as a string. Envelopes are then never unwrapped, because a string isn't an object, so every unnamed event goes to `sse.message`.
 - **A `parseData` function** receives the data and the event type, so it can parse each type differently. Whatever it throws is published as `sse.parse.error`.
 
@@ -357,6 +361,48 @@ const sse = new SseHandler('/api/events', evem, { heartbeatTimeout: 45_000 });
 ```
 
 The timer starts with the request and restarts when the response arrives and with every chunk received. It's off by default and isn't available with the EventSource transport. A custom transport supports it if it calls `activity()`. With `sequential: true`, the time spent waiting for an event's subscribers counts too, because nothing is read meanwhile: keep the timeout well above how long they can take.
+
+### Waiting until the stream is live
+
+An open stream doesn't always mean events will reach you. Many servers subscribe to their source (Redis pub/sub, Postgres `LISTEN`, a message broker) after sending the response headers, and whatever is published in between is lost. If your page loads the current state and then relies on the stream for changes, load it only once the server's subscription is in place, or a change can slip between the two.
+
+Such servers usually send an event once they're subscribed, often their first keepalive. Name it with `readyEvent`, and the handler is ready only once it arrives, after every connection and reconnection:
+
+```typescript
+import { EvEm } from '@jcfigueiredo/evem';
+import { SseHandler } from '@jcfigueiredo/evem/sse';
+
+const loadSnapshot = async () => {
+  /* fetch the current state and render it */
+};
+
+const evem = new EvEm();
+// The server sends `event: keepalive` once it has subscribed to its broker, then regularly
+const sse = new SseHandler('/api/events', evem, { readyEvent: 'keepalive' });
+
+// After every (re)connection, once nothing can be missed any more
+evem.subscribe('sse.ready', () => loadSnapshot());
+
+// Or wait once, with a deadline: false if it took longer, or if the handler stopped
+const live = await sse.whenReady(5_000);
+```
+
+Without `readyEvent`, the handler is ready as soon as the stream opens. `readyEvent` can also be a predicate on the raw event, e.g. `(event) => event.type === 'status' && event.data === '"live"'`. It's checked before the data is parsed, so a ready event counts even if its data doesn't parse. `sse.ready` is published just before the ready event itself.
+
+**Plain-text keepalives.** Some servers send pings whose data isn't JSON, such as `event: keepalive` with `data: connected` (sse-starlette does). With the default `parseData: 'json'`, each one is published as `sse.parse.error`. Read that event's data as text:
+
+```typescript
+import { EvEm } from '@jcfigueiredo/evem';
+import { SseHandler } from '@jcfigueiredo/evem/sse';
+
+const evem = new EvEm();
+const sse = new SseHandler('/api/events', evem, {
+  readyEvent: 'keepalive',
+  parseData: (data, eventType) => (eventType === 'keepalive' ? data : JSON.parse(data)),
+});
+```
+
+An empty `data:` needs nothing: it's published with `null`.
 
 ## Resuming with Last-Event-ID
 
@@ -835,6 +881,7 @@ interface SseEvents {
   'sse.parse.error': { error: Error; rawData: string; eventType: string; lastEventId: string };
   'sse.error': { error: Error; reason: SseCloseInfo['reason']; status?: number; contentType?: string | null };
   'sse.reconnect.failed': { attempts: number };
+  'sse.ready': { timestamp: number };
 }
 
 interface SseMessage {

@@ -35,7 +35,7 @@ describe('FakeSseServer', () => {
     expect(server.openConnections).toBe(1);
     await vi.advanceTimersByTimeAsync(20);
 
-    expect(published).toEqual(['state connecting', 'state connected', 'server.hello']);
+    expect(published).toEqual(['state connecting', 'state connected', 'sse.ready', 'server.hello']);
     expect(wire()).toEqual([
       'client: GET https://api.test/events',
       'note: connection 1 opened (200, text/event-stream)',
@@ -73,7 +73,7 @@ describe('FakeSseServer', () => {
     expect(wire()).toContain('note: connection 1: the server stops writing, and keeps it open');
     expect(wire()).toContain('note: connection 1 closed by the client');
     expect(wire().at(-1)).toBe('note: connection 2 opened (200, text/event-stream)');
-    expect(published.at(-1)).toBe('state connected');
+    expect(published.slice(-2)).toEqual(['state connected', 'sse.ready']);
   });
 
   it('ends a stream, drops it, or refuses the next connection, and resumes after the Last-Event-ID', async () => {
