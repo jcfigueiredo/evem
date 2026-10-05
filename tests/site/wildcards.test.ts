@@ -1,3 +1,4 @@
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { EvEm } from '../../src/index';
 import { matchesPattern } from '../../demo/src/engine/tracedEvEm';
@@ -23,5 +24,24 @@ describe('explainMatch', () => {
     ['a.b.c', '*.b.*', '* matched "a", the * at the end matched "c"']
   ])('%s against %s: %s, with the verdict EvEm gives', (event, pattern, reason) => {
     expect(explainMatch(event, pattern)).toEqual({ matched: matchesPattern(new EvEm(), event, pattern), reason });
+  });
+});
+
+describe('explainMatch - against EvEm, on generated events and patterns', () => {
+  const segment = fc.constantFrom('a', 'b', 'user', '', 'x*');
+  const name = (part: fc.Arbitrary<string>) =>
+    fc
+      .array(part, { minLength: 1, maxLength: 5 })
+      .map(parts => parts.join('.'))
+      .filter(text => text !== '');
+
+  it('gives the verdict EvEm gives, with a reason, for any event and pattern', () => {
+    fc.assert(
+      fc.property(name(segment), name(fc.oneof(segment, fc.constant('*'))), (event, pattern) => {
+        const explanation = explainMatch(event, pattern);
+        expect(explanation.matched).toBe(matchesPattern(new EvEm(), event, pattern));
+        expect(explanation.reason).not.toBe('');
+      })
+    );
   });
 });
