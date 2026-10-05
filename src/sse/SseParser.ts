@@ -37,6 +37,7 @@ export class SseParser {
   private dispatchedLastEventId: string;
   private started = false;
   /** The previous chunk ended with CR, so an LF at the start of the next one ends the same line */
+  // Stryker disable next-line BooleanLiteral: a LF at the very start is an empty line either way, which dispatches nothing
   private skipLeadingLineFeed = false;
 
   /**
@@ -77,6 +78,7 @@ export class SseParser {
     this.skipLeadingLineFeed = false;
 
     let lineStart = 0;
+    // Stryker disable next-line EqualityOperator: past the end, the character is undefined: not a line break
     for (let i = 0; i < text.length; i++) {
       const char = text[i];
       if (char !== '\r' && char !== '\n') {
@@ -108,6 +110,7 @@ export class SseParser {
     this.lineBuffer = '';
     this.data = '';
     this.eventType = '';
+    // Stryker disable next-line BooleanLiteral: a LF first after end() is an empty line either way, which dispatches nothing
     this.skipLeadingLineFeed = false;
   }
 
@@ -146,6 +149,7 @@ export class SseParser {
           this.callbacks.onRetry?.(Number(value));
         }
         break;
+      // Stryker disable next-line ConditionalExpression: the default case does nothing
       default:
         // Unknown fields are ignored
         break;
@@ -166,6 +170,7 @@ export class SseParser {
 
     const event: SseParsedEvent = {
       type: this.eventType || 'message',
+      // Stryker disable next-line StringLiteral: every data line ends in \n, so data always does
       data: this.data.endsWith('\n') ? this.data.slice(0, -1) : this.data,
       lastEventId
     };

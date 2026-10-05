@@ -96,8 +96,8 @@ const BUILT_IN_TRANSPORT_OPTIONS = [
 function createTransport(url: string, options: SseHandlerOptions): SseTransport {
   // Stryker disable next-line StringLiteral: any string other than 'eventsource' means the fetch transport
   const { transport = 'fetch' } = options;
-  // Stryker disable next-line ConditionalExpression: heartbeatTimeout is the only option in these lists that can be 0
   const given = (names: readonly (keyof SseHandlerOptions)[]) =>
+    // Stryker disable next-line ConditionalExpression: heartbeatTimeout is the only option in these lists that can be 0
     names.filter(name => options[name] !== undefined && !(name === 'heartbeatTimeout' && options[name] === 0));
 
   if (typeof transport === 'object') {

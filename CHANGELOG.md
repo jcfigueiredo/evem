@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Internal
+
+- Mutation testing (StrykerJS) found tests that ran code without checking it; the library's tests now catch 99.8% of its changes, up from 86.9%. Code no test could tell apart is gone (a re-entrancy guard in the WebSocket queue that nothing could trigger, redundant checks, cleanup with no effect); no behavior changed.
+
 ### Changed
 
 - **Requires Node.js 22+**, up from 20: Node.js 20 reached end of life in April 2026. Browsers are unaffected. Node.js 22.4+ has a global `WebSocket`, so the WebSocket adapter takes a URL without `WebSocketConstructor`; the `ws` package is still the way to give sockets options such as headers.

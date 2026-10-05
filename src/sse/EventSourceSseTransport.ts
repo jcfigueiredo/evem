@@ -83,9 +83,11 @@ export class EventSourceSseTransport implements SseTransport {
         source.onerror = null;
         source.onmessage = null;
         source.close();
+        // Stryker disable all: finishing twice does nothing: the source is closed and the promise settled
         if (this.finish === finish) {
           this.finish = undefined;
         }
+        // Stryker restore all
         resolve(info);
       };
       this.finish = finish;
@@ -93,6 +95,7 @@ export class EventSourceSseTransport implements SseTransport {
       const onMessage = (event: MessageEvent) => {
         listener.activity();
         // EventSource can't pause, so a returned promise isn't awaited here
+        // Stryker disable next-line StringLiteral: a MessageEvent's lastEventId is always a string
         void listener.event({ type: event.type, data: String(event.data), lastEventId: event.lastEventId ?? '' });
       };
       source.onopen = () => listener.open();

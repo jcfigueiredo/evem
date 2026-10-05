@@ -240,3 +240,96 @@ describe('FetchSseTransport - Retry-After as an HTTP date', () => {
     expect('retryAfter' in closed && closed.retryAfter !== undefined).toBe(false);
   });
 });
+
+describe('FetchSseTransport - what mutation testing showed the tests missed', () => {
+  const connect = async (response: ReturnType<NonNullable<Parameters<typeof createFakeFetch>[0]>>) => {
+    const { fetch } = createFakeFetch(() => response);
+    const { listener } = recordingListener();
+    return new FetchSseTransport({ fetch }).connect({ url: 'https://api.test/events' }, listener);
+  };
+
+  it.each([
+    [' 7 ', 7000],
+    ['7s', undefined],
+    ['x7', undefined],
+    ['12', 12_000]
+  ])('reads Retry-After %j as %j ms', async (header, expected) => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 0, 1));
+    const closed = await connect({ status: 503, headers: { 'retry-after': header } });
+    expect(closed).toStrictEqual(
+      expected === undefined
+        ? { reason: 'http-error', status: 503 }
+        : { reason: 'http-error', status: 503, retryAfter: expected }
+    );
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    [' text/event-stream ', true],
+    ['x-text/event-stream', false],
+    ['text/event-streams', false],
+    ['text/event-streamx;charset=utf-8', false]
+  ])('takes the content type %j: %s', async (contentType, accepted) => {
+    const { fetch, calls } = createFakeFetch(() => ({ contentType }));
+    const { listener } = recordingListener();
+    const closed = new FetchSseTransport({ fetch }).connect({ url: 'https://api.test/events' }, listener);
+    await flush();
+    if (accepted) calls[0]!.stream.close();
+    expect((await closed).reason).toBe(accepted ? 'ended' : 'bad-content-type');
+  });
+
+  it('ends as the stream ending when a 200 response has no body', async () => {
+    const fetch = async () => new Response(null, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+    const { listener } = recordingListener();
+    await expect(
+      new FetchSseTransport({ fetch }).connect({ url: 'https://api.test/events' }, listener)
+    ).resolves.toEqual({
+      reason: 'ended'
+    });
+  });
+
+  it('sends cookies only to its own origin unless withCredentials is set', async () => {
+    const { fetch, calls } = createFakeFetch();
+    const { listener } = recordingListener();
+    const transport = new FetchSseTransport({ fetch });
+    void transport.connect({ url: 'https://api.test/events' }, listener);
+    await flush();
+    expect(calls[0]!.init.credentials).toBe('same-origin');
+    transport.abort();
+  });
+
+  it("gives events without an id the request's last event id, or none", async () => {
+    const seen: string[] = [];
+    for (const lastEventId of ['41', undefined]) {
+      const { fetch, calls } = createFakeFetch();
+      const { listener, events } = recordingListener();
+      const closed = new FetchSseTransport({ fetch }).connect(
+        { url: 'https://api.test/events', lastEventId },
+        listener
+      );
+      await flush();
+      calls[0]!.stream.push('data: 1\n\n');
+      calls[0]!.stream.close();
+      await closed;
+      seen.push(events[0]!.lastEventId);
+    }
+    expect(seen).toEqual(['41', '']);
+  });
+
+  it('takes an id-only message when the listener has no lastEventId callback', async () => {
+    const { fetch, calls } = createFakeFetch();
+    const listener = { open() {}, event() {}, retry() {}, activity() {} };
+    const closed = new FetchSseTransport({ fetch }).connect({ url: 'https://api.test/events' }, listener);
+    await flush();
+    calls[0]!.stream.push('id: 5\n\n');
+    calls[0]!.stream.close();
+    await expect(closed).resolves.toEqual({ reason: 'ended' });
+  });
+});
+
+describe('FetchSseTransport - aborting before it connected', () => {
+  it('does nothing, so disconnecting a handler that never connected works', async () => {
+    const { fetch } = createFakeFetch();
+    expect(() => new FetchSseTransport({ fetch }).abort()).not.toThrow();
+  });
+});
