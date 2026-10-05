@@ -43,3 +43,7 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# Mutation testing (pnpm mutation): its sandbox and its report
+/.stryker-tmp
+/reports/mutation

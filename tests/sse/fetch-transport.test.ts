@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, type Mock } from 'vitest';
 import { FetchSseTransport } from '../../src/sse/FetchSseTransport';
 import type { SseTransportListener } from '../../src/sse/types';
 import type { SseParsedEvent } from '../../src/sse/SseParser';
@@ -6,7 +6,7 @@ import { createFakeFetch, flush } from './helpers/fakeFetch';
 
 function recordingListener() {
   const events: SseParsedEvent[] = [];
-  const listener: SseTransportListener & { opened: number; retries: number[]; activity: ReturnType<typeof vi.fn> } = {
+  const listener: SseTransportListener & { opened: number; retries: number[]; activity: Mock<() => void> } = {
     opened: 0,
     retries: [],
     open() {

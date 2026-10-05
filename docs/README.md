@@ -30,6 +30,7 @@ pnpm test:coverage   # Run once with a coverage report (a summary, and HTML in c
 pnpm typecheck       # TypeScript check
 pnpm lint            # Complexity and repeated code (ESLint)
 pnpm duplication     # Code duplicated between files (jscpd)
+pnpm mutation        # Mutation testing (StrykerJS): changes the code to see whether the tests notice; ~10 min
 pnpm format          # Format the code with Prettier (pnpm format:check only checks)
 pnpm check           # Everything CI runs: format check, lint, duplication, type check, tests and package check
 pnpm demo            # The demo site (showcase and playground) on a local dev server

@@ -1,5 +1,5 @@
 import { EvEm } from '../src/eventEmitter';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 describe('Memory Leak Detection', () => {
   let evem: EvEm;
@@ -11,6 +11,11 @@ describe('Memory Leak Detection', () => {
     vi.spyOn(console, 'group').mockImplementation(() => {});
     vi.spyOn(console, 'groupEnd').mockImplementation(() => {});
     vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  // Since Vitest 3, spying on a method that's already a spy reuses it: restore, or calls carry over to the next test
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('should not warn when memory leak detection is disabled', () => {
