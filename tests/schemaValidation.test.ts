@@ -534,3 +534,29 @@ describe('Schema validation - async validators that reject', () => {
     consoleErrorSpy.mockRestore();
   });
 });
+
+describe('Schema validation - what LOG_AND_CONTINUE logs', () => {
+  it('logs a simple validator’s failure without errors, a thrown non-Error with none, and runs the callback anyway', async () => {
+    const evem = new EvEm();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const simple = vi.fn();
+    const throwing = vi.fn();
+    evem.subscribe('user', simple, { schema: () => false, schemaErrorPolicy: ErrorPolicy.LOG_AND_CONTINUE });
+    evem.subscribe('user', throwing, {
+      schema: () => {
+        throw 'not an Error';
+      },
+      schemaErrorPolicy: ErrorPolicy.LOG_AND_CONTINUE
+    });
+
+    expect(await evem.publish('user', { name: 'Ada' })).toBe(true);
+
+    expect(simple).toHaveBeenCalledWith({ name: 'Ada' });
+    expect(throwing).toHaveBeenCalledWith({ name: 'Ada' });
+    expect(error.mock.calls).toEqual([
+      ["Schema validation failed for event 'user'", ''],
+      ["Error during schema validation for event 'user': not an Error", '']
+    ]);
+    error.mockRestore();
+  });
+});

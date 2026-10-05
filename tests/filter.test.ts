@@ -137,3 +137,25 @@ describe('Event filtering', () => {
     expect(handler).toHaveBeenCalledWith(8);
   });
 });
+
+describe('Event filtering - a filter that throws', () => {
+  test('counts as a rejection: it is logged, its subscriber skipped, and the other subscribers still run', async () => {
+    const emitter = new EvEm();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const filtered = vi.fn();
+    const other = vi.fn();
+    emitter.subscribe('order.created', filtered, {
+      filter: () => {
+        throw new Error('bad filter');
+      }
+    });
+    emitter.subscribe('order.created', other);
+
+    expect(await emitter.publish('order.created', { id: 1 })).toBe(true);
+
+    expect(filtered).not.toHaveBeenCalled();
+    expect(other).toHaveBeenCalledWith({ id: 1 });
+    expect(error).toHaveBeenCalledWith('Filter threw an error:', expect.objectContaining({ message: 'bad filter' }));
+    error.mockRestore();
+  });
+});

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Internal
+
+- `publish` and `subscribe` are split into smaller methods: each step of a subscription's callback chain (once, throttle, debounce, filters, schema validation) and of a publish (its options, the matching subscribers, transforms, the error policy) has its own. No change in behavior: with no middleware registered, synchronous subscribers still all run before `publish` returns; an async callback or transform hands over to the next subscriber on the same microtask as before; and errors are logged with the same messages.
+- Tests now cover the paths no test reached: a filter that throws, an event after a throttle window expired before its timer fired, a transform that throws with `errorPolicy: SILENT`, an async transform on a cancelable event, and what `schemaErrorPolicy: LOG_AND_CONTINUE` logs.
+
 ## 0.3.1 (2026-10-03)
 
 ### Documentation

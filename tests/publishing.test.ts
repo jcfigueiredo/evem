@@ -102,3 +102,27 @@ describe('EvEm - Publishing payload values', () => {
     expect(callback).toHaveBeenCalledWith({});
   });
 });
+
+describe('EvEm - Publishing: synchronous subscribers', () => {
+  test('all run before publish returns, synchronous transforms between them included (with no middleware)', () => {
+    const emitter = new EvEm();
+    const seen: unknown[] = [];
+    emitter.subscribe(
+      'event',
+      (data: { n: number }) => {
+        seen.push(data.n);
+      },
+      {
+        priority: 'high',
+        transform: (data: { n: number }) => ({ n: data.n + 1 })
+      }
+    );
+    emitter.subscribe('event', (data: { n: number }) => {
+      seen.push(data.n);
+    });
+
+    void emitter.publish('event', { n: 1 });
+
+    expect(seen).toEqual([1, 2]);
+  });
+});
