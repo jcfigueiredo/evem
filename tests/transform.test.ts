@@ -417,3 +417,32 @@ describe('Transforms - errors and cancelable events', () => {
     expect(last).not.toHaveBeenCalled();
   });
 });
+
+describe('Transforms - timing', () => {
+  it('hands an async transform’s result to the next subscriber as soon as it settles', async () => {
+    const evem = new EvEm();
+    const order: string[] = [];
+    evem.subscribe(
+      'message',
+      () => {
+        order.push('A');
+      },
+      { priority: 'high', transform: async data => data }
+    );
+    evem.subscribe('message', () => {
+      order.push('B');
+    });
+
+    const published = evem.publish('message', {});
+    // A chain of microtasks alongside the publish, as other code would be
+    await null;
+    order.push('t1');
+    await null;
+    order.push('t2');
+    await null;
+    order.push('t3');
+    await published;
+
+    expect(order).toEqual(['A', 't1', 't2', 'B', 't3']);
+  });
+});

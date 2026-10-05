@@ -104,7 +104,7 @@ describe('EvEm - Publishing payload values', () => {
 });
 
 describe('EvEm - Publishing: synchronous subscribers', () => {
-  test('all run before publish returns, synchronous transforms between them included', () => {
+  test('all run before publish returns, synchronous transforms between them included (with no middleware)', () => {
     const emitter = new EvEm();
     const seen: unknown[] = [];
     emitter.subscribe(

@@ -533,7 +533,8 @@ class EvEm implements IEventEmitter {
    */
   private onceWrapper<T>(callback: WrappedCallback<T>, subscriptionId: string): WrappedCallback<T> {
     let hasFired = false;
-    return (args: T) => {
+    // Named, like the other steps' wrappers, so stack traces show which step a frame is
+    const onceWrapper = (args: T) => {
       if (hasFired) {
         return SKIPPED;
       }
@@ -541,6 +542,7 @@ class EvEm implements IEventEmitter {
       this.unsubscribeById(subscriptionId);
       return callback(args);
     };
+    return onceWrapper;
   }
 
   /** Throttle, debounce, both, or neither (a time that isn't positive is no time) */
@@ -696,8 +698,9 @@ class EvEm implements IEventEmitter {
       }
       return true;
     };
-    return (args: T) =>
+    const filterWrapper = (args: T) =>
       checkFilters(args).then(this.bindToActivePublishChain(passes => (passes ? callback(args) : SKIPPED)));
+    return filterWrapper;
   }
 
   /**
@@ -711,7 +714,7 @@ class EvEm implements IEventEmitter {
     validator: SchemaValidator<T> | AdvancedSchemaValidator<T>,
     policy: ErrorPolicy
   ): WrappedCallback<T> {
-    return (args: T) => {
+    const schemaValidationWrapper = (args: T) => {
       const failed = (message: string, errors: SchemaValidationError[] | null) =>
         this.onSchemaFailure(message, policy, errors, () => callback(args));
 
@@ -746,6 +749,7 @@ class EvEm implements IEventEmitter {
       }
       return handleValidationResult(validationResult);
     };
+    return schemaValidationWrapper;
   }
 
   /**
@@ -1030,8 +1034,15 @@ class EvEm implements IEventEmitter {
           break;
         }
         if (transform && outcome !== SKIPPED) {
+          // An async transform is awaited here, as the callback is, so the next subscriber runs as soon as it settles
           const transforming = this.applyTransform(transform, run);
-          if (transforming) await transforming;
+          if (transforming) {
+            try {
+              this.settleTransform(await transforming, run);
+            } catch (error) {
+              this.onPublishError(error, run, 'transform function');
+            }
+          }
         }
       } catch (error) {
         this.onPublishError(error, run, 'event handler');
@@ -1065,37 +1076,41 @@ class EvEm implements IEventEmitter {
   }
 
   /**
-   * A subscriber's transform: its result becomes the data the next subscribers receive. An async one is awaited up
-   * to the publish timeout. Its errors go through the error policy here, so with its go-ahead the next subscriber
-   * gets the data from before the transform; THROW rethrows to publish.
+   * A subscriber's transform: a synchronous result becomes the data the next subscribers receive at once; an async
+   * one is returned, raced against the publish timeout, for publish to await and pass to settleTransform. Its errors
+   * go through the error policy, so with its go-ahead the next subscriber gets the data from before the transform;
+   * THROW rethrows to publish.
    */
-  private applyTransform(transform: TransformFunction, run: PublishRun): void | Promise<void> {
-    const failed = (error: unknown) => this.onPublishError(error, run, 'transform function');
+  private applyTransform(transform: TransformFunction, run: PublishRun): Promise<unknown> | undefined {
     let result: unknown;
     try {
       result = this.runInPublishChain(run.chain, () => transform(run.data));
     } catch (error) {
-      return failed(error);
+      this.onPublishError(error, run, 'transform function');
+      return undefined;
     }
-    if (!(result instanceof Promise)) {
-      run.data = run.cancelable ? this.withCancelSupport(run, result) : result;
-      return;
+    if (result instanceof Promise) {
+      return this.handlePromiseWithTimeout(result, run.timeout);
     }
-    return this.handlePromiseWithTimeout(result, run.timeout).then(settled => {
-      if (settled === TIMED_OUT) {
-        return failed(new Error(`Transform timed out after ${run.timeout}ms`));
-      }
-      run.data = run.cancelable ? this.withCancelSupport(run, settled) : settled;
-    }, failed);
+    this.settleTransform(result, run);
+    return undefined;
+  }
+
+  /** A transform's result becomes the data (cancelable again if the event is); a timeout is an error */
+  private settleTransform(result: unknown, run: PublishRun): void {
+    if (result === TIMED_OUT) {
+      throw new Error(`Transform timed out after ${run.timeout}ms`);
+    }
+    run.data = run.cancelable ? this.withCancelSupport(run, result) : result;
   }
 
   /**
    * A callback's or a transform's error, by the publish error policy: SILENT ignores it, LOG_AND_CONTINUE logs it
-   * and goes on, CANCEL_ON_ERROR logs it and stops the event, THROW rejects the publish. A schema error with
-   * schemaErrorPolicy THROW always rejects, whatever the policy.
+   * and goes on, CANCEL_ON_ERROR logs it and stops the event, THROW rejects the publish. A callback's schema error
+   * with schemaErrorPolicy THROW always rejects, whatever the policy.
    */
   private onPublishError(error: unknown, run: PublishRun, what: 'event handler' | 'transform function'): void {
-    if (isSchemaThrow(error)) {
+    if (what === 'event handler' && isSchemaThrow(error)) {
       throw error;
     }
     switch (run.errorPolicy) {

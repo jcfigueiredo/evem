@@ -205,7 +205,7 @@ describe('Event throttling - a window that expired before its timer fired', () =
     const emitter = new EvEm();
     const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
     const callback = vi.fn();
-    emitter.subscribe('scroll', callback, { throttleTime: 100 });
+    const id = emitter.subscribe('scroll', callback, { throttleTime: 100 });
 
     await emitter.publish('scroll', 1);
     // The clock moves past the window, but its timer hasn't fired yet (it's a real one)
@@ -215,5 +215,7 @@ describe('Event throttling - a window that expired before its timer fired', () =
 
     expect(callback.mock.calls).toEqual([[1], [2]]);
     now.mockRestore();
+    // Unsubscribing clears the window's timer
+    emitter.unsubscribeById(id);
   });
 });
