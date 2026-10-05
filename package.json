@@ -42,6 +42,10 @@
       "types": "./dist/sse/server.d.ts",
       "default": "./dist/sse/server.js"
     },
+    "./dom": {
+      "types": "./dist/dom/index.d.ts",
+      "default": "./dist/dom/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

@@ -50,7 +50,9 @@ try {
       'dist/sse/index.js',
       'dist/sse/index.d.ts',
       'dist/sse/server.js',
-      'dist/sse/server.d.ts'
+      'dist/sse/server.d.ts',
+      'dist/dom/index.js',
+      'dist/dom/index.d.ts'
     ]) {
       if (!files.includes(required)) throw new Error(`missing ${required}; packed: ${files.join(', ')}`);
     }
@@ -71,6 +73,7 @@ try {
       import { WebSocketHandler, MessageQueue, RequestTimeoutError } from "${pkg.name}/websocket";
       import { SseHandler, SseParser } from "${pkg.name}/sse";
       import { formatSseMessage, SSE_HEADERS } from "${pkg.name}/sse/server";
+      import { bridgeToDom, bridgeFromDom } from "${pkg.name}/dom";
       const evem = new EvEm();
       let received;
       evem.subscribe("user.*", data => { received = data; });
@@ -82,6 +85,13 @@ try {
       const parsed = [];
       new SseParser({ onEvent: event => parsed.push(event) }).feed(formatSseMessage({ event: "e", data: { n: 1 } }));
       if (parsed[0]?.data !== '{"n":1}') throw new Error("SSE round trip failed");
+      const target = new EventTarget();
+      const bridged = [];
+      target.addEventListener("user.login", event => bridged.push(event.detail));
+      bridgeToDom(evem, "user.*", { target });
+      bridgeFromDom(evem, "ui.ready", { target });
+      await evem.publish("user.login", { id: 2 });
+      if (bridged[0]?.id !== 2) throw new Error("DOM bridge did not dispatch");
     `;
     run(process.execPath, ['--input-type=module', '-e', script], consumer);
   });
@@ -92,7 +102,8 @@ try {
       const { WebSocketHandler } = require("${pkg.name}/websocket");
       const { SseHandler } = require("${pkg.name}/sse");
       const { formatSseMessage } = require("${pkg.name}/sse/server");
-      for (const value of [EvEm, WebSocketHandler, SseHandler, formatSseMessage]) {
+      const { bridgeToDom } = require("${pkg.name}/dom");
+      for (const value of [EvEm, WebSocketHandler, SseHandler, formatSseMessage, bridgeToDom]) {
         if (typeof value !== "function") throw new Error("missing export");
       }
     `;
@@ -116,7 +127,10 @@ try {
         import { WebSocketHandler, type WebSocketHandlerOptions } from "${pkg.name}/websocket";
         import { SseHandler, type SseEvents, type SseHandlerOptions } from "${pkg.name}/sse";
         import { formatSseMessage, type SseMessage } from "${pkg.name}/sse/server";
+        import { bridgeToDom, type DomBridgeOptions } from "${pkg.name}/dom";
         const evem = new EvEm();
+        const bridgeOptions: DomBridgeOptions = { target: new EventTarget(), rename: name => name.replaceAll(".", ":") };
+        const stopBridge: () => void = bridgeToDom(evem, ["server.*"], bridgeOptions);
         evem.subscribe<{ id: number }>("user.login", user => { user.id.toFixed(); });
         const history: EventRecord<{ id: number }>[] = evem.getEventHistory();
         const leakOptions: Partial<MemoryLeakOptions> = { threshold: 20 };
@@ -131,7 +145,7 @@ try {
           { fetch: async (input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init) },
           { fetch: async (url: string) => new Response(url) },
         ];
-        export { history, leakOptions, options, sse, wire, failure, fetches, ErrorPolicy, WebSocketHandler };
+        export { history, leakOptions, options, sse, wire, failure, fetches, ErrorPolicy, WebSocketHandler, stopBridge };
       `
         );
         writeFileSync(
