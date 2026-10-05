@@ -1,11 +1,28 @@
-import type { EvEm, MiddlewareConfig } from '../eventEmitter.js';
+import type { AnyEvEm, MiddlewareConfig } from '../eventEmitter.js';
 import { ConnectionManager } from './ConnectionManager.js';
 import { MessageQueue } from './MessageQueue.js';
 import { RequestResponseManager } from './RequestResponseManager.js';
 import { localName } from '../shared/names.js';
 import { publishSafely } from '../shared/publishSafely.js';
 import { routeServerMessage } from '../shared/routing.js';
-import type { IWebSocket, WebSocketHandlerOptions, RequestOptions } from './types.js';
+import type { IWebSocket, WebSocketEvents, WebSocketHandlerOptions, RequestOptions } from './types.js';
+
+/** The adapter's own events, declared to the emitter for its devWarnings; the record type keeps them in step with WebSocketEvents */
+// Stryker disable BooleanLiteral: only the keys are used; the values are there for the type check
+const WEBSOCKET_EVENT_NAMES = Object.keys({
+  'ws.connection.state': true,
+  'ws.error': true,
+  'ws.reconnect.failed': true,
+  'ws.send': true,
+  'ws.send.queued': true,
+  'ws.queue.overflow': true,
+  'ws.send.request': true,
+  'ws.response': true,
+  'ws.response.error': true,
+  'ws.message': true,
+  'ws.parse.error': true
+} satisfies Record<keyof WebSocketEvents, true>);
+// Stryker restore BooleanLiteral
 
 /**
  * WebSocketHandler - Automatically wires WebSocket events to EvEm
@@ -29,7 +46,7 @@ import type { IWebSocket, WebSocketHandlerOptions, RequestOptions } from './type
  */
 export class WebSocketHandler {
   private ws: IWebSocket;
-  private evem: EvEm;
+  private evem: AnyEvEm;
   private connectionManager: ConnectionManager;
   private messageQueue?: MessageQueue;
   private requestResponse?: RequestResponseManager;
@@ -67,7 +84,7 @@ export class WebSocketHandler {
    * @param evem - EvEm instance for event management
    * @param options - Configuration options
    */
-  constructor(urlOrSocket: string | IWebSocket, evem: EvEm, options: WebSocketHandlerOptions = {}) {
+  constructor(urlOrSocket: string | IWebSocket, evem: AnyEvEm, options: WebSocketHandlerOptions = {}) {
     this.evem = evem;
     // Built here rather than as fields: their patterns follow the emitter's separator
     this.requestFormatMiddleware = {
@@ -113,6 +130,7 @@ export class WebSocketHandler {
     }
 
     // Initialize ConnectionManager
+    evem.addKnownEvents(WEBSOCKET_EVENT_NAMES.map(name => localName(evem, name)));
     this.connectionManager = new ConnectionManager(evem);
 
     // Must be registered before the MessageQueue middleware so queued requests are already formatted

@@ -7,6 +7,7 @@
 - [Middleware](guide/middleware.md): change, reroute or cancel events before any subscriber sees them
 - [Errors, timeouts and recursion](guide/errors.md): error policies, timeouts for async subscribers, recursion protection
 - [History and debugging](guide/history-and-debugging.md): history and replay, memory-leak warnings, `info()`
+- [Typed events](guide/typed-events.md): an event map, so names and payloads are checked, wildcards included; `defineEvents` and development warnings
 
 ## Reference
 

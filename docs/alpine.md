@@ -92,6 +92,16 @@ The plugin and the [DOM bridge](dom.md) work together:
 
 Use both while moving an app over.
 
-## Coming
+## Catching misspelled names
 
-A development warning when `$evem.on`'s pattern matches no known event. It needs the list of event names at runtime, which comes with the typed event map (`docs/typed-events-design.md`).
+Patterns in templates are strings, so the compiler can't check them, even with a [typed event map](guide/typed-events.md). Declare your events with `defineEvents` and turn on `devWarnings` in development. A `$evem.on` whose pattern matches no declared event is then reported in the console, as are publishes of undeclared names:
+
+```typescript
+import Alpine from 'alpinejs';
+import { EvEm, defineEvents, payload } from '@jcfigueiredo/evem';
+import { evemAlpine } from '@jcfigueiredo/evem/alpine';
+
+const appEvents = defineEvents({ 'lane:expand': payload<{ lane: string }>() }, { separator: ':' });
+const evem = new EvEm({ events: appEvents, devWarnings: true });
+Alpine.plugin(evemAlpine(evem));
+```

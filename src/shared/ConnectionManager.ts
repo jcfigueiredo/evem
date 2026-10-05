@@ -1,4 +1,4 @@
-import type { EvEm } from '../eventEmitter.js';
+import type { AnyEvEm } from '../eventEmitter.js';
 import { localName } from './names.js';
 import type { ConnectionState, ConnectionStateChangeEvent } from './types.js';
 
@@ -22,7 +22,7 @@ export class ConnectionManager {
   private readonly stateEvent: string;
 
   constructor(
-    private evem: EvEm,
+    private evem: AnyEvEm,
     options: ConnectionManagerOptions = {}
   ) {
     this.stateEvent = options.stateEvent ?? localName(evem, 'ws.connection.state');

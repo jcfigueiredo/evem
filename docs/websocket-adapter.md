@@ -163,7 +163,7 @@ Subscriber errors are handled by EvEm's default error policy: they're logged, an
 | anything else, e.g. `{"ping":1}`, or JSON that isn't an object (`null`, `42`) | `ws.message` | the whole parsed message |
 | invalid JSON | `ws.parse.error` | `{ error, rawData }` |
 
-`event` takes precedence over `type`. If `data` is missing, subscribers receive `{}`. With `enableRequestResponse: false`, response messages go to `ws.message`. See [Server Events](websocket-server-events.md) for subscribing to these.
+`event` takes precedence over `type`. If `data` is missing, subscribers receive `undefined`. With `enableRequestResponse: false`, response messages go to `ws.message`. See [Server Events](websocket-server-events.md) for subscribing to these.
 
 ## Request-response
 

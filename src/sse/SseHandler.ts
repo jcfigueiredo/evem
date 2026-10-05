@@ -1,4 +1,4 @@
-import type { EvEm } from '../eventEmitter.js';
+import type { AnyEvEm } from '../eventEmitter.js';
 import { ConnectionManager } from '../shared/ConnectionManager.js';
 import { localName } from '../shared/names.js';
 import { publishSafely } from '../shared/publishSafely.js';
@@ -7,7 +7,15 @@ import type { ConnectionState } from '../shared/types.js';
 import { EventSourceSseTransport, type EventSourceConstructorLike } from './EventSourceSseTransport.js';
 import { FetchSseTransport } from './FetchSseTransport.js';
 import type { SseParsedEvent } from './SseParser.js';
-import type { SseBody, SseCloseInfo, SseFetch, SseHeaders, SseTransport, SseTransportListener } from './types.js';
+import type {
+  SseBody,
+  SseCloseInfo,
+  SseEvents,
+  SseFetch,
+  SseHeaders,
+  SseTransport,
+  SseTransportListener
+} from './types.js';
 
 /**
  * What shouldReconnect receives: why the connection ended, and how many reconnection attempts
@@ -90,6 +98,19 @@ export interface SseHandlerOptions {
    */
   pageLifecycle?: boolean;
 }
+
+/** The adapter's own events, declared to the emitter for its devWarnings; the record type keeps them in step with SseEvents */
+// Stryker disable BooleanLiteral: only the keys are used; the values are there for the type check
+const SSE_EVENT_NAMES = Object.keys({
+  'sse.connection.state': true,
+  'sse.message': true,
+  'sse.event': true,
+  'sse.parse.error': true,
+  'sse.error': true,
+  'sse.reconnect.failed': true,
+  'sse.ready': true
+} satisfies Record<keyof SseEvents, true>);
+// Stryker restore BooleanLiteral
 
 /** With pageLifecycle, how long a connection error waits before it's reported, in case the page is leaving */
 const LEAVING_GRACE = 3000;
@@ -280,10 +301,11 @@ export class SseHandler {
    */
   constructor(
     private readonly url: string,
-    private readonly evem: EvEm,
+    private readonly evem: AnyEvEm,
     private readonly options: SseHandlerOptions = {}
   ) {
     this.transport = createTransport(url, options);
+    evem.addKnownEvents(SSE_EVENT_NAMES.map(name => localName(evem, name)));
     this.connectionManager = new ConnectionManager(evem, { stateEvent: localName(this.evem, 'sse.connection.state') });
     this.reconnect = options.reconnect ?? true;
     this.reconnectDelay = options.reconnectDelay ?? 3000;

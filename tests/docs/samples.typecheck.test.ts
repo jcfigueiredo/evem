@@ -21,6 +21,7 @@ const PRELUDES: Record<TypeScriptDoc, string[]> = {
   'docs/guide/middleware.md': [prelude('readme.d.ts')],
   'docs/guide/errors.md': [prelude('readme.d.ts')],
   'docs/guide/history-and-debugging.md': [prelude('readme.d.ts')],
+  'docs/guide/typed-events.md': [],
   'docs/examples.md': [prelude('examples.d.ts')],
   'docs/websocket-adapter.md': [],
   'docs/websocket-server-events.md': [prelude('websocket-server-events.d.ts'), prelude('react.d.ts')],

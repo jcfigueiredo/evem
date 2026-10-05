@@ -33,7 +33,7 @@ The handler parses each incoming message with `messageParser` (`JSON.parse` by d
 Some details of these rules:
 
 - `event` is checked before `type`. Use `event` for new servers; `type` is kept for older ones.
-- If `data` is missing, subscribers receive `{}`.
+- If `data` is missing, subscribers receive `undefined`.
 - The prefix comes from the `serverEventPrefix` option (default `'server'`). It's added unless the name already starts with `<prefix>.`: `server.user.login` stays as it is, and `serverless.deploy` becomes `server.serverless.deploy`.
   - With `serverEventPrefix: 'api'`, `{"event":"user.login"}` is published as `api.user.login`.
   - With `serverEventPrefix: ''`, events are published under their own names: `user.login`.

@@ -92,14 +92,26 @@ describe('EvEm - Publishing payload values', () => {
     expect(callback).toHaveBeenCalledWith(null);
   });
 
-  test('should still deliver an empty object when no data is given', async () => {
+  test('delivers undefined when no data is given', async () => {
     const evem = new EvEm();
     const callback = vi.fn();
     evem.subscribe('value.changed', callback);
 
     await evem.publish('value.changed');
 
-    expect(callback).toHaveBeenCalledWith({});
+    expect(callback).toHaveBeenCalledWith(undefined);
+  });
+
+  test('delivers an empty object, which can be canceled, to a cancelable publish without data', async () => {
+    const evem = new EvEm();
+    const received: unknown[] = [];
+    evem.subscribe('value.changed', (data: { cancel(): void }) => {
+      received.push({ ...data });
+      data.cancel();
+    });
+
+    expect(await evem.publish('value.changed', undefined, { cancelable: true })).toBe(false);
+    expect(received).toEqual([{ cancel: expect.any(Function) }]);
   });
 });
 

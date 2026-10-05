@@ -1,6 +1,6 @@
 # Comparison with alternatives
 
-Here's how EvEm compares to other popular event emitter libraries. EvEm is written in TypeScript and ships its own type declarations. You type payloads per subscription and publish (`subscribe<T>`, `publish<T>`), but there is no typed event map: event names are plain strings, and the compiler doesn't check that what you publish matches what subscribers expect.
+Here's how EvEm compares to other popular event emitter libraries. EvEm is written in TypeScript and ships its own type declarations. With a [typed event map](guide/typed-events.md) (`new EvEm<AppEvents>()`), the compiler checks every name and payload, wildcard subscriptions included: a pattern that matches no event is an error. Without one, you type payloads per subscription and publish (`subscribe<T>`, `publish<T>`).
 
 ## EvEm vs Node.js EventEmitter
 
@@ -26,7 +26,6 @@ Here's how EvEm compares to other popular event emitter libraries. EvEm is writt
 
 **Cons of EvEm:**
 - EventEmitter3 is focused on raw performance, which EvEm doesn't match
-- EventEmitter3 supports a typed event map (`new EventEmitter<Events>()`); EvEm doesn't
 - Smaller community and ecosystem
 
 ## EvEm vs Mitt
@@ -40,7 +39,6 @@ Here's how EvEm compares to other popular event emitter libraries. EvEm is writt
 **Cons of EvEm:**
 - Larger bundle size than Mitt (which is ~200 bytes)
 - More complex API compared to Mitt's minimalist approach
-- Mitt supports a typed event map (`mitt<Events>()`); EvEm doesn't
 
 ## EvEm vs RxJS
 

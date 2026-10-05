@@ -1,4 +1,4 @@
-import type { EvEm, MiddlewareConfig } from '../eventEmitter.js';
+import type { AnyEvEm, MiddlewareConfig } from '../eventEmitter.js';
 import { publishSafely } from '../shared/publishSafely.js';
 
 export interface DomBridgeOptions {
@@ -11,7 +11,7 @@ export interface DomBridgeOptions {
 /** CustomEvents the bridge dispatched, which bridgeFromDom must not bring back */
 const dispatchedByBridge = new WeakSet<Event>();
 /** Per emitter, the EvEm names being published from the DOM right now, which bridgeToDom must not send back */
-const arrivingFromDom = new WeakMap<EvEm, Map<string, number>>();
+const arrivingFromDom = new WeakMap<AnyEvEm, Map<string, number>>();
 
 function targetOf(options: DomBridgeOptions): EventTarget {
   if (options.target) {
@@ -32,7 +32,7 @@ function targetOf(options: DomBridgeOptions): EventTarget {
  * @returns A function that stops the bridge
  * @throws {TypeError} Without a target outside browsers
  */
-export function bridgeToDom(evem: EvEm, patterns: string | string[], options: DomBridgeOptions = {}): () => void {
+export function bridgeToDom(evem: AnyEvEm, patterns: string | string[], options: DomBridgeOptions = {}): () => void {
   const target = targetOf(options);
   const rename = options.rename ?? ((name: string) => name);
   const middleware: MiddlewareConfig[] = [patterns].flat().map(pattern => ({
@@ -61,7 +61,7 @@ export function bridgeToDom(evem: EvEm, patterns: string | string[], options: Do
  * @returns A function that stops the bridge
  * @throws {TypeError} Without a target outside browsers
  */
-export function bridgeFromDom(evem: EvEm, names: string | string[], options: DomBridgeOptions = {}): () => void {
+export function bridgeFromDom(evem: AnyEvEm, names: string | string[], options: DomBridgeOptions = {}): () => void {
   const target = targetOf(options);
   const rename = options.rename ?? ((name: string) => name);
   const listener = (domEvent: Event) => {

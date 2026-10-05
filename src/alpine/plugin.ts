@@ -1,4 +1,4 @@
-import type { EventCallback, EvEm, PublishOptions, SubscriptionOptions } from '../eventEmitter.js';
+import type { AnyEvEm, EventCallback, PublishOptions, SubscriptionOptions } from '../eventEmitter.js';
 import { localName } from '../shared/names.js';
 import type { ConnectionState } from '../shared/types.js';
 
@@ -59,7 +59,7 @@ export interface EvemStore {
  * Templates get `$evem.publish()` and `$evem.on()`, whose subscriptions end with their element, and, with the
  * `sse` option, a reactive `$store.evem` with the connection's `state` and whether it's `ready`.
  */
-export function evemAlpine(evem: EvEm, options: EvemAlpineOptions = {}): (Alpine: AlpineLike) => void {
+export function evemAlpine(evem: AnyEvEm, options: EvemAlpineOptions = {}): (Alpine: AlpineLike) => void {
   return Alpine => {
     Alpine.magic(options.magic ?? 'evem', (_el, { cleanup }): EvemMagic => ({
       publish: (event, data, publishOptions) => evem.publish(event, data, publishOptions),

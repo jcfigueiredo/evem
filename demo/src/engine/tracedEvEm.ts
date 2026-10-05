@@ -1,6 +1,7 @@
 import {
   EvEm,
   type EventCallback,
+  type EvEmOptions,
   type MiddlewareConfig,
   type MiddlewareFunction,
   type PublishOptions,
@@ -88,6 +89,9 @@ function describeOptions(options: SubscriptionOptions<any, any> | undefined): st
  * An EvEm that records what it does in `trace`, for the timeline. It only observes: every method calls the real
  * one with wrappers that record calls, verdicts and results and pass everything through unchanged.
  */
+/** A class of untyped emitters, as scenario code creates them: `new EvEm()`, `new EvEm({ separator: ':' })` */
+export type EvEmClass = new (options?: EvEmOptions | number) => EvEm;
+
 /** What else the traced EvEm records */
 export interface TraceOptions {
   /** For every publish, whether each subscription's pattern matched the event, and why (the Wildcards scenario) */
@@ -98,7 +102,7 @@ export function createTracedEvEm(
   trace: Trace,
   names: ReadonlyMap<Function, string> = new Map(),
   { explainMatches = false }: TraceOptions = {}
-): typeof EvEm {
+): EvEmClass {
   /** A function's display name: the scenario's name for it, else its own (only code the reader wrote keeps one) */
   const nameOf = (fn: Function, fallback: string | (() => string)) =>
     names.get(fn) ?? (fn.name || (typeof fallback === 'string' ? fallback : fallback()));
@@ -122,8 +126,8 @@ export function createTracedEvEm(
     /** Numbers the subscribers that have no name */
     private anonymous = 0;
 
-    constructor(...args: ConstructorParameters<typeof EvEm>) {
-      super(...args);
+    constructor(options?: EvEmOptions | number) {
+      super(options);
       // Follow EvEm's own publish chains: while EvEm runs a handler in a publish's chain, that's the current publish
       const own = this as unknown as PublishChains;
       const enterPublishChain = own.enterPublishChain.bind(this);

@@ -39,7 +39,7 @@ describe('typeCheck', () => {
         'evem.subscribe(42, () => {});'
       ].join('\n');
       expect(typeCheck([{ path: '__check__/misuse.ts', code }])).toEqual([
-        expect.objectContaining({ path: '__check__/misuse.ts', line: 3, code: 2345 })
+        expect.objectContaining({ path: '__check__/misuse.ts', line: 3, code: 2769 }) // no overload matches
       ]);
     },
     TIMEOUT
