@@ -91,17 +91,18 @@ describe('Server routing - properties', () => {
     );
   });
 
-  it('publishes a message the same way over WebSocket and over SSE', async () => {
+  it('publishes a message the same way over WebSocket and over SSE, with either separator', async () => {
     await fc.assert(
-      fc.asyncProperty(message, prefix, async (value, before) => {
+      fc.asyncProperty(message, prefix, fc.constantFrom('.', ':'), async (value, before, separator) => {
         const text = JSON.stringify(value);
         const published = { ws: [] as unknown[], sse: [] as unknown[] };
         const record = (into: unknown[], channel: string) => {
-          const evem = new EvEm();
+          const evem = new EvEm({ separator });
           evem.use((event, data) => {
             // The adapters' own state events (and SSE's readiness) aside; ws.message and sse.message are the same event
-            if (!event.includes('connection.state') && event !== 'sse.ready')
-              into.push({ event: event.replace(`${channel}.`, 'channel.'), data });
+            const own = (name: string) => name.split('.').join(separator);
+            if (!event.includes(own('connection.state')) && event !== own('sse.ready'))
+              into.push({ event: event.replace(`${channel}${separator}`, 'channel.'), data });
             return data;
           });
           return evem;

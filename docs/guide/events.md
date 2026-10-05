@@ -36,6 +36,26 @@ EvEm supports wildcard patterns in event subscriptions, allowing for more dynami
 - A `*` at the start or in the middle of a pattern matches **exactly one** segment.
 - Wildcards work in subscription patterns, middleware patterns, `getEventHistory()` and `info()`. Publish concrete event names.
 
+### Another Separator
+
+Segments are separated by dots unless you choose another separator when you create the emitter. Colons suit apps whose event names also appear in HTML: Alpine reads a dot in `@user.created.window` as a modifier, but takes `@user:created.window` whole, and htmx accepts both.
+
+```typescript
+import { EvEm } from "@jcfigueiredo/evem";
+const evem = new EvEm({ separator: ':' });
+
+evem.subscribe('task:*', (task: { id: number }) => console.log('task event', task.id));
+
+await evem.publish('task:opened', { id: 1 });
+await evem.publish('task:comment:added', { id: 2 });
+await evem.publish('task.closed', { id: 3 }); // One segment here: dots are ordinary characters
+// Output:
+// task event 1
+// task event 2
+```
+
+The separator applies to every pattern on that emitter: subscriptions, middleware, `getEventHistory()` and `info()`. It can be any string without `*`, such as `'::'` or `'/'`. The [adapters](../websocket-adapter.md) use it for their own events too: `ws:send`, `sse:connection:state`, and server events under `server:`.
+
 ### Subscribe to All Events in a Category
 
 ```typescript

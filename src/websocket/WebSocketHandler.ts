@@ -2,6 +2,7 @@ import type { EvEm, MiddlewareConfig } from '../eventEmitter.js';
 import { ConnectionManager } from './ConnectionManager.js';
 import { MessageQueue } from './MessageQueue.js';
 import { RequestResponseManager } from './RequestResponseManager.js';
+import { localName } from '../shared/names.js';
 import { publishSafely } from '../shared/publishSafely.js';
 import { routeServerMessage } from '../shared/routing.js';
 import type { IWebSocket, WebSocketHandlerOptions, RequestOptions } from './types.js';
@@ -48,10 +49,7 @@ export class WebSocketHandler {
    * Puts outgoing requests in wire format before the MessageQueue sees them,
    * so requests queued while offline are still sent as requests when the queue flushes
    */
-  private readonly requestFormatMiddleware: MiddlewareConfig = {
-    pattern: 'ws.send.request',
-    handler: (_event: string, request: any) => ({ type: 'request', ...request })
-  };
+  private readonly requestFormatMiddleware: MiddlewareConfig;
 
   /**
    * Sends ws.send.* events other than requests (e.g. ws.send.chat), like ws.send itself.
@@ -60,16 +58,7 @@ export class WebSocketHandler {
    * Requests (when request-response is enabled) and flushed messages (ws.send.queued) have their
    * own subscribers.
    */
-  private readonly subEventSendMiddleware: MiddlewareConfig = {
-    pattern: 'ws.send.*',
-    handler: (event: string, data: any) => {
-      const hasRequestSubscriber = event === 'ws.send.request' && this.options.enableRequestResponse;
-      if (!hasRequestSubscriber && !event.includes('queued')) {
-        this.sendOrQueue(data, false, 'Failed to send message:');
-      }
-      return data;
-    }
-  };
+  private readonly subEventSendMiddleware: MiddlewareConfig;
 
   /**
    * Create a new WebSocketHandler
@@ -80,6 +69,21 @@ export class WebSocketHandler {
    */
   constructor(urlOrSocket: string | IWebSocket, evem: EvEm, options: WebSocketHandlerOptions = {}) {
     this.evem = evem;
+    // Built here rather than as fields: their patterns follow the emitter's separator
+    this.requestFormatMiddleware = {
+      pattern: localName(evem, 'ws.send.request'),
+      handler: (_event: string, request: any) => ({ type: 'request', ...request })
+    };
+    this.subEventSendMiddleware = {
+      pattern: localName(evem, 'ws.send.*'),
+      handler: (event: string, data: any) => {
+        const hasRequestSubscriber = event === localName(evem, 'ws.send.request') && this.options.enableRequestResponse;
+        if (!hasRequestSubscriber && !event.includes('queued')) {
+          this.sendOrQueue(data, false, 'Failed to send message:');
+        }
+        return data;
+      }
+    };
 
     // Set default options
     this.options = {
@@ -186,7 +190,7 @@ export class WebSocketHandler {
       const error = event.error || (event instanceof Error ? event : new Error('WebSocket error'));
 
       // Emit error event
-      void this.publishSafely('ws.error', { error, event });
+      void this.publishSafely(localName(this.evem, 'ws.error'), { error, event });
 
       // Call custom error handler if provided
       if (this.options.onError) {
@@ -232,7 +236,7 @@ export class WebSocketHandler {
 
     if (this.reconnectAttempts >= this.options.maxReconnectAttempts) {
       await this.connectionManager.transitionTo('disconnected');
-      await this.publishSafely('ws.reconnect.failed', { attempts: this.reconnectAttempts });
+      await this.publishSafely(localName(this.evem, 'ws.reconnect.failed'), { attempts: this.reconnectAttempts });
       return;
     }
 
@@ -263,7 +267,7 @@ export class WebSocketHandler {
     } catch (caught) {
       // A socket that can't even be created counts as a failed attempt
       const error = caught instanceof Error ? caught : new Error(String(caught));
-      void this.publishSafely('ws.error', { error });
+      void this.publishSafely(localName(this.evem, 'ws.error'), { error });
       if (this.options.onError) {
         this.options.onError(error);
       }
@@ -286,20 +290,20 @@ export class WebSocketHandler {
     // effect while disconnected), so we handle both:
     // - ws.send: Messages published by the app
     // - ws.send.queued: Messages flushed from the queue once connected
-    const sendSub = this.evem.subscribe('ws.send', (data: any) => {
+    const sendSub = this.evem.subscribe(localName(this.evem, 'ws.send'), (data: any) => {
       this.sendOrQueue(data, false, 'Failed to send message:');
     });
     this.subscriptionIds.push(sendSub);
 
     // Subscribe to ws.send.queued for flushed queue messages
-    const queuedSub = this.evem.subscribe('ws.send.queued', (data: any) => {
+    const queuedSub = this.evem.subscribe(localName(this.evem, 'ws.send.queued'), (data: any) => {
       this.sendOrQueue(data, true, 'Failed to send message:');
     });
     this.subscriptionIds.push(queuedSub);
 
     // Wire request messages if request-response is enabled
     if (this.options.enableRequestResponse) {
-      const requestSub = this.evem.subscribe('ws.send.request', (request: any) => {
+      const requestSub = this.evem.subscribe(localName(this.evem, 'ws.send.request'), (request: any) => {
         // Already in wire format (requestFormatMiddleware)
         this.sendOrQueue(request, false, 'Failed to send request:');
       });
@@ -347,12 +351,13 @@ export class WebSocketHandler {
       const routed = routeServerMessage(message, {
         prefix: this.options.serverEventPrefix,
         channel: 'ws',
-        handleResponses: this.options.enableRequestResponse
+        handleResponses: this.options.enableRequestResponse,
+        separator: this.evem.separator
       });
       void this.publishSafely(routed.event, routed.data);
     } catch (error) {
       // Emit parse error event
-      void this.publishSafely('ws.parse.error', {
+      void this.publishSafely(localName(this.evem, 'ws.parse.error'), {
         error,
         rawData
       });

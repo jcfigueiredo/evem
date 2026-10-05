@@ -213,6 +213,20 @@ export interface EventInfo {
   pattern?: string;
 }
 
+/**
+ * Options for the EvEm constructor
+ */
+export interface EvEmOptions {
+  /** How many times an event may be published from inside its own handlers @default 3 */
+  maxRecursionDepth?: number;
+  /**
+   * What separates the segments of event names and patterns: `'.'` (`user.created`, `user.*`), or e.g. `':'`
+   * (`user:created`, `user:*`), which suits Alpine and htmx attributes. The adapters' own event names use it
+   * too (`sse:error`). Any non-empty string without `*` @default '.'
+   */
+  separator?: string;
+}
+
 interface IEventEmitter {
   subscribe<T = unknown, R = any>(
     event: string,
@@ -281,8 +295,21 @@ class EvEm implements IEventEmitter {
   private showLeakSubscriptionDetails: boolean = true; // Default to showing details
   private warnedEvents = new Set<string>(); // Track events we've already warned about
 
-  constructor(maxRecursionDepth: number = 3) {
+  /** What separates the segments of event names and patterns (see EvEmOptions.separator) */
+  readonly separator: string;
+
+  /**
+   * @param options - EvEmOptions, or the maximum recursion depth as a number (the older form)
+   * @throws {TypeError} If the separator is empty, contains `*` or isn't a string
+   */
+  constructor(options: EvEmOptions | number = {}) {
+    const { maxRecursionDepth = 3, separator = '.' } =
+      typeof options === 'number' ? { maxRecursionDepth: options } : options;
+    if (typeof separator !== 'string' || separator === '' || separator.includes('*')) {
+      throw new TypeError(`The separator can't be empty or contain '*', and must be a string.`);
+    }
     this.maxRecursionDepth = maxRecursionDepth;
+    this.separator = separator;
   }
 
   /**
@@ -1187,8 +1214,8 @@ class EvEm implements IEventEmitter {
       return true;
     }
 
-    const eventParts = event.split('.');
-    const patternParts = pattern.split('.');
+    const eventParts = event.split(this.separator);
+    const patternParts = pattern.split(this.separator);
 
     // If pattern has more parts than the event, it can't match
     // Stryker disable next-line BlockStatement,ConditionalExpression: the length check below rejects it too

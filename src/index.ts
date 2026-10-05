@@ -4,6 +4,7 @@ export {
   Priority,
   ErrorPolicy,
   type IEventEmitter,
+  type EvEmOptions,
   type EventCallback,
   type FilterPredicate,
   type TransformFunction,

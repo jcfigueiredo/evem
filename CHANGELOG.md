@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Separator option**: `new EvEm({ separator: ':' })` splits event names and patterns on another string than `.`, for every pattern on that emitter (subscriptions, middleware, history, `info()`). Colons suit names used in Alpine and htmx attributes, where Alpine reads dots as modifiers. The adapters follow it: their own events (`ws:send`, `sse:connection:state`) and the server prefix (`server:task-changed`). The constructor now takes an options object, `{ maxRecursionDepth, separator }`; `new EvEm(5)` still sets the recursion depth. `evem.separator` reads it.
 - **SSE readiness**: `SseHandler`'s `readyEvent` option names the event that shows the stream is live (or takes a predicate on the raw event), for servers that subscribe to a broker or database channel after answering, when events published in between are lost. `isReady()`, `whenReady(timeoutMs?)` (resolves `false` at once when the handler has stopped, so it never hangs) and the `sse.ready` event, after every (re)connection. Without `readyEvent`, the stream is ready as soon as it opens.
 
 - **SSE page lifecycle**: `SseHandler`'s `pageLifecycle` option (browsers) disconnects on `pagehide` and reconnects, resuming from the last event id, when the page is restored from the back/forward cache, where a stream can look open and be dead. Connection errors are reported 3 seconds late and dropped if the page goes away meanwhile, so leaving a page doesn't report the aborted stream as `sse.error`. No `beforeunload` listener, which would keep the page out of Firefox's back/forward cache.

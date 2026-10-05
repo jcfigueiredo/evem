@@ -1,5 +1,6 @@
 import type { EvEm } from '../eventEmitter.js';
 import { ConnectionManager } from '../shared/ConnectionManager.js';
+import { localName } from '../shared/names.js';
 import { publishSafely } from '../shared/publishSafely.js';
 import { routeServerMessage, toServerEventName } from '../shared/routing.js';
 import type { ConnectionState } from '../shared/types.js';
@@ -283,7 +284,7 @@ export class SseHandler {
     private readonly options: SseHandlerOptions = {}
   ) {
     this.transport = createTransport(url, options);
-    this.connectionManager = new ConnectionManager(evem, { stateEvent: 'sse.connection.state' });
+    this.connectionManager = new ConnectionManager(evem, { stateEvent: localName(this.evem, 'sse.connection.state') });
     this.reconnect = options.reconnect ?? true;
     this.reconnectDelay = options.reconnectDelay ?? 3000;
     this.maxReconnectDelay = options.maxReconnectDelay ?? 30000;
@@ -472,7 +473,7 @@ export class SseHandler {
 
     if (this.attempts >= this.maxReconnectAttempts) {
       await this.stop();
-      await this.publishSafely('sse.reconnect.failed', { attempts: this.attempts });
+      await this.publishSafely(localName(this.evem, 'sse.reconnect.failed'), { attempts: this.attempts });
       return;
     }
 
@@ -497,7 +498,7 @@ export class SseHandler {
           ? { contentType: end.contentType }
           : {};
     const report = () => {
-      void this.publishSafely('sse.error', { error, reason: end.reason, ...details });
+      void this.publishSafely(localName(this.evem, 'sse.error'), { error, reason: end.reason, ...details });
       this.callOnError(error);
     };
     if (!this.options.pageLifecycle) {
@@ -613,7 +614,7 @@ export class SseHandler {
   private becomeReady(): [string, unknown] {
     this.ready = true;
     for (const settle of [...this.readyWaiters]) settle(true);
-    return ['sse.ready', { timestamp: Date.now() }];
+    return [localName(this.evem, 'sse.ready'), { timestamp: Date.now() }];
   }
 
   /** The stream isn't live any more; when the handler stops (`settle` false), whenReady() calls stop waiting */
@@ -653,19 +654,27 @@ export class SseHandler {
     try {
       const data = this.parse(event);
       if (this.options.rawEvents) {
-        publishes.push(['sse.event', { type: event.type, data, rawData: event.data, lastEventId: event.lastEventId }]);
+        publishes.push([
+          localName(this.evem, 'sse.event'),
+          { type: event.type, data, rawData: event.data, lastEventId: event.lastEventId }
+        ]);
       }
       const routed =
         event.type !== 'message'
-          ? { event: toServerEventName(event.type, this.serverEventPrefix), data }
+          ? { event: toServerEventName(event.type, this.serverEventPrefix, this.evem.separator), data }
           : (this.options.unwrapEnvelope ?? true)
-            ? routeServerMessage(data, { prefix: this.serverEventPrefix, channel: 'sse', handleResponses: false })
-            : { event: 'sse.message', data };
+            ? routeServerMessage(data, {
+                prefix: this.serverEventPrefix,
+                channel: 'sse',
+                handleResponses: false,
+                separator: this.evem.separator
+              })
+            : { event: localName(this.evem, 'sse.message'), data };
       publishes.push([routed.event, routed.data]);
     } catch (caught) {
       const error = caught instanceof Error ? caught : new Error(String(caught));
       publishes.push([
-        'sse.parse.error',
+        localName(this.evem, 'sse.parse.error'),
         { error, rawData: event.data, eventType: event.type, lastEventId: event.lastEventId }
       ]);
       this.callOnError(error);

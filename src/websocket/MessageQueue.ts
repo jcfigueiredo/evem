@@ -1,4 +1,5 @@
 import type { EvEm } from '../eventEmitter.js';
+import { localName } from '../shared/names.js';
 import { publishSafely } from '../shared/publishSafely.js';
 import type { ConnectionManager } from './ConnectionManager.js';
 import type { QueuedMessage } from './types.js';
@@ -76,22 +77,25 @@ export class MessageQueue {
     // Register middleware for exact 'ws.send' AND pattern 'ws.send.*'
     // We need both because 'ws.send*' doesn't match 'ws.send' exactly
     this.evem.use({
-      pattern: 'ws.send',
+      pattern: localName(this.evem, 'ws.send'),
       handler: this.middlewareHandler
     });
 
     this.evem.use({
-      pattern: 'ws.send.*',
+      pattern: localName(this.evem, 'ws.send.*'),
       handler: this.middlewareHandler
     });
 
     // Subscribe to connection state changes for auto-flush (only if enabled)
     if (this.options.autoFlush === true) {
-      this.stateSubscriptionId = this.evem.subscribe('ws.connection.state', async (event: any) => {
-        if (event.to === 'connected') {
-          await this.flush();
+      this.stateSubscriptionId = this.evem.subscribe(
+        localName(this.evem, 'ws.connection.state'),
+        async (event: any) => {
+          if (event.to === 'connected') {
+            await this.flush();
+          }
         }
-      });
+      );
     }
   }
 
@@ -111,8 +115,8 @@ export class MessageQueue {
     // removeMiddleware removes a single registration, so remove each one by its pattern
     // Stryker disable next-line ConditionalExpression: removing a middleware that isn't registered does nothing
     if (this.middlewareHandler) {
-      this.evem.removeMiddleware({ pattern: 'ws.send', handler: this.middlewareHandler });
-      this.evem.removeMiddleware({ pattern: 'ws.send.*', handler: this.middlewareHandler });
+      this.evem.removeMiddleware({ pattern: localName(this.evem, 'ws.send'), handler: this.middlewareHandler });
+      this.evem.removeMiddleware({ pattern: localName(this.evem, 'ws.send.*'), handler: this.middlewareHandler });
       this.middlewareHandler = undefined;
     }
 
@@ -174,7 +178,7 @@ export class MessageQueue {
 
     const message: QueuedMessage = {
       // Stryker disable next-line StringLiteral: the original event name isn't kept: a flush publishes ws.send.queued
-      event: 'ws.send',
+      event: localName(this.evem, 'ws.send'),
       data,
       timestamp: Date.now()
     };
@@ -188,7 +192,7 @@ export class MessageQueue {
       // This is safe to do synchronously because 'ws.queue.overflow' won't match our middleware pattern
       void publishSafely(
         this.evem,
-        'ws.queue.overflow',
+        localName(this.evem, 'ws.queue.overflow'),
         // Stryker disable next-line OptionalChaining: a full queue (maxSize at least 1) always has a message to drop
         { maxSize: this.maxSize, droppedMessage: droppedMessage?.data },
         'the WebSocket connection'
@@ -211,7 +215,7 @@ export class MessageQueue {
     // Publish each queued message to ws.send.queued
     // Middleware will ignore these because event name includes 'queued'
     for (const message of messagesToFlush) {
-      await this.evem.publish('ws.send.queued', message.data);
+      await this.evem.publish(localName(this.evem, 'ws.send.queued'), message.data);
     }
   }
 
