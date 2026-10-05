@@ -210,9 +210,14 @@ The pitfalls, from htmx-ext-sse's source:
 | htmx `evem:` extension | Medium | the bridge; only on demand |
 | EventSource shim | Recipe only | — |
 
-## Open questions
+## Decisions
 
-1. **Separator scope:** per instance (`new EvEm({ separator: ':' })`), with the adapters reading it from the instance? Or a global default? Per instance is safer, and the adapters already receive the instance.
-2. **Bridge direction default:** to the DOM only, with `bridgeFromDom` explicit? I'd say yes; two-way by default invites loops.
-3. **Alpine tests:** happy-dom as a dev dependency, or a fake Alpine object plus Chrome checks? I'd take happy-dom.
-4. **Dev-mode warnings** for `$evem.on` patterns that match no known event: worth the runtime list of names, or leave it to a typed map?
+Agreed in review:
+
+1. **The separator is set per instance**, `new EvEm({ separator: ':' })`. The adapters read it from the instance they're given, and there's no global default.
+2. **The bridge goes to the DOM only by default.** `bridgeFromDom` is a separate, explicit call, so nothing loops unless both directions were asked for.
+3. **The Alpine plugin is tested with happy-dom** (a dev dependency) and real Alpine, plus a check in Chrome on the demo site.
+4. **`$evem.on` warns in development when its pattern matches no known event.**
+   - Types don't exist at runtime, so this needs the known names as a list. The typed event map design should provide both from one declaration, e.g. names declared once that yield the type and the runtime list.
+   - Without such a list, the plugin can't warn, and says so once at start-up in development.
+   - "Development" is the bundler's `import.meta.env.DEV`, or a `dev` option, since the library can't detect it by itself.
