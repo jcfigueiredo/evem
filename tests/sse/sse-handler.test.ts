@@ -1230,3 +1230,139 @@ describe('SseHandler - empty data', () => {
     await handler.disconnect();
   });
 });
+
+describe('SseHandler - page lifecycle', () => {
+  let evem: EvEm;
+  let transport: FakeTransport;
+  let handler: SseHandler;
+  let page: EventTarget;
+  let log: string[];
+
+  const tick = async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+  const create = (options: SseHandlerOptions = {}) => {
+    handler = new SseHandler('https://api.test/events', evem, { transport, pageLifecycle: true, ...options });
+    return handler;
+  };
+  const pageshow = (persisted: boolean) => {
+    const event = new Event('pageshow');
+    Object.defineProperty(event, 'persisted', { value: persisted });
+    page.dispatchEvent(event);
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    evem = new EvEm();
+    transport = new FakeTransport();
+    page = new EventTarget();
+    vi.stubGlobal('addEventListener', page.addEventListener.bind(page));
+    log = [];
+    evem.subscribe('sse.connection.state', (change: { to: string }) => {
+      log.push(`state ${change.to}`);
+    });
+    evem.subscribe('sse.error', (error: { reason: string }) => {
+      log.push(`error ${error.reason}`);
+    });
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+  });
+
+  afterEach(async () => {
+    await handler?.disconnect();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('throws a TypeError outside a browser page', () => {
+    vi.unstubAllGlobals();
+    expect(() => create({ autoConnect: false })).toThrow(TypeError);
+    expect(() => create({ autoConnect: false })).toThrow('pageLifecycle needs a browser page');
+  });
+
+  it('disconnects quietly on pagehide, and reconnects with the last event id when the page comes back from the cache', async () => {
+    create();
+    await tick();
+    transport.open();
+    transport.send('{}', 'tick', '7');
+    await tick();
+
+    page.dispatchEvent(new Event('pagehide'));
+    await tick();
+    expect(transport.aborts).toBe(1);
+    expect(handler.getConnectionState()).toBe('disconnected');
+
+    pageshow(true);
+    await tick();
+    expect(transport.connections).toHaveLength(2);
+    expect(transport.current.request.lastEventId).toBe('7');
+    transport.open();
+    await tick();
+
+    expect(handler.isConnected()).toBe(true);
+    expect(log.filter(entry => entry.startsWith('error'))).toEqual([]);
+  });
+
+  it("doesn't reconnect on a pageshow that isn't a restore from the cache", async () => {
+    create();
+    await tick();
+    page.dispatchEvent(new Event('pagehide'));
+    await tick();
+
+    pageshow(false);
+    await tick();
+
+    expect(transport.connections).toHaveLength(1);
+  });
+
+  it("doesn't reconnect a handler that wasn't running when the page was hidden, or that was disconnected since", async () => {
+    create({ autoConnect: false });
+    page.dispatchEvent(new Event('pagehide'));
+    pageshow(true);
+    await tick();
+    expect(transport.connections).toHaveLength(0);
+
+    handler.connect();
+    await tick();
+    page.dispatchEvent(new Event('pagehide'));
+    await tick();
+    await handler.disconnect();
+    pageshow(true);
+    await tick();
+    expect(transport.connections).toHaveLength(1);
+  });
+
+  it('reports a connection error after a grace period, and reconnects without waiting for it', async () => {
+    const onError = vi.fn<(error: Error) => void>();
+    create({ reconnectDelay: 100, backoff: false, onError });
+    await tick();
+    transport.open();
+    transport.end({ reason: 'network-error', error: new Error('dropped') });
+    await tick();
+    expect(log).not.toContain('error network-error');
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(transport.connections).toHaveLength(2);
+
+    await vi.advanceTimersByTimeAsync(2899);
+    expect(onError).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(log).toContain('error network-error');
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'dropped' }));
+  });
+
+  it("doesn't report a connection error at all when the page goes away during the grace period", async () => {
+    const onError = vi.fn<(error: Error) => void>();
+    create({ onError });
+    await tick();
+    transport.open();
+    transport.end({ reason: 'network-error', error: new Error('navigation aborted it') });
+    await tick();
+
+    page.dispatchEvent(new Event('pagehide'));
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(log.filter(entry => entry.startsWith('error'))).toEqual([]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+});
