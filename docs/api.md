@@ -26,7 +26,7 @@
 - `use<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void`: Register a middleware
   - A function processes all events
   - A `{ pattern, handler }` object processes only events matching `pattern`
-  - The handler returns the (new) data, `null` to cancel, or a new `{ event, data }` object to reroute
+  - The handler returns the (new) data, `null` to cancel, or a new `{ event, data }` object to reroute. Data returned unchanged never cancels or reroutes, so `null` data returned as it is passes through
 - `removeMiddleware<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void`: Remove a middleware (the same function, or a config with the same handler and pattern)
 - `info(pattern?: string): EventInfo[]`: List subscriptions (`{ event, isMiddleware: false, id, priority }`) and middleware (`{ event, isMiddleware: true, pattern }`), optionally only those matching `pattern`
 - `enableHistory(maxEvents = 50): void`: Start recording events

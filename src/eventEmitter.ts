@@ -153,7 +153,7 @@ type SubscriptionOptions<T = unknown, R = any> = {
 
 /**
  * Result from a middleware function
- * - Return null to cancel the event
+ * - Return null to cancel the event (unless its data is null: data returned unchanged never cancels)
  * - Return the modified data to continue with the modified data
  * - Return a new object with exactly two properties, `event` (a string) and `data`, to change the
  *   event name and data. Returning the data unchanged, or a copy with extra properties, never
@@ -923,8 +923,9 @@ class EvEm implements IEventEmitter {
         const result = this.runInPublishChain(publishChain, () => handler(currentEvent, currentData));
         const processedResult = result instanceof Promise ? await result : result;
 
-        // If middleware returns null, cancel the event
-        if (processedResult === null) {
+        // A middleware that returns null cancels the event, unless the data was null already: data returned
+        // unchanged never cancels (a pass-through middleware would otherwise cancel every event with null data)
+        if (processedResult === null && currentData !== null) {
           return null;
         }
 
