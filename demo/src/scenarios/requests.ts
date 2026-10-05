@@ -83,6 +83,8 @@ export const requests: Scenario = {
     methods: {
       'users.get': params => {
         const { id } = params as { id: number };
+        // A thrown { code, message } is how a fake server's method answers with an error response
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the fake server's contract (FakeWebSocketBehavior)
         if (!USERS[id]) throw { code: 404, message: `No user ${id}` };
         return { id, name: USERS[id] };
       },

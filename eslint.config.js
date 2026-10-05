@@ -20,5 +20,20 @@ export default tseslint.config(
       'sonarjs/no-identical-expressions': 'error',
       'sonarjs/no-collapsible-if': 'error'
     }
+  },
+  {
+    // Bugs the types reveal: promises nobody handles, switches that miss a case, values that read badly in text
+    files: ['src/**/*.ts', 'demo/src/**/*.ts'],
+    languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
+    plugins: { '@typescript-eslint': tseslint.plugin },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/await-thenable': 'error',
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      '@typescript-eslint/restrict-template-expressions': 'error',
+      '@typescript-eslint/only-throw-error': 'error',
+      '@typescript-eslint/prefer-promise-reject-errors': 'error'
+    }
   }
 );

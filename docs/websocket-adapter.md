@@ -207,6 +207,7 @@ console.log(alice.name, bob.name);
   - `RequestTimeoutError` (extends `WebSocketError`, `code: 'REQUEST_TIMEOUT'`) when the timeout expires.
   - An `Error` with the server's `message`, `code` and `data` for an error response. The message is `'Request failed'` if the response has no error details.
   - An `Error` if request-response is disabled, if `request()` is called after `disconnect()`, or if the request is still pending when `disconnect()` is called.
+  - The error `publish` rejects with, at once, if publishing `ws.send.request` rejects (e.g. because of one of your subscribers with `schemaErrorPolicy: THROW`).
 
 ## Offline queue
 
@@ -242,6 +243,7 @@ await handler.disconnect()         → disconnecting → disconnected
 - Reconnecting needs a URL: the string you passed, or the `url` property of the socket you passed (browser and `ws` sockets have one). Without a URL, an unexpected close moves to `disconnected`.
 - New sockets are created with `WebSocketConstructor`, or the global `WebSocket` if you didn't set one.
 - Socket errors are published as `ws.error`. The state changes when the socket then closes.
+- What the handler publishes from the socket (incoming messages, `ws.error`, `ws.parse.error`, `ws.queue.overflow`, `ws.reconnect.failed`) can't reach you as a rejection: a publish that rejects (e.g. because of a `schemaErrorPolicy: THROW` subscriber) is logged with `console.error` rather than left as an unhandled rejection, which would end a Node.js process.
 
 ```typescript
 import { EvEm } from '@jcfigueiredo/evem';

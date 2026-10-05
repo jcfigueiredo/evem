@@ -272,21 +272,24 @@ export async function mountWidget(host: HTMLElement, scenario: Scenario): Promis
           name,
           control,
           session.values[name]!,
-          async value => {
-            acted();
-            gate.reset();
-            await session.setValue(name, value);
-            void editor?.then(view => {
-              view.setCode(session.code);
-              view.setRunsEnabled(true);
-            });
-            renderActions();
-            announced = 0;
-            render();
-            // The output always matches the controls: a feature runs its first action again (an adapter's stream
-            // starts over by itself)
-            const first = session.actions[0];
-            if (first && !adapter) await run(first.id);
+          value => {
+            // Nothing awaits a control's change: what it runs never rejects (the session records errors)
+            void (async () => {
+              acted();
+              gate.reset();
+              await session.setValue(name, value);
+              void editor?.then(view => {
+                view.setCode(session.code);
+                view.setRunsEnabled(true);
+              });
+              renderActions();
+              announced = 0;
+              render();
+              // The output always matches the controls: a feature runs its first action again (an adapter's stream
+              // starts over by itself)
+              const first = session.actions[0];
+              if (first && !adapter) await run(first.id);
+            })();
           },
           prefix,
           // The card's height is fixed: its controls' hints are tooltips (and read by screen readers)

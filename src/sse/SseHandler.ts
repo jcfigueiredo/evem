@@ -1,5 +1,6 @@
 import type { EvEm } from '../eventEmitter.js';
 import { ConnectionManager } from '../shared/ConnectionManager.js';
+import { publishSafely } from '../shared/publishSafely.js';
 import { routeServerMessage, toServerEventName } from '../shared/routing.js';
 import type { ConnectionState } from '../shared/types.js';
 import { EventSourceSseTransport, type EventSourceConstructorLike } from './EventSourceSseTransport.js';
@@ -167,7 +168,9 @@ export function defaultShouldReconnect(info: SseCloseInfo): boolean {
       return true;
     case 'http-error':
       return info.status === 408 || info.status === 429 || info.status >= 500;
-    default:
+    case 'no-content':
+    case 'bad-content-type':
+    case 'aborted':
       return false;
   }
 }
@@ -187,7 +190,9 @@ function errorFor(info: SseCloseInfo, heartbeatTimeout: number): Error | undefin
       return new Error('EventSource connection failed');
     case 'heartbeat-timeout':
       return new Error(`No data received for ${heartbeatTimeout}ms`);
-    default:
+    case 'ended':
+    case 'no-content':
+    case 'aborted':
       return undefined;
   }
 }
@@ -529,9 +534,6 @@ export class SseHandler {
    * Publish without letting a rejection (e.g. a subscriber with schemaErrorPolicy THROW) go unhandled
    */
   private publishSafely(event: string, data: unknown): Promise<void> {
-    return this.evem.publish(event, data).then(
-      () => undefined,
-      error => console.error(`Error publishing "${event}" from the SSE stream:`, error)
-    );
+    return publishSafely(this.evem, event, data, 'the SSE stream');
   }
 }

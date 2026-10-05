@@ -18,20 +18,21 @@ for (const menu of document.querySelectorAll<HTMLDetailsElement>('details[data-m
 // name stays what it does)
 const copyStatus = el('p', { class: 'sr-only', 'aria-live': 'polite' });
 document.body.append(copyStatus);
+const copy = async (button: HTMLButtonElement) => {
+  try {
+    await navigator.clipboard.writeText(button.dataset['copy'] ?? '');
+    button.textContent = 'Copied';
+  } catch {
+    button.textContent = 'Copy failed';
+  }
+  copyStatus.textContent = button.textContent;
+  setTimeout(() => {
+    button.textContent = 'Copy';
+    copyStatus.textContent = '';
+  }, 1500);
+};
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy]')) {
-  button.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(button.dataset['copy'] ?? '');
-      button.textContent = 'Copied';
-    } catch {
-      button.textContent = 'Copy failed';
-    }
-    copyStatus.textContent = button.textContent;
-    setTimeout(() => {
-      button.textContent = 'Copy';
-      copyStatus.textContent = '';
-    }, 1500);
-  });
+  button.addEventListener('click', () => void copy(button));
 }
 
 // Each feature's widget starts when it comes near the screen, so the page doesn't run seven scenarios at load
