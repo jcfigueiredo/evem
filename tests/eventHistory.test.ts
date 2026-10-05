@@ -246,3 +246,49 @@ describe('EvEm - Event History contents and limits', () => {
     expect(emitter.getEventHistory().map(record => record.data)).toEqual([4, 5]);
   });
 });
+
+describe('History replay - which events, and what it logs', () => {
+  test('replayLastEvent replays only the latest of several matching events', async () => {
+    const evem = new EvEm();
+    evem.enableHistory();
+    await evem.publish('price', 1);
+    await evem.publish('price', 2);
+    await evem.publish('price', 3);
+    const callback = vi.fn();
+    evem.subscribe('price', callback, { replayLastEvent: true });
+    expect(callback.mock.calls).toEqual([[3]]);
+  });
+
+  test('replays nothing, without an error, when no recorded event matches', async () => {
+    const evem = new EvEm();
+    evem.enableHistory();
+    await evem.publish('other', 1);
+    const callback = vi.fn();
+    expect(() => evem.subscribe('price', callback, { replayLastEvent: true })).not.toThrow();
+    expect(() => evem.subscribe('price', callback, { replayHistory: true })).not.toThrow();
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  test('logs nothing when a replayed callback succeeds, and says which replay failed when one throws', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const evem = new EvEm();
+    evem.enableHistory();
+    await evem.publish('price', 1);
+    evem.subscribe('price', () => {}, { replayHistory: true });
+    evem.subscribe('price', () => {}, { replayLastEvent: true });
+    expect(error).not.toHaveBeenCalled();
+
+    evem.subscribe(
+      'price',
+      () => {
+        throw new Error('bad replay');
+      },
+      { replayHistory: true }
+    );
+    expect(error).toHaveBeenCalledWith(
+      'Error replaying historical event "price" to new subscriber:',
+      expect.objectContaining({ message: 'bad replay' })
+    );
+    error.mockRestore();
+  });
+});

@@ -331,7 +331,6 @@ class EvEm implements IEventEmitter {
    */
   disableMemoryLeakDetection(): void {
     this.memoryLeakDetectionEnabled = false;
-    this.warnedEvents.clear();
   }
 
   /**
@@ -372,6 +371,7 @@ class EvEm implements IEventEmitter {
    */
   private trimHistory(): void {
     const excess = this.eventHistory.length - this.historyMaxSize;
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: splicing 0 or fewer items removes nothing
     if (excess > 0) {
       this.eventHistory.splice(0, excess);
     }
@@ -426,6 +426,7 @@ class EvEm implements IEventEmitter {
     if (depth > this.maxRecursionDepth) {
       throw new Error(`Max recursion depth of ${this.maxRecursionDepth} exceeded for event '${event}'`);
     }
+    // Stryker disable next-line LogicalOperator: new Map(null) is empty too
     const chain = new Map(parentChain ?? []);
     chain.set(event, depth);
     return chain;
@@ -520,7 +521,7 @@ class EvEm implements IEventEmitter {
     }
 
     if (this.historyEnabled && (options?.replayLastEvent || options?.replayHistory)) {
-      this.replayHistoryTo(finalCallback, event, options.replayLastEvent ? 'last' : 'all');
+      this.replayHistoryTo(finalCallback, event, Boolean(options.replayLastEvent));
     }
 
     return subscriptionId;
@@ -552,7 +553,9 @@ class EvEm implements IEventEmitter {
     subscriptionId: string,
     options?: SubscriptionOptions<T, any>
   ): WrappedCallback<T> {
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: 0 is falsy before the comparison, and a negative window has always ended
     const throttleTime = options?.throttleTime && options.throttleTime > 0 ? options.throttleTime : 0;
+    // Stryker disable next-line EqualityOperator: 0 is falsy before the comparison
     const debounceTime = options?.debounceTime && options.debounceTime > 0 ? options.debounceTime : 0;
     if (throttleTime && debounceTime) {
       return this.throttleDebounceWrapper(callback, event, subscriptionId, throttleTime, debounceTime);
@@ -584,12 +587,13 @@ class EvEm implements IEventEmitter {
 
         // Throttle window has expired, clean up the old timer
         clearTimeout(throttleData.timer);
-        this.throttleTimers.delete(timerId);
       }
 
       // Set up a new throttle window
       const expiresAt = now + throttleTime;
+      // Stryker disable next-line BlockStatement: only frees the map entry: a window's end is read from expiresAt
       const timer = setTimeout(() => {
+        // Stryker disable next-line CallExpression: only frees the map entry: a window's end is read from expiresAt
         this.throttleTimers.delete(timerId);
       }, throttleTime);
 
@@ -616,6 +620,7 @@ class EvEm implements IEventEmitter {
 
   /** Cancel a debounced call that hasn't run yet, if there is one */
   private clearDebounce(timerId: string): void {
+    // Stryker disable next-line ConditionalExpression: clearTimeout(undefined) does nothing
     if (this.debounceTimers.has(timerId)) {
       clearTimeout(this.debounceTimers.get(timerId));
     }
@@ -633,6 +638,7 @@ class EvEm implements IEventEmitter {
     debounceTime: number
   ): typeof SKIPPED {
     const timer = setTimeout(() => {
+      // Stryker disable next-line CallExpression: only frees the map entry of a timer that has fired
       this.debounceTimers.delete(timerId);
       this.invokeDetached(callback, args, `Error in debounced handler for "${event}":`);
     }, debounceTime);
@@ -788,12 +794,12 @@ class EvEm implements IEventEmitter {
     }
   }
 
-  /** History replay for a new subscriber: its event's latest record (`last`), or all of them, in order (`all`) */
-  private replayHistoryTo<T>(callback: WrappedCallback<T>, event: string, which: 'last' | 'all'): void {
+  /** History replay for a new subscriber: its event's latest record (`onlyLast`), or all of them, in order */
+  private replayHistoryTo<T>(callback: WrappedCallback<T>, event: string, onlyLast: boolean): void {
     const relevantHistory = this.getEventHistory().filter(record => this.isEventMatch(record.event, event));
     if (relevantHistory.length === 0) return;
 
-    if (which === 'last') {
+    if (onlyLast) {
       const lastEvent = relevantHistory[relevantHistory.length - 1]!;
       this.invokeDetached(callback, lastEvent.data, `Error replaying last event "${event}" to new subscriber:`);
       return;
@@ -858,29 +864,35 @@ class EvEm implements IEventEmitter {
       this.events.delete(event);
     }
 
-    // Clear memory leak warning if subscription count falls below threshold
-    if (this.memoryLeakDetectionEnabled && this.warnedEvents.has(event) && callbacks.size <= this.memoryLeakThreshold) {
+    // An event back at the threshold can be warned about again (turning detection on clears the list anyway)
+    if (callbacks.size <= this.memoryLeakThreshold) {
       this.warnedEvents.delete(event);
     }
 
     // Clean up any debounce timers associated with this subscription
     const debounceTimerKey = `debounce_${event}_${id}`;
+    // Stryker disable next-line ConditionalExpression: clearTimeout(undefined) does nothing
     if (this.debounceTimers.has(debounceTimerKey)) {
       clearTimeout(this.debounceTimers.get(debounceTimerKey));
+      // Stryker disable next-line CallExpression: frees the map entry of a subscription that's gone
       this.debounceTimers.delete(debounceTimerKey);
     }
 
     // Clean up any throttle timers associated with this subscription
+    // Stryker disable all: a window's timer only frees its map entry, so clearing it isn't observable
     const throttleTimerKey = `throttle_${event}_${id}`;
     if (this.throttleTimers.has(throttleTimerKey)) {
       clearTimeout(this.throttleTimers.get(throttleTimerKey)!.timer);
       this.throttleTimers.delete(throttleTimerKey);
     }
+    // Stryker restore all
 
     // Clean up any combined throttle+debounce timers
     const combinedTimerKey = `combined_${event}_${id}`;
+    // Stryker disable next-line ConditionalExpression: clearTimeout(undefined) does nothing
     if (this.debounceTimers.has(combinedTimerKey)) {
       clearTimeout(this.debounceTimers.get(combinedTimerKey));
+      // Stryker disable next-line CallExpression: frees the map entry of a subscription that's gone
       this.debounceTimers.delete(combinedTimerKey);
     }
   }
@@ -951,11 +963,14 @@ class EvEm implements IEventEmitter {
     const prototype = Object.getPrototypeOf(data);
     if (Array.isArray(data) || prototype === Object.prototype || prototype === null) {
       const copy: any = Array.isArray(data) ? [...data] : { ...data };
+      // Stryker disable next-line ConditionalExpression: whether an object's cancel is enumerable isn't part of the contract; an array's (not enumerable) is pinned by a test
       if (Array.isArray(data)) {
+        // Stryker disable next-line BooleanLiteral: subscribers call cancel() and read canceled; nothing redefines them
         Object.defineProperty(copy, 'cancel', { value: cancel, configurable: true, writable: true });
       } else {
         copy.cancel = cancel;
       }
+      // Stryker disable next-line BooleanLiteral: subscribers call cancel() and read canceled; nothing redefines them
       Object.defineProperty(copy, 'canceled', { get: isCanceled, configurable: true });
       return copy;
     }
@@ -1115,6 +1130,7 @@ class EvEm implements IEventEmitter {
    * with schemaErrorPolicy THROW always rejects, whatever the policy.
    */
   private onPublishError(error: unknown, run: PublishRun, what: 'event handler' | 'transform function'): void {
+    // Stryker disable next-line ConditionalExpression: a transform's errors never carry the private schema mark
     if (what === 'event handler' && isSchemaThrow(error)) {
       throw error;
     }
@@ -1162,6 +1178,7 @@ class EvEm implements IEventEmitter {
    */
   private isEventMatch(event: string, pattern: string): boolean {
     // If pattern is a single wildcard, it matches everything
+    // Stryker disable next-line BlockStatement,ConditionalExpression,StringLiteral: a shortcut: the rules below match '*' against every event too
     if (pattern === '*') {
       return true;
     }
@@ -1170,13 +1187,16 @@ class EvEm implements IEventEmitter {
     const patternParts = pattern.split('.');
 
     // If pattern has more parts than the event, it can't match
+    // Stryker disable next-line BlockStatement,ConditionalExpression: the length check below rejects it too
     if (patternParts.length > eventParts.length) {
       return false;
     }
 
     // Special case for wildcard at end (e.g. "user.*")
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: for a pattern no longer than the event (checked above), the loop below gives the same answer
     if (patternParts.length < eventParts.length && patternParts[patternParts.length - 1] === '*') {
       // Check all parts before the last one
+      // Stryker disable next-line EqualityOperator: the last part is the *, which matches any segment
       for (let i = 0; i < patternParts.length - 1; i++) {
         if (patternParts[i] !== '*' && patternParts[i] !== eventParts[i]) {
           return false;
@@ -1191,6 +1211,7 @@ class EvEm implements IEventEmitter {
     }
 
     // Check each part
+    // Stryker disable next-line EqualityOperator: past the end, both parts are undefined
     for (let i = 0; i < patternParts.length; i++) {
       if (patternParts[i] !== '*' && patternParts[i] !== eventParts[i]) {
         return false;
@@ -1230,6 +1251,7 @@ class EvEm implements IEventEmitter {
         const subscriptions = this.events.get(event) ?? new Map<string, CallbackInfo>();
 
         console.log(`Subscriptions to "${event}": ${subscriptions.size}`);
+        // Stryker disable StringLiteral,CallExpression: the help text under the warning
         console.log('Subscription IDs:');
 
         subscriptions.forEach((info, id) => {
@@ -1240,9 +1262,12 @@ class EvEm implements IEventEmitter {
         console.log('1. Ensure all event handlers are unsubscribed when components are unmounted');
         console.log('2. Use subscribeOnce() for one-time events');
         console.log(`3. Increase the threshold if ${this.memoryLeakThreshold} is too low for your application`);
+        // Stryker restore StringLiteral,CallExpression
+        // Stryker disable all: defensive, in case printing the details throws
       } catch (error) {
         console.error('Error displaying subscription details:', error);
       }
+      // Stryker restore all
 
       console.groupEnd();
     }
@@ -1278,11 +1303,9 @@ class EvEm implements IEventEmitter {
     for (const mw of this.middleware) {
       const middlewarePattern = mw.pattern || '*';
 
-      // For middleware, we include it if:
-      // 1. No pattern was provided (showing everything)
-      // 2. The middleware's pattern matches the provided pattern
-      // 3. The middleware has no pattern (matches all events) and a pattern was provided
-      const shouldInclude = !pattern || this.isEventMatch(pattern, middlewarePattern) || middlewarePattern === '*';
+      // For middleware, we include it if no pattern was provided (showing everything), or if its pattern matches
+      // the provided one (a middleware without a pattern has '*', which matches every pattern)
+      const shouldInclude = !pattern || this.isEventMatch(pattern, middlewarePattern);
 
       if (shouldInclude) {
         result.push({

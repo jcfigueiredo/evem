@@ -307,3 +307,20 @@ describe('Error policies - callback timeouts', () => {
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 });
+
+describe('Error policies - callbacks that throw what is not an object', () => {
+  it.each([null, undefined])('handles a callback that throws %s like any other error', async thrown => {
+    const evem = new EvEm();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const after = vi.fn();
+    evem.subscribe('job', () => {
+      throw thrown;
+    });
+    evem.subscribe('job', after);
+
+    expect(await evem.publish('job', 1)).toBe(true);
+    expect(error).toHaveBeenCalledWith('Error in event handler for "job":', thrown);
+    expect(after).toHaveBeenCalled();
+    error.mockRestore();
+  });
+});

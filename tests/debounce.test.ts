@@ -183,3 +183,13 @@ describe('Throttle and debounce together - unsubscribing', () => {
     vi.useRealTimers();
   });
 });
+
+describe('Debounce - a time that is not positive', () => {
+  test('runs the callback at once, as if there were no debounce', async () => {
+    const emitter = new EvEm();
+    const callback = vi.fn();
+    emitter.subscribe('typing', callback, { debounceTime: -5 });
+    await emitter.publish('typing', 'a');
+    expect(callback).toHaveBeenCalledWith('a');
+  });
+});

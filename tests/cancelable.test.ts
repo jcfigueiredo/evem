@@ -265,3 +265,99 @@ describe('Cancelable events - objects that are proxied', () => {
     expect(seen).toEqual([true, true, true, false]);
   });
 });
+
+describe('Cancelable events - payloads of every kind', () => {
+  test('passes a primitive as it is: nothing to add cancel() to', async () => {
+    const emitter = new EvEm();
+    const received: unknown[] = [];
+    emitter.subscribe('amount', (data: number) => {
+      received.push(data);
+    });
+    expect(await emitter.publish('amount', 5000, { cancelable: true })).toBe(true);
+    expect(received).toEqual([5000]);
+  });
+
+  test("copies a plain object, so a subscriber's changes don't reach the publisher's", async () => {
+    const emitter = new EvEm();
+    const order: { status: string; cancel?: () => void } = { status: 'new' };
+    emitter.subscribe('order', (data: { status: string }) => {
+      data.status = 'changed';
+    });
+    await emitter.publish('order', order, { cancelable: true });
+    expect(order).toEqual({ status: 'new' });
+    expect('cancel' in order).toBe(false);
+  });
+
+  test('copies an array as an array, and an object without a prototype as a plain object', async () => {
+    const emitter = new EvEm();
+    const seen: unknown[] = [];
+    emitter.subscribe('list', (data: { n?: number; cancel?: unknown }) => {
+      seen.push(Array.isArray(data), data.n, typeof data.cancel);
+    });
+    const bare = Object.create(null) as Record<string, number>;
+    bare.n = 1;
+    await emitter.publish('list', [1, 2], { cancelable: true });
+    await emitter.publish('list', bare, { cancelable: true });
+    expect(seen).toEqual([true, undefined, 'function', false, 1, 'function']);
+    expect('cancel' in bare).toBe(false);
+  });
+
+  test("copies an object without a prototype, so a subscriber's changes don't reach the publisher's", async () => {
+    const emitter = new EvEm();
+    emitter.subscribe('list', (data: { n: number }) => {
+      data.n = 2;
+    });
+    const bare = Object.create(null) as { n: number };
+    bare.n = 1;
+    await emitter.publish('list', bare, { cancelable: true });
+    expect(bare.n).toBe(1);
+  });
+
+  test('passes null as it is', async () => {
+    const emitter = new EvEm();
+    const received: unknown[] = [];
+    emitter.subscribe('maybe', (data: unknown) => {
+      received.push(data);
+    });
+    expect(await emitter.publish('maybe', null, { cancelable: true })).toBe(true);
+    expect(received).toEqual([null]);
+  });
+
+  test('a proxied object reports canceled, and reads its own fields and methods', async () => {
+    class Order {
+      id = 7;
+      label() {
+        return `order ${this.id}`;
+      }
+    }
+    const emitter = new EvEm();
+    const seen: unknown[] = [];
+    emitter.subscribe('order', (data: Order & { canceled: boolean; cancel(): void }) => {
+      seen.push(data.canceled, data.id, data.label());
+      data.cancel();
+      seen.push(data.canceled);
+    });
+    expect(await emitter.publish('order', new Order(), { cancelable: true })).toBe(false);
+    expect(seen).toEqual([false, 7, 'order 7', true]);
+  });
+
+  test("doesn't run the transform of the subscriber that canceled", async () => {
+    const emitter = new EvEm();
+    const transform = vi.fn((data: object) => data);
+    emitter.subscribe('pay', (data: { cancel(): void }) => data.cancel(), { transform });
+    expect(await emitter.publish('pay', { amount: 1 }, { cancelable: true })).toBe(false);
+    expect(transform).not.toHaveBeenCalled();
+  });
+});
+
+describe('Cancelable events - arrays keep only their items as keys', () => {
+  test("cancel and canceled aren't among an array's keys", async () => {
+    const emitter = new EvEm();
+    let keys: string[] = [];
+    emitter.subscribe('list', (data: number[]) => {
+      keys = Object.keys(data);
+    });
+    await emitter.publish('list', [1, 2], { cancelable: true });
+    expect(keys).toEqual(['0', '1']);
+  });
+});

@@ -391,3 +391,84 @@ describe('Middleware - results that are not objects', () => {
     expect(received).toEqual([42]);
   });
 });
+
+describe('Middleware - removing it', () => {
+  const run = async (evem: EvEm) => {
+    const seen: unknown[] = [];
+    evem.subscribe('order', data => {
+      seen.push(data);
+    });
+    await evem.publish('order', []);
+    return seen[0];
+  };
+  const tag = (name: string) => (_event: string, data: string[]) => [...data, name];
+
+  it('removes the function it is given, wherever it is in the list', async () => {
+    const evem = new EvEm();
+    const a = tag('a');
+    const b = tag('b');
+    evem.use(a);
+    evem.use(b);
+    evem.removeMiddleware(b);
+    expect(await run(evem)).toEqual(['a']);
+  });
+
+  it('removes nothing when given one that was never added', async () => {
+    const evem = new EvEm();
+    evem.use(tag('a'));
+    evem.use({ pattern: 'order', handler: tag('b') });
+    evem.removeMiddleware(tag('x'));
+    evem.removeMiddleware({ pattern: 'order', handler: tag('y') });
+    expect(await run(evem)).toEqual(['a', 'b']);
+  });
+
+  it('removes a pattern registration only where both its pattern and its handler match', async () => {
+    const evem = new EvEm();
+    const shared = tag('shared');
+    const other = tag('other');
+    evem.use({ pattern: 'shipment', handler: shared });
+    evem.use({ pattern: 'order', handler: other });
+    evem.use({ pattern: 'order', handler: shared });
+    evem.removeMiddleware({ pattern: 'order', handler: shared });
+    expect(await run(evem)).toEqual(['other']);
+  });
+});
+
+describe('Middleware - results that are not a reroute', () => {
+  it('replaces the data with undefined when it returns nothing', async () => {
+    const evem = new EvEm();
+    const received: unknown[] = [];
+    evem.use(() => undefined);
+    evem.subscribe('count', data => {
+      received.push(data);
+    });
+    expect(await evem.publish('count', { n: 1 })).toBe(true);
+    expect(received).toEqual([undefined]);
+  });
+
+  it('replaces the data with a string result, whatever its length', async () => {
+    const evem = new EvEm();
+    const received: unknown[] = [];
+    evem.use(() => 'ok');
+    evem.subscribe('count', data => {
+      received.push(data);
+    });
+    expect(await evem.publish('count', 1)).toBe(true);
+    expect(received).toEqual(['ok']);
+  });
+
+  it('treats { event, data } whose event is not a string as data', async () => {
+    const evem = new EvEm();
+    const received: unknown[] = [];
+    const rerouted = vi.fn();
+    // Not a valid MiddlewareResult for a reroute: event must be a string
+    evem.use((() => ({ event: 42, data: 'x' })) as unknown as MiddlewareFunction);
+    evem.subscribe('count', data => {
+      received.push(data);
+    });
+    evem.subscribe('42', rerouted);
+    await evem.publish('count', 1);
+    expect(received).toEqual([{ event: 42, data: 'x' }]);
+    expect(rerouted).not.toHaveBeenCalled();
+  });
+});

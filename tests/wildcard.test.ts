@@ -68,3 +68,24 @@ describe('EvEm - Wildcard Subscription Tests', () => {
     expect(callback).toHaveBeenCalledWith(eventData);
   });
 });
+
+describe('Wildcards - patterns and longer events', () => {
+  const matches = async (pattern: string, event: string) => {
+    const emitter = new EvEm();
+    const callback = vi.fn();
+    emitter.subscribe(pattern, callback);
+    await emitter.publish(event);
+    return callback.mock.calls.length === 1;
+  };
+
+  test('a pattern without a trailing * matches only events with as many segments', async () => {
+    expect(await matches('user', 'user.login')).toBe(false);
+    expect(await matches('user.login', 'user.login.extra')).toBe(false);
+    expect(await matches('user.*', 'user')).toBe(false);
+  });
+
+  test('a * in the middle of a pattern that ends in * still matches any segment', async () => {
+    expect(await matches('order.*.*', 'order.a.b.c')).toBe(true);
+    expect(await matches('order.*.*', 'other.a.b.c')).toBe(false);
+  });
+});
