@@ -29,6 +29,12 @@ const SCHEMA_THROW = Symbol('schemaThrow');
 
 const isSchemaThrow = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && (error as Record<symbol, unknown>)[SCHEMA_THROW] === true;
+/** A subscription's priority as a number: 'high' is 100, 'normal' 0, 'low' -100; numbers as they are */
+function priorityValue(priority: number | PriorityLevel | Priority | undefined): number {
+  if (typeof priority === 'number') return priority;
+  return priority === 'high' ? 100 : priority === 'low' ? -100 : 0;
+}
+
 type FilterPredicate<T = unknown> = (args: T) => boolean | Promise<boolean>;
 type PriorityLevel = 'high' | 'normal' | 'low';
 
@@ -447,298 +453,24 @@ class EvEm implements IEventEmitter {
   ): string {
     if (!event) throw new Error('Event name cannot be empty.');
 
-    // Generate a subscription ID early so we can use it in the throttle/debounce callbacks
+    // The once, throttle and debounce wrappers use the subscription's id
     const subscriptionId = generateId();
 
-    // Reference to the original callback
+    // The callback chain, built from the inside out. Events flow through it in this order:
+    // schema validation → filters → throttle/debounce → once → original callback.
+    // Once is innermost, so only an event that got through every other step consumes it; filters wrap
+    // throttle/debounce and once, so a rejected event never uses up a throttle window, resets a debounce
+    // timer or consumes a once subscription
     let finalCallback: WrappedCallback<T> = callback;
-
-    // Build the callback chain from the inside out. Events flow through it in this order:
-    // schema validation → filters → throttle/debounce → once → original callback
-
-    // First, wrap with once logic if needed. It's innermost, so only an event that got through
-    // every other step consumes it, and the flag makes it fire exactly once even when events
-    // arrive concurrently or are replayed from history
-    if (options?.once) {
-      const onceOriginalCallback = finalCallback;
-      const self = this; // Store reference to 'this' for the closure
-      let hasFired = false;
-
-      finalCallback = function onceWrapper(args: T) {
-        if (hasFired) {
-          return SKIPPED;
-        }
-        hasFired = true;
-        // Unsubscribe before calling, so the subscription is removed even if the callback throws or never settles
-        self.unsubscribeById(subscriptionId);
-        return onceOriginalCallback(args);
-      };
-    }
-
-    // Store reference to the callback with once logic
-    // This will be called by the throttle/debounce wrappers
-    const processedCallback = finalCallback;
-
-    // Apply throttle/debounce logic
-    const hasThrottle = options?.throttleTime && options.throttleTime > 0;
-    const hasDebounce = options?.debounceTime && options.debounceTime > 0;
-
-    // Handle throttle only
-    if (hasThrottle && !hasDebounce) {
-      const throttleTime = options.throttleTime!;
-
-      finalCallback = (args: T) => {
-        const timerId = `throttle_${event}_${subscriptionId}`;
-        const now = Date.now();
-
-        // Check if we're currently throttled
-        if (this.throttleTimers.has(timerId)) {
-          const throttleData = this.throttleTimers.get(timerId)!;
-
-          // If throttle window hasn't expired, ignore this event
-          if (now < throttleData.expiresAt) {
-            return SKIPPED;
-          }
-
-          // Throttle window has expired, clean up the old timer
-          clearTimeout(throttleData.timer);
-          this.throttleTimers.delete(timerId);
-        }
-
-        // Set up a new throttle window
-        const expiresAt = now + throttleTime;
-        const timer = setTimeout(() => {
-          this.throttleTimers.delete(timerId);
-        }, throttleTime);
-
-        this.throttleTimers.set(timerId, { timer, expiresAt });
-
-        // Execute the callback immediately (throttle processes first event right away)
-        return processedCallback(args);
-      };
-    }
-    // Handle debounce only
-    else if (!hasThrottle && hasDebounce) {
-      const debounceTime = options.debounceTime!;
-
-      finalCallback = (args: T) => {
-        const timerId = `debounce_${event}_${subscriptionId}`;
-
-        // Clear any existing timer for this callback
-        if (this.debounceTimers.has(timerId)) {
-          clearTimeout(this.debounceTimers.get(timerId));
-        }
-
-        // Set a new timer
-        const timer = setTimeout(() => {
-          this.debounceTimers.delete(timerId);
-          // Execute the callback directly; there's no publish to report errors to anymore
-          this.invokeDetached(processedCallback, args, `Error in debounced handler for "${event}":`);
-        }, debounceTime);
-
-        this.debounceTimers.set(timerId, timer);
-        return SKIPPED;
-      };
-    }
-    // Handle both throttle and debounce
-    else if (hasThrottle && hasDebounce) {
-      const throttleTime = options.throttleTime!;
-      const debounceTime = options.debounceTime!;
-
-      // Track the last throttled time
-      const throttleState = { lastThrottledTime: 0 };
-
-      finalCallback = (args: T) => {
-        const timerId = `combined_${event}_${subscriptionId}`;
-        const now = Date.now();
-
-        // Check if throttling allows this event to pass through
-        let shouldProcessNow = false;
-
-        // If no throttle window or it has expired, we can process immediately
-        if (now - throttleState.lastThrottledTime > throttleTime) {
-          throttleState.lastThrottledTime = now;
-          shouldProcessNow = true;
-        }
-
-        // Clear any existing debounce timer
-        if (this.debounceTimers.has(timerId)) {
-          clearTimeout(this.debounceTimers.get(timerId));
-        }
-
-        // If it should process now due to throttle, do it immediately
-        if (shouldProcessNow) {
-          return processedCallback(args);
-        }
-
-        // Otherwise, debounce it
-        const timer = setTimeout(() => {
-          this.debounceTimers.delete(timerId);
-          this.invokeDetached(processedCallback, args, `Error in debounced handler for "${event}":`);
-        }, debounceTime);
-
-        this.debounceTimers.set(timerId, timer);
-        return SKIPPED;
-      };
-    }
-
-    // Apply filters if needed. Filters wrap throttle/debounce and once, so a rejected event
-    // never uses up a throttle window, resets a debounce timer or consumes a once subscription
-    const filters = options?.filter ? (Array.isArray(options.filter) ? options.filter : [options.filter]) : null;
-
-    if (filters) {
-      const originalCallback = finalCallback;
-      const self = this; // Store reference to 'this' for the closure
-
-      // Create a function that checks all filters first
-      const checkFilters = async (args: T): Promise<boolean> => {
-        // Apply each filter in series (short-circuiting on first false)
-        for (const filter of filters) {
-          try {
-            const result = filter(args);
-            const passes = result instanceof Promise ? await result : result;
-            if (!passes) return false; // Filter failed
-          } catch (error) {
-            console.error('Filter threw an error:', error);
-            return false; // Treat errors in filters as filter failures
-          }
-        }
-        return true; // All filters passed
-      };
-
-      // Wrap the callback with filter logic
-      finalCallback = function filterWrapper(args: T) {
-        // Check all filters first
-        const filterResult = checkFilters(args);
-
-        // If filterResult is a promise (async filter)
-        if (filterResult instanceof Promise) {
-          return filterResult.then(
-            self.bindToActivePublishChain(passes => {
-              // If all filters passed, call the original callback
-              if (passes) {
-                return originalCallback(args);
-              }
-              // Otherwise skip the callback
-              return SKIPPED;
-            })
-          );
-        } else if (filterResult) {
-          // If all filters passed synchronously, call the original callback
-          return originalCallback(args);
-        }
-        // Otherwise don't call the callback
-        return SKIPPED;
-      };
-    }
-
-    // Apply schema validation if provided
+    if (options?.once) finalCallback = this.onceWrapper(finalCallback, subscriptionId);
+    finalCallback = this.flowControlWrapper(finalCallback, event, subscriptionId, options);
+    if (options?.filter) finalCallback = this.filterWrapper(finalCallback, options.filter);
     if (options?.schema) {
-      const schemaValidator = options.schema;
-      const originalCallback = finalCallback;
-      const schemaErrorPolicy = options.schemaErrorPolicy ?? ErrorPolicy.CANCEL_ON_ERROR;
-      const self = this; // Store reference to 'this' for the closure
-
-      // Wrap the callback with schema validation logic
-      finalCallback = function schemaValidationWrapper(args: T) {
-        // Handler for schema validation errors based on error policy
-        const handleSchemaValidationError = (
-          message: string,
-          policy: ErrorPolicy,
-          errors: SchemaValidationError[] | null
-        ): any => {
-          switch (policy) {
-            case ErrorPolicy.SILENT:
-              // Silently ignore the error, don't call the callback
-              return SKIPPED;
-
-            case ErrorPolicy.LOG_AND_CONTINUE:
-              // Log the error and continue with the callback
-              console.error(message, errors ? errors : '');
-              return originalCallback(args);
-
-            case ErrorPolicy.THROW:
-              // Throw an error
-              const error = new Error(message);
-              (error as any).validationErrors = errors;
-              Object.defineProperty(error, SCHEMA_THROW, { value: true });
-              throw error;
-
-            case ErrorPolicy.CANCEL_ON_ERROR:
-            default:
-              // Log the error and skip this subscriber (other subscribers still run)
-              console.error(message, errors ? errors : '');
-              return SKIPPED;
-          }
-        };
-
-        // Call the callback for valid data, or apply the error policy for invalid data.
-        // Works for both simple (boolean) and advanced ({ valid, errors }) validator results.
-        const handleValidationResult = (result: boolean | { valid: boolean; errors?: SchemaValidationError[] }) => {
-          const isSimpleResult = typeof result === 'boolean';
-          const valid = isSimpleResult ? result : result.valid;
-          if (valid) {
-            return originalCallback(args);
-          }
-          return handleSchemaValidationError(
-            `Schema validation failed for event '${event}'`,
-            schemaErrorPolicy,
-            isSimpleResult ? null : (result.errors ?? null)
-          );
-        };
-
-        // Only errors thrown by the validator itself are schema errors; errors thrown by the
-        // callback must reach the publish error policy, so the callback runs outside this try
-        // The validator itself threw (or rejected), handle according to error policy
-        const handleValidatorError = (error: unknown) =>
-          handleSchemaValidationError(
-            `Error during schema validation for event '${event}': ${error}`,
-            schemaErrorPolicy,
-            error instanceof Error ? [{ message: error.message }] : null
-          );
-
-        let validationResult: ReturnType<typeof schemaValidator>;
-        try {
-          validationResult = schemaValidator(args);
-        } catch (error) {
-          return handleValidatorError(error);
-        }
-
-        // Handle both synchronous and asynchronous validators
-        if (validationResult instanceof Promise) {
-          return validationResult.then(
-            self.bindToActivePublishChain(handleValidationResult),
-            self.bindToActivePublishChain(handleValidatorError)
-          );
-        }
-        return handleValidationResult(validationResult);
-      };
+      const policy = options.schemaErrorPolicy ?? ErrorPolicy.CANCEL_ON_ERROR;
+      finalCallback = this.schemaWrapper(finalCallback, event, options.schema, policy);
     }
 
-    // Convert priority option to a numeric value
-    let priority = 0; // Default priority (normal)
-
-    if (options?.priority !== undefined) {
-      if (typeof options.priority === 'number') {
-        priority = options.priority;
-      } else {
-        // Convert string priority levels to numbers
-        switch (options.priority) {
-          case 'high':
-            priority = 100;
-            break;
-          case 'low':
-            priority = -100;
-            break;
-          case 'normal':
-          default:
-            priority = 0;
-            break;
-        }
-      }
-    }
-
-    // Capture the transform function if provided
+    const priority = priorityValue(options?.priority);
     const transform = options?.transform;
 
     // Register the final wrapped callback with its priority and transform function
@@ -757,36 +489,281 @@ class EvEm implements IEventEmitter {
       this.checkForMemoryLeak(event, callbacks.size);
     }
 
-    // Handle history replay options if history is enabled
     if (this.historyEnabled && (options?.replayLastEvent || options?.replayHistory)) {
-      // Get relevant historical events
-      const relevantHistory = this.getEventHistory().filter(record => this.isEventMatch(record.event, event));
-
-      if (relevantHistory.length > 0) {
-        // If replayLastEvent is true, only replay the most recent event
-        if (options?.replayLastEvent) {
-          const lastEvent = relevantHistory[relevantHistory.length - 1]!;
-          // Directly call the callback with the historical data
-          this.invokeDetached(
-            finalCallback,
-            lastEvent.data,
-            `Error replaying last event "${event}" to new subscriber:`
-          );
-        }
-        // If replayHistory is true, replay all matching historical events in order
-        else if (options?.replayHistory) {
-          for (const record of relevantHistory) {
-            this.invokeDetached(
-              finalCallback,
-              record.data,
-              `Error replaying historical event "${event}" to new subscriber:`
-            );
-          }
-        }
-      }
+      this.replayHistoryTo(finalCallback, event, options.replayLastEvent ? 'last' : 'all');
     }
 
     return subscriptionId;
+  }
+
+  /**
+   * Once: the callback runs for the first event that reaches it. The subscription goes just before it runs, so it
+   * goes even if the callback throws or never settles; the flag makes it fire exactly once even when events arrive
+   * concurrently or are replayed from history.
+   */
+  private onceWrapper<T>(callback: WrappedCallback<T>, subscriptionId: string): WrappedCallback<T> {
+    let hasFired = false;
+    return (args: T) => {
+      if (hasFired) {
+        return SKIPPED;
+      }
+      hasFired = true;
+      this.unsubscribeById(subscriptionId);
+      return callback(args);
+    };
+  }
+
+  /** Throttle, debounce, both, or neither (a time that isn't positive is no time) */
+  private flowControlWrapper<T>(
+    callback: WrappedCallback<T>,
+    event: string,
+    subscriptionId: string,
+    options?: SubscriptionOptions<T, any>
+  ): WrappedCallback<T> {
+    const throttleTime = options?.throttleTime && options.throttleTime > 0 ? options.throttleTime : 0;
+    const debounceTime = options?.debounceTime && options.debounceTime > 0 ? options.debounceTime : 0;
+    if (throttleTime && debounceTime) {
+      return this.throttleDebounceWrapper(callback, event, subscriptionId, throttleTime, debounceTime);
+    }
+    if (throttleTime) return this.throttleWrapper(callback, event, subscriptionId, throttleTime);
+    if (debounceTime) return this.debounceWrapper(callback, event, subscriptionId, debounceTime);
+    return callback;
+  }
+
+  /** Throttle: the first event runs at once and opens a window; events during the window are dropped */
+  private throttleWrapper<T>(
+    callback: WrappedCallback<T>,
+    event: string,
+    subscriptionId: string,
+    throttleTime: number
+  ): WrappedCallback<T> {
+    return (args: T) => {
+      const timerId = `throttle_${event}_${subscriptionId}`;
+      const now = Date.now();
+
+      // Check if we're currently throttled
+      if (this.throttleTimers.has(timerId)) {
+        const throttleData = this.throttleTimers.get(timerId)!;
+
+        // If throttle window hasn't expired, ignore this event
+        if (now < throttleData.expiresAt) {
+          return SKIPPED;
+        }
+
+        // Throttle window has expired, clean up the old timer
+        clearTimeout(throttleData.timer);
+        this.throttleTimers.delete(timerId);
+      }
+
+      // Set up a new throttle window
+      const expiresAt = now + throttleTime;
+      const timer = setTimeout(() => {
+        this.throttleTimers.delete(timerId);
+      }, throttleTime);
+
+      this.throttleTimers.set(timerId, { timer, expiresAt });
+
+      // Execute the callback immediately (throttle processes first event right away)
+      return callback(args);
+    };
+  }
+
+  /** Debounce: each event restarts a timer, and the callback runs with the last event once they pause */
+  private debounceWrapper<T>(
+    callback: WrappedCallback<T>,
+    event: string,
+    subscriptionId: string,
+    debounceTime: number
+  ): WrappedCallback<T> {
+    return (args: T) => {
+      const timerId = `debounce_${event}_${subscriptionId}`;
+
+      // Clear any existing timer for this callback
+      if (this.debounceTimers.has(timerId)) {
+        clearTimeout(this.debounceTimers.get(timerId));
+      }
+
+      // Set a new timer
+      const timer = setTimeout(() => {
+        this.debounceTimers.delete(timerId);
+        // Execute the callback directly; there's no publish to report errors to anymore
+        this.invokeDetached(callback, args, `Error in debounced handler for "${event}":`);
+      }, debounceTime);
+
+      this.debounceTimers.set(timerId, timer);
+      return SKIPPED;
+    };
+  }
+
+  /**
+   * Throttle and debounce: an event runs at once when more than throttleTime has passed since the last immediate
+   * run; the others are debounced, so the last event still gets a run
+   */
+  private throttleDebounceWrapper<T>(
+    callback: WrappedCallback<T>,
+    event: string,
+    subscriptionId: string,
+    throttleTime: number,
+    debounceTime: number
+  ): WrappedCallback<T> {
+    // Track the last throttled time
+    const throttleState = { lastThrottledTime: 0 };
+
+    return (args: T) => {
+      const timerId = `combined_${event}_${subscriptionId}`;
+      const now = Date.now();
+
+      // Check if throttling allows this event to pass through
+      let shouldProcessNow = false;
+
+      // If no throttle window or it has expired, we can process immediately
+      if (now - throttleState.lastThrottledTime > throttleTime) {
+        throttleState.lastThrottledTime = now;
+        shouldProcessNow = true;
+      }
+
+      // Clear any existing debounce timer
+      if (this.debounceTimers.has(timerId)) {
+        clearTimeout(this.debounceTimers.get(timerId));
+      }
+
+      // If it should process now due to throttle, do it immediately
+      if (shouldProcessNow) {
+        return callback(args);
+      }
+
+      // Otherwise, debounce it
+      const timer = setTimeout(() => {
+        this.debounceTimers.delete(timerId);
+        this.invokeDetached(callback, args, `Error in debounced handler for "${event}":`);
+      }, debounceTime);
+
+      this.debounceTimers.set(timerId, timer);
+      return SKIPPED;
+    };
+  }
+
+  /**
+   * Filters: run in series, stop at the first that says no, and must all pass; one that throws is logged and
+   * counts as a no. The answer is always a promise (they may be async), so the callback runs in the publish chain
+   * it was called in (bindToActivePublishChain).
+   */
+  private filterWrapper<T>(
+    callback: WrappedCallback<T>,
+    filter: FilterPredicate<T> | FilterPredicate<T>[]
+  ): WrappedCallback<T> {
+    const filters = Array.isArray(filter) ? filter : [filter];
+    const checkFilters = async (args: T): Promise<boolean> => {
+      for (const each of filters) {
+        try {
+          const result = each(args);
+          const passes = result instanceof Promise ? await result : result;
+          if (!passes) return false;
+        } catch (error) {
+          console.error('Filter threw an error:', error);
+          return false;
+        }
+      }
+      return true;
+    };
+    return (args: T) =>
+      checkFilters(args).then(this.bindToActivePublishChain(passes => (passes ? callback(args) : SKIPPED)));
+  }
+
+  /**
+   * Schema validation: valid data reaches the callback; invalid data, or a validator that throws or rejects, goes
+   * to the subscriber's schemaErrorPolicy (see onSchemaFailure). Only errors thrown by the validator itself are
+   * schema errors; the callback's own errors reach the publish error policy, so it runs outside the validator's try.
+   */
+  private schemaWrapper<T>(
+    callback: WrappedCallback<T>,
+    event: string,
+    validator: SchemaValidator<T> | AdvancedSchemaValidator<T>,
+    policy: ErrorPolicy
+  ): WrappedCallback<T> {
+    return (args: T) => {
+      const failed = (message: string, errors: SchemaValidationError[] | null) =>
+        this.onSchemaFailure(message, policy, errors, () => callback(args));
+
+      // Works for both simple (boolean) and advanced ({ valid, errors }) validator results
+      const handleValidationResult = (result: boolean | { valid: boolean; errors?: SchemaValidationError[] }) => {
+        const isSimpleResult = typeof result === 'boolean';
+        const valid = isSimpleResult ? result : result.valid;
+        if (valid) {
+          return callback(args);
+        }
+        return failed(`Schema validation failed for event '${event}'`, isSimpleResult ? null : (result.errors ?? null));
+      };
+      const handleValidatorError = (error: unknown) =>
+        failed(
+          `Error during schema validation for event '${event}': ${error}`,
+          error instanceof Error ? [{ message: error.message }] : null
+        );
+
+      let validationResult: ReturnType<typeof validator>;
+      try {
+        validationResult = validator(args);
+      } catch (error) {
+        return handleValidatorError(error);
+      }
+
+      // Handle both synchronous and asynchronous validators
+      if (validationResult instanceof Promise) {
+        return validationResult.then(
+          this.bindToActivePublishChain(handleValidationResult),
+          this.bindToActivePublishChain(handleValidatorError)
+        );
+      }
+      return handleValidationResult(validationResult);
+    };
+  }
+
+  /**
+   * What failed validation does, by the subscriber's schemaErrorPolicy: SILENT skips the subscriber,
+   * LOG_AND_CONTINUE logs and runs it anyway (`run`), THROW rejects the publish (marked with SCHEMA_THROW, so the
+   * publish error policy can't swallow it), and CANCEL_ON_ERROR (the default) logs and skips this subscriber only
+   */
+  private onSchemaFailure(
+    message: string,
+    policy: ErrorPolicy,
+    errors: SchemaValidationError[] | null,
+    run: () => unknown
+  ): unknown {
+    switch (policy) {
+      case ErrorPolicy.SILENT:
+        return SKIPPED;
+
+      case ErrorPolicy.LOG_AND_CONTINUE:
+        console.error(message, errors ? errors : '');
+        return run();
+
+      case ErrorPolicy.THROW: {
+        const error = new Error(message);
+        (error as any).validationErrors = errors;
+        Object.defineProperty(error, SCHEMA_THROW, { value: true });
+        throw error;
+      }
+
+      case ErrorPolicy.CANCEL_ON_ERROR:
+      default:
+        console.error(message, errors ? errors : '');
+        return SKIPPED;
+    }
+  }
+
+  /** History replay for a new subscriber: its event's latest record (`last`), or all of them, in order (`all`) */
+  private replayHistoryTo<T>(callback: WrappedCallback<T>, event: string, which: 'last' | 'all'): void {
+    const relevantHistory = this.getEventHistory().filter(record => this.isEventMatch(record.event, event));
+    if (relevantHistory.length === 0) return;
+
+    if (which === 'last') {
+      const lastEvent = relevantHistory[relevantHistory.length - 1]!;
+      this.invokeDetached(callback, lastEvent.data, `Error replaying last event "${event}" to new subscriber:`);
+      return;
+    }
+    for (const record of relevantHistory) {
+      this.invokeDetached(callback, record.data, `Error replaying historical event "${event}" to new subscriber:`);
+    }
   }
 
   /**
