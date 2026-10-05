@@ -58,7 +58,7 @@ function checkResponse(response: Response): SseCloseInfo | undefined {
 
 /**
  * SSE transport built on fetch: supports headers, POST and every event type, and works in
- * browsers and Node.js 20+. It reads the body as a stream and stops reading while the listener
+ * browsers and Node.js 22+. It reads the body as a stream and stops reading while the listener
  * is busy with an event (backpressure).
  */
 export class FetchSseTransport implements SseTransport {

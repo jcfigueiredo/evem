@@ -37,7 +37,7 @@ pnpm demo            # The demo site (showcase and playground) on a local dev se
 pnpm demo:build      # Build the demo site into demo/dist/
 ```
 
-Developing needs Node.js 20.19+ or 22.13+ (the demo site is built with Vite 8, and the tests build it; ESLint 10 needs 22.13 on Node 22); the package itself runs on Node.js 20+.
+Developing needs Node.js 22.13+ (for Vitest 5 and ESLint 10); the package itself runs on Node.js 22+.
 
 Maintainers release new versions with `pnpm release <version>`; see [Releasing](releasing.md).
 

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **Requires Node.js 22+**, up from 20: Node.js 20 reached end of life in April 2026. Browsers are unaffected. Node.js 22.4+ has a global `WebSocket`, so the WebSocket adapter takes a URL without `WebSocketConstructor`; the `ws` package is still the way to give sockets options such as headers.
+
 ### Fixed
 
 - **WebSocket adapter**: what it publishes from the socket (incoming messages, `ws.error`, `ws.parse.error`, `ws.queue.overflow`, `ws.reconnect.failed`) left a rejected publish unhandled, which ends a Node.js process; a publish rejects when one of your subscribers makes it (`schemaErrorPolicy: THROW`, the recursion limit). Those rejections are now logged with `console.error`, as the SSE adapter already did.

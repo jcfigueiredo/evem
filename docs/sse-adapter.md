@@ -40,7 +40,7 @@ Try it in the [playground](https://jcfigueiredo.github.io/evem/playground/#/sse/
 npm install @jcfigueiredo/evem
 ```
 
-There's nothing else to install. The adapter only needs `fetch`, `ReadableStream`, `TextDecoder` and `AbortController`, which modern browsers and Node.js 20+ have built in. The package is ES modules only.
+There's nothing else to install. The adapter only needs `fetch`, `ReadableStream`, `TextDecoder` and `AbortController`, which modern browsers and Node.js 22+ have built in. The package is ES modules only.
 
 ```typescript
 import { EvEm } from '@jcfigueiredo/evem';
@@ -112,7 +112,7 @@ The default transport makes the request with `fetch` and parses the stream itsel
 - **HTTP status:** it sees the response status, so it can stop on `204` or `401` and retry on `503`, waiting at least as long as `Retry-After` asks.
 - **Heartbeat timeout:** it can detect a stream that silently stopped.
 - **Backpressure:** with `sequential: true`, it stops reading while your subscribers are busy.
-- **Node.js:** it works in Node.js 20+, which has `fetch` but no `EventSource`.
+- **Node.js:** it works in Node.js 22+, which has `fetch` but no `EventSource` (except behind a flag).
 
 ### EventSource (`transport: 'eventsource'`)
 
@@ -424,7 +424,7 @@ Each event is published with EvEm's default publish options, so an async subscri
 
 ## Node.js
 
-Node.js 20 and later have a global `fetch`, so the default transport works without any setup:
+Node.js has a global `fetch`, so the default transport works without any setup:
 
 ```typescript
 import { EvEm } from '@jcfigueiredo/evem';
@@ -447,7 +447,7 @@ process.on('SIGINT', async () => {
 - **Use an absolute URL.** Node.js has no page to resolve `/api/events` against, so a relative URL throws a `TypeError` when the handler is created.
 - **Idle streams:** Node's built-in `fetch` gives up on a response whose body has been silent for 5 minutes. The handler then reconnects (`sse.error` with `reason: 'network-error'`). A server heartbeat more often than that avoids it.
 - **A custom `fetch`** (the `fetch` option) lets you use a proxy agent, other timeouts or instrumentation.
-- **EventSource transport:** Node.js 20 has no `EventSource`, and Node.js 22 has one only behind `--experimental-eventsource`. Pass a polyfill such as the [`eventsource`](https://www.npmjs.com/package/eventsource) package as `EventSourceConstructor`, or simply use the default transport. Without an implementation, creating the handler throws a `TypeError`.
+- **EventSource transport:** Node.js 22 has an `EventSource` only behind `--experimental-eventsource`. Pass a polyfill such as the [`eventsource`](https://www.npmjs.com/package/eventsource) package as `EventSourceConstructor`, or simply use the default transport. Without an implementation, creating the handler throws a `TypeError`.
 
 ## Writing servers
 
