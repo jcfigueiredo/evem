@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **WebSocket adapter**: what it publishes from the socket (incoming messages, `ws.error`, `ws.parse.error`, `ws.queue.overflow`, `ws.reconnect.failed`) left a rejected publish unhandled, which ends a Node.js process; a publish rejects when one of your subscribers makes it (`schemaErrorPolicy: THROW`, the recursion limit). Those rejections are now logged with `console.error`, as the SSE adapter already did.
+- **`request()`** rejects at once, with the reason, when publishing `ws.send.request` rejects, instead of leaving the rejection unhandled and the request waiting for its timeout.
+
 ## 0.3.2 (2026-10-04)
 
 ### Internal

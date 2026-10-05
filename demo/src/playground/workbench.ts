@@ -313,9 +313,10 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   const renderControls = () => {
     controls.replaceChildren(
       ...Object.entries(scenario.controls).map(([name, control]) =>
-        controlField(name, control, session.values[name]!, value =>
-          restart(() => session.setValue(name, value), describeChange(control, value))
-        )
+        // A restart never rejects: the session turns errors into timeline rows
+        controlField(name, control, session.values[name]!, value => {
+          void restart(() => session.setValue(name, value), describeChange(control, value));
+        })
       )
     );
     controls.disabled = session.edited;

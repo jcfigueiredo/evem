@@ -73,8 +73,15 @@ export class RequestResponseManager {
         timestamp: Date.now()
       });
 
-      // Publish the request
-      this.evem.publish('ws.send.request', requestMessage);
+      // Publish the request. A publish that rejects (an app's subscriber made it) rejects the request at once, with
+      // the reason, instead of leaving it to time out
+      this.evem.publish('ws.send.request', requestMessage).catch((error: unknown) => {
+        clearTimeout(timeoutId);
+        if (this.pendingRequests.get(id)?.timeoutId === timeoutId) {
+          this.pendingRequests.delete(id);
+        }
+        reject(error instanceof Error ? error : new Error(String(error)));
+      });
     });
   }
 

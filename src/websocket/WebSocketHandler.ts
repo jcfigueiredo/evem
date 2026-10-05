@@ -2,6 +2,7 @@ import type { EvEm, MiddlewareConfig } from '../eventEmitter.js';
 import { ConnectionManager } from './ConnectionManager.js';
 import { MessageQueue } from './MessageQueue.js';
 import { RequestResponseManager } from './RequestResponseManager.js';
+import { publishSafely } from '../shared/publishSafely.js';
 import { routeServerMessage } from '../shared/routing.js';
 import type { IWebSocket, WebSocketHandlerOptions, RequestOptions } from './types.js';
 
@@ -132,7 +133,7 @@ export class WebSocketHandler {
 
     // onopen won't fire for a socket that is already open
     if (this.ws.readyState === this.ws.OPEN) {
-      this.connectionManager.transitionTo('connected');
+      void this.connectionManager.transitionTo('connected');
     }
   }
 
@@ -163,18 +164,17 @@ export class WebSocketHandler {
       await this.handleUnexpectedClose();
     };
 
-    // Wire onopen
-    this.ws.onopen = async event => {
+    // The socket's handlers return nothing: the state changes they start never reject (see publishSafely)
+    this.ws.onopen = () => {
       opened = true;
       endHandled = false;
       this.reconnectAttempts = 0;
-      await this.connectionManager.transitionTo('connected');
+      void this.connectionManager.transitionTo('connected');
     };
 
-    // Wire onclose
-    this.ws.onclose = async event => {
+    this.ws.onclose = () => {
       opened = false;
-      await handleEnd();
+      void handleEnd();
     };
 
     // Wire onerror
@@ -183,7 +183,7 @@ export class WebSocketHandler {
       const error = event.error || (event instanceof Error ? event : new Error('WebSocket error'));
 
       // Emit error event
-      this.evem.publish('ws.error', { error, event });
+      void this.publishSafely('ws.error', { error, event });
 
       // Call custom error handler if provided
       if (this.options.onError) {
@@ -229,7 +229,7 @@ export class WebSocketHandler {
 
     if (this.reconnectAttempts >= this.options.maxReconnectAttempts) {
       await this.connectionManager.transitionTo('disconnected');
-      await this.evem.publish('ws.reconnect.failed', { attempts: this.reconnectAttempts });
+      await this.publishSafely('ws.reconnect.failed', { attempts: this.reconnectAttempts });
       return;
     }
 
@@ -258,11 +258,11 @@ export class WebSocketHandler {
     } catch (caught) {
       // A socket that can't even be created counts as a failed attempt
       const error = caught instanceof Error ? caught : new Error(String(caught));
-      this.evem.publish('ws.error', { error });
+      void this.publishSafely('ws.error', { error });
       if (this.options.onError) {
         this.options.onError(error);
       }
-      this.handleUnexpectedClose();
+      void this.handleUnexpectedClose();
       return;
     }
 
@@ -344,10 +344,10 @@ export class WebSocketHandler {
         channel: 'ws',
         handleResponses: this.options.enableRequestResponse
       });
-      this.evem.publish(routed.event, routed.data);
+      void this.publishSafely(routed.event, routed.data);
     } catch (error) {
       // Emit parse error event
-      this.evem.publish('ws.parse.error', {
+      void this.publishSafely('ws.parse.error', {
         error,
         rawData
       });
@@ -465,5 +465,10 @@ export class WebSocketHandler {
       await this.connectionManager.transitionTo('disconnecting');
       await this.connectionManager.transitionTo('disconnected');
     }
+  }
+
+  /** Publish from a socket callback, logging a rejection (see publishSafely in src/shared) */
+  private publishSafely(event: string, data: unknown): Promise<void> {
+    return publishSafely(this.evem, event, data, 'the WebSocket connection');
   }
 }

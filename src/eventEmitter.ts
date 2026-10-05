@@ -732,7 +732,7 @@ class EvEm implements IEventEmitter {
       };
       const handleValidatorError = (error: unknown) =>
         failed(
-          `Error during schema validation for event '${event}': ${error}`,
+          `Error during schema validation for event '${event}': ${String(error)}`,
           error instanceof Error ? [{ message: error.message }] : null
         );
 

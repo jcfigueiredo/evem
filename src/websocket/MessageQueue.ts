@@ -1,4 +1,5 @@
 import type { EvEm } from '../eventEmitter.js';
+import { publishSafely } from '../shared/publishSafely.js';
 import type { ConnectionManager } from './ConnectionManager.js';
 import type { QueuedMessage } from './types.js';
 
@@ -185,10 +186,12 @@ export class MessageQueue {
 
         // Emit overflow event with just the data part
         // This is safe to do synchronously because 'ws.queue.overflow' won't match our middleware pattern
-        this.evem.publish('ws.queue.overflow', {
-          maxSize: this.maxSize,
-          droppedMessage: droppedMessage?.data
-        });
+        void publishSafely(
+          this.evem,
+          'ws.queue.overflow',
+          { maxSize: this.maxSize, droppedMessage: droppedMessage?.data },
+          'the WebSocket connection'
+        );
       }
 
       this.queue.push(message);
