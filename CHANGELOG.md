@@ -16,6 +16,7 @@
 ### Internal
 
 - Mutation testing (StrykerJS) found tests that ran code without checking it; the library's tests now catch 99.8% of its changes, up from 86.9%. Code no test could tell apart is gone (a re-entrancy guard in the WebSocket queue that nothing could trigger, redundant checks, cleanup with no effect); no behavior changed.
+- Property-based tests (fast-check) for the SSE parser, wildcard matching, throttle and debounce, subscriptions, the WebSocket queue, priorities, cancelable payloads and server routing (WebSocket and SSE route a message alike). They found the `NaN` priority above; the guide now also says that a cancelable payload wrapped in a proxy (a `Map`, a `Date`) fails brand checks such as `structuredClone`.
 
 ## 0.3.2 (2026-10-04)
 
