@@ -131,6 +131,8 @@ evem.subscribe('render', () => {
 await evem.publish('render');
 ```
 
+Higher numbers run first, and subscribers with the same priority run in the order they subscribed. A priority of `NaN` (from a computation gone wrong, say) can't be ordered, so it counts as `normal` (0).
+
 ### Combining Priority with Other Features
 
 Priority can be combined with other features like filters, throttling, or debouncing:
