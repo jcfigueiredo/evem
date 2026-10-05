@@ -35,6 +35,36 @@ function priorityValue(priority: number | PriorityLevel | Priority | undefined):
   return priority === 'high' ? 100 : priority === 'low' ? -100 : 0;
 }
 
+/** A publish's options, from either form: a number is the timeout */
+function readPublishOptions(options: PublishOptions | number | undefined): {
+  timeout: number;
+  cancelable: boolean;
+  errorPolicy: ErrorPolicy;
+} {
+  if (typeof options === 'number') {
+    return { timeout: options, cancelable: false, errorPolicy: ErrorPolicy.LOG_AND_CONTINUE };
+  }
+  return {
+    timeout: options?.timeout ?? 5000,
+    cancelable: options?.cancelable ?? false,
+    errorPolicy: options?.errorPolicy ?? ErrorPolicy.LOG_AND_CONTINUE
+  };
+}
+
+/**
+ * One publish while its subscribers run: its event (after middleware), options and publish chain, whether it was
+ * canceled, and the data the next subscriber receives
+ */
+type PublishRun = {
+  event: string;
+  chain: Map<string, number>;
+  timeout: number;
+  cancelable: boolean;
+  errorPolicy: ErrorPolicy;
+  canceled: boolean;
+  data: any;
+};
+
 type FilterPredicate<T = unknown> = (args: T) => boolean | Promise<boolean>;
 type PriorityLevel = 'high' | 'normal' | 'low';
 
@@ -952,188 +982,139 @@ class EvEm implements IEventEmitter {
     if (!event) {
       return Promise.reject(new Error('Event name cannot be empty.'));
     }
-
-    // Handle different forms of options
-    let timeout = 5000;
-    let cancelable = false;
-    let errorPolicy = ErrorPolicy.LOG_AND_CONTINUE;
-
-    if (typeof options === 'number') {
-      timeout = options;
-    } else if (options) {
-      timeout = options.timeout ?? 5000;
-      cancelable = options.cancelable ?? false;
-      errorPolicy = options.errorPolicy ?? ErrorPolicy.LOG_AND_CONTINUE;
-    }
+    const { timeout, cancelable, errorPolicy } = readPublishOptions(options);
 
     // Track nesting for recursion detection (throws if this event is nested too deeply)
-    const publishChain = this.enterPublishChain(event);
+    const chain = this.enterPublishChain(event);
 
-    // Create event data (with or without cancel function); only a missing payload defaults to {}
-    let eventData: any = args === undefined ? ({} as T) : args;
-    let isCanceled = false;
-    const makeCancelable = (data: any) =>
-      this.addCancelSupport(
-        data,
-        () => {
-          isCanceled = true;
-        },
-        () => isCanceled
-      );
+    // Only a missing payload defaults to {}
+    let data: any = args === undefined ? ({} as T) : args;
 
-    // Apply middleware to the event
+    // Middleware can cancel the event (null), change its data, or reroute it
     if (this.middleware.length > 0) {
-      const middlewareResult = await this.applyMiddleware(event, eventData, publishChain);
-
-      // If middleware canceled the event, return false
+      const middlewareResult = await this.applyMiddleware(event, data, chain);
       if (middlewareResult === null) {
         return false;
       }
-
-      // Update event and data based on middleware result
       event = middlewareResult.event;
-      eventData = middlewareResult.data;
+      data = middlewareResult.data;
     }
 
-    // Record this event in history (before processing any callbacks), with the data subscribers
-    // receive after middleware, but before the cancel method is added, so that replayed events
-    // don't have cancel methods
-    this.recordEvent(event, eventData);
+    // Record this event in history (before processing any callbacks), with the data subscribers receive after
+    // middleware, but before the cancel method is added, so that replayed events don't have cancel methods
+    this.recordEvent(event, data);
 
-    // Add cancel functionality if the event is cancelable
+    const run: PublishRun = { event, chain, timeout, cancelable, errorPolicy, canceled: false, data };
     if (cancelable) {
-      eventData = makeCancelable(eventData);
+      run.data = this.withCancelSupport(run, data);
     }
 
-    const matchingCallbacks: {
-      callback: WrappedCallback;
-      priority: number;
-      sequence: number;
-      transform?: TransformFunction;
-    }[] = [];
-
-    // First, collect all matching callbacks with their priorities and transform functions
-    for (const [registeredEvent, callbacks] of this.events) {
-      if (this.isEventMatch(event, registeredEvent)) {
-        for (const [_, cbInfo] of callbacks) {
-          matchingCallbacks.push({
-            callback: cbInfo.callback,
-            priority: cbInfo.priority,
-            sequence: cbInfo.sequence,
-            transform: cbInfo.transform
-          });
-        }
-      }
-    }
-
-    // Sort callbacks by priority (highest first), then in the order they subscribed
-    matchingCallbacks.sort((a, b) => b.priority - a.priority || a.sequence - b.sequence);
-
-    // Helper function to handle callback errors based on the error policy
-    const handleCallbackError = (error: any) => {
-      // schemaErrorPolicy THROW always rejects publish, whatever the publish error policy
-      if (isSchemaThrow(error)) {
-        throw error;
-      }
-
-      // Handle other errors based on the error policy
-      switch (errorPolicy) {
-        case ErrorPolicy.SILENT:
-          // Silently ignore the error
-          break;
-
-        case ErrorPolicy.CANCEL_ON_ERROR:
-          // Log the error and cancel event propagation
-          console.error(`Error in event handler for "${event}":`, error);
-          isCanceled = true;
-          break;
-
-        case ErrorPolicy.THROW:
-          // Rethrow the error to the caller
-          throw error;
-
-        case ErrorPolicy.LOG_AND_CONTINUE:
-        default:
-          // Log the error and continue with the next callback (default behavior)
-          console.error(`Error in event handler for "${event}":`, error);
-          break;
-      }
-    };
-
-    // Execute callbacks in priority order - we need to handle them sequentially for cancellation
-    let currentEventData = eventData; // Start with the initial event data
-
-    for (const { callback, transform } of matchingCallbacks) {
-      // Skip remaining callbacks if the event was canceled
-      if (isCanceled) {
+    // Subscribers run one after the other, in priority order, until one cancels the event. Only what returns a
+    // promise is awaited, so synchronous subscribers all run before publish returns
+    for (const { callback, transform } of this.matchingSubscribers(event)) {
+      if (run.canceled) {
         break;
       }
-
       try {
-        // Call the current callback with the current event data
-        let outcome = this.runInPublishChain(publishChain, () => callback(currentEventData));
+        let outcome = this.runInPublishChain(chain, () => callback(run.data));
         if (outcome instanceof Promise) {
-          // For async callbacks, wait for them to complete before proceeding to the next one.
-          // A timeout is handled by the error policy below; the callback itself keeps running.
+          // A timeout is an error for the error policy; the callback itself keeps running
           outcome = await this.handlePromiseWithTimeout(outcome, timeout);
           if (outcome === TIMED_OUT) {
             throw new Error(`Event handler timed out after ${timeout}ms`);
           }
         }
-
-        // Check if the event was canceled by the callback
-        if (isCanceled) {
+        // The callback may have canceled the event; a skipped one (once, filter, schema, throttle or debounce)
+        // doesn't transform the data
+        if (run.canceled) {
           break;
         }
-
-        // Apply this subscriber's transform, unless its once, filter, schema or throttle/debounce
-        // step skipped the callback for this event
         if (transform && outcome !== SKIPPED) {
-          try {
-            const transformResult = this.runInPublishChain(publishChain, () => transform(currentEventData));
-            if (transformResult instanceof Promise) {
-              // For async transformations, wait for them to complete
-              const asyncResult = await this.handlePromiseWithTimeout(transformResult, timeout);
-              if (asyncResult === TIMED_OUT) {
-                // Handled by the error policy below, so the next subscriber keeps the current data
-                throw new Error(`Transform timed out after ${timeout}ms`);
-              }
-              currentEventData = cancelable ? makeCancelable(asyncResult) : asyncResult;
-            } else {
-              currentEventData = cancelable ? makeCancelable(transformResult) : transformResult;
-            }
-          } catch (transformError) {
-            // Handle transform error based on the error policy
-            switch (errorPolicy) {
-              case ErrorPolicy.SILENT:
-                // Silently ignore the error - use original data for next callback
-                break;
-
-              case ErrorPolicy.CANCEL_ON_ERROR:
-                // Log the error and cancel event propagation
-                console.error(`Error in transform function for "${event}":`, transformError);
-                isCanceled = true;
-                break;
-
-              case ErrorPolicy.THROW:
-                // Rethrow the error to the caller
-                throw transformError;
-
-              case ErrorPolicy.LOG_AND_CONTINUE:
-              default:
-                // Log the error and continue with the next callback with original data
-                console.error(`Error in transform function for "${event}":`, transformError);
-                break;
-            }
-          }
+          const transforming = this.applyTransform(transform, run);
+          if (transforming) await transforming;
         }
       } catch (error) {
-        handleCallbackError(error);
+        this.onPublishError(error, run, 'event handler');
       }
     }
 
     // Return whether the event completed without being canceled
-    return !isCanceled;
+    return !run.canceled;
+  }
+
+  /** The subscriptions whose pattern matches `event`, highest priority first, then in the order they subscribed */
+  private matchingSubscribers(event: string): CallbackInfo[] {
+    const matching: CallbackInfo[] = [];
+    for (const [registeredEvent, callbacks] of this.events) {
+      if (this.isEventMatch(event, registeredEvent)) {
+        for (const subscriber of callbacks.values()) matching.push(subscriber);
+      }
+    }
+    return matching.sort((a, b) => b.priority - a.priority || a.sequence - b.sequence);
+  }
+
+  /** The data with cancel() and `canceled`, which cancel this publish run */
+  private withCancelSupport(run: PublishRun, data: any): any {
+    return this.addCancelSupport(
+      data,
+      () => {
+        run.canceled = true;
+      },
+      () => run.canceled
+    );
+  }
+
+  /**
+   * A subscriber's transform: its result becomes the data the next subscribers receive. An async one is awaited up
+   * to the publish timeout. Its errors go through the error policy here, so with its go-ahead the next subscriber
+   * gets the data from before the transform; THROW rethrows to publish.
+   */
+  private applyTransform(transform: TransformFunction, run: PublishRun): void | Promise<void> {
+    const failed = (error: unknown) => this.onPublishError(error, run, 'transform function');
+    let result: unknown;
+    try {
+      result = this.runInPublishChain(run.chain, () => transform(run.data));
+    } catch (error) {
+      return failed(error);
+    }
+    if (!(result instanceof Promise)) {
+      run.data = run.cancelable ? this.withCancelSupport(run, result) : result;
+      return;
+    }
+    return this.handlePromiseWithTimeout(result, run.timeout).then(settled => {
+      if (settled === TIMED_OUT) {
+        return failed(new Error(`Transform timed out after ${run.timeout}ms`));
+      }
+      run.data = run.cancelable ? this.withCancelSupport(run, settled) : settled;
+    }, failed);
+  }
+
+  /**
+   * A callback's or a transform's error, by the publish error policy: SILENT ignores it, LOG_AND_CONTINUE logs it
+   * and goes on, CANCEL_ON_ERROR logs it and stops the event, THROW rejects the publish. A schema error with
+   * schemaErrorPolicy THROW always rejects, whatever the policy.
+   */
+  private onPublishError(error: unknown, run: PublishRun, what: 'event handler' | 'transform function'): void {
+    if (isSchemaThrow(error)) {
+      throw error;
+    }
+    switch (run.errorPolicy) {
+      case ErrorPolicy.SILENT:
+        break;
+
+      case ErrorPolicy.CANCEL_ON_ERROR:
+        console.error(`Error in ${what} for "${run.event}":`, error);
+        run.canceled = true;
+        break;
+
+      case ErrorPolicy.THROW:
+        throw error;
+
+      case ErrorPolicy.LOG_AND_CONTINUE:
+      default:
+        console.error(`Error in ${what} for "${run.event}":`, error);
+        break;
+    }
   }
 
   private async handlePromiseWithTimeout<T>(promise: Promise<T>, timeout: number): Promise<T | typeof TIMED_OUT> {
