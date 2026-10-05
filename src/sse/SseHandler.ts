@@ -81,7 +81,17 @@ export interface SseHandlerOptions {
    * See isReady(), whenReady() and `sse.ready`.
    */
   readyEvent?: string | ((event: SseParsedEvent) => boolean);
+  /**
+   * Follow the browser page's lifecycle: disconnect on `pagehide`, reconnect (resuming from the last event id)
+   * when the page is restored from the back/forward cache, and report connection errors only after a grace
+   * period, dropping them if the page goes away meanwhile (a navigation that aborts the stream). Browsers
+   * only @default false
+   */
+  pageLifecycle?: boolean;
 }
+
+/** With pageLifecycle, how long a connection error waits before it's reported, in case the page is leaving */
+const LEAVING_GRACE = 3000;
 
 /** The longest delay setTimeout supports (2^31 - 1 ms, about 24.8 days) */
 const MAX_TIMEOUT = 2_147_483_647;
@@ -256,6 +266,10 @@ export class SseHandler {
   private ready = false;
   /** whenReady() calls still waiting, settled when the handler gets ready or stops */
   private readonly readyWaiters = new Set<(ready: boolean) => void>();
+  /** With pageLifecycle: the page was hidden while the handler ran, so a restore from the cache reconnects */
+  private resumeOnShow = false;
+  /** With pageLifecycle: connection errors waiting out the grace period before they're reported */
+  private readonly pendingReports = new Set<ReturnType<typeof setTimeout>>();
 
   /**
    * @param url - URL of the SSE endpoint
@@ -278,6 +292,9 @@ export class SseHandler {
     this.heartbeatTimeout = options.heartbeatTimeout ?? 0;
     this.serverEventPrefix = options.serverEventPrefix ?? 'server';
     this.lastEventId = options.lastEventId || undefined;
+    if (options.pageLifecycle) {
+      this.followPageLifecycle();
+    }
 
     if (options.autoConnect ?? true) {
       this.connect();
@@ -289,6 +306,7 @@ export class SseHandler {
    * after disconnect(), connects again.
    */
   connect(): void {
+    this.resumeOnShow = false;
     if (this.active) {
       return;
     }
@@ -302,6 +320,12 @@ export class SseHandler {
    * `disconnecting` to `disconnected`; the returned promise resolves once those changes are handled.
    */
   async disconnect(): Promise<void> {
+    this.resumeOnShow = false;
+    await this.shutDown();
+  }
+
+  /** Close the connection and cancel what's pending: disconnect(), and a page being hidden */
+  private async shutDown(): Promise<void> {
     this.active = false;
     this.notReady(false);
     this.generation++;
@@ -438,14 +462,7 @@ export class SseHandler {
 
     const error = errorFor(end, this.heartbeatTimeout);
     if (error) {
-      const details =
-        end.reason === 'http-error'
-          ? { status: end.status }
-          : end.reason === 'bad-content-type'
-            ? { contentType: end.contentType }
-            : {};
-      void this.publishSafely('sse.error', { error, reason: end.reason, ...details });
-      this.callOnError(error);
+      this.reportEnd(end, error);
     }
 
     if (!this.reconnect || !this.shouldReconnect({ ...end, attempts: this.attempts })) {
@@ -469,6 +486,54 @@ export class SseHandler {
       }
     }, this.delayFor(end));
     await this.connectionManager.transitionTo('reconnecting');
+  }
+
+  /** Publish `sse.error` and call onError; with pageLifecycle, after the grace period, unless the page hides */
+  private reportEnd(end: SseCloseInfo, error: Error): void {
+    const details =
+      end.reason === 'http-error'
+        ? { status: end.status }
+        : end.reason === 'bad-content-type'
+          ? { contentType: end.contentType }
+          : {};
+    const report = () => {
+      void this.publishSafely('sse.error', { error, reason: end.reason, ...details });
+      this.callOnError(error);
+    };
+    if (!this.options.pageLifecycle) {
+      report();
+      return;
+    }
+    const timer = setTimeout(() => {
+      this.pendingReports.delete(timer);
+      report();
+    }, LEAVING_GRACE);
+    this.pendingReports.add(timer);
+  }
+
+  /**
+   * Listen to the page: on `pagehide`, drop the errors waiting to be reported and disconnect (remembering to
+   * come back); on a `pageshow` from the back/forward cache, reconnect. No `beforeunload` listener: Firefox
+   * keeps pages with one out of the back/forward cache.
+   */
+  private followPageLifecycle(): void {
+    const page = globalThis as { addEventListener?: (type: string, listener: (event: Event) => void) => void };
+    if (typeof page.addEventListener !== 'function') {
+      throw new TypeError('pageLifecycle needs a browser page: there is no window to listen to.');
+    }
+    page.addEventListener('pagehide', () => {
+      for (const timer of this.pendingReports) clearTimeout(timer);
+      this.pendingReports.clear();
+      if (this.active) {
+        void this.shutDown();
+        this.resumeOnShow = true;
+      }
+    });
+    page.addEventListener('pageshow', event => {
+      if ((event as Event & { persisted?: boolean }).persisted && this.resumeOnShow) {
+        this.connect();
+      }
+    });
   }
 
   /** shouldReconnect, falling back to the default policy if it throws */

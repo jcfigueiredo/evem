@@ -166,6 +166,7 @@ The `eventTypes`, `EventSourceConstructor` and `lastEventIdParam` options apply 
 | `shouldReconnect` | [the defaults](#how-a-connection-ends) | `(info: SseReconnectInfo) => boolean`. Replaces the default decision of whether to reconnect. |
 | `heartbeatTimeout` | `0` (off) | Reconnect if the server takes longer than this many ms to respond, or if no bytes (comments included) arrive for this long once the stream is open. Not available with the EventSource transport. |
 | `readyEvent` | none | The event that shows the stream is live: its name as the server sends it (`'keepalive'`), or `(event) => boolean` on the raw event. After every (re)connection, the handler is ready once it arrives; without it, as soon as the stream opens. See [Waiting until the stream is live](#waiting-until-the-stream-is-live). |
+| `pageLifecycle` | `false` | Browsers only: disconnect on `pagehide`, reconnect when the page comes back from the back/forward cache, and report connection errors 3 s late, dropping them if the page goes away meanwhile. See [The page's lifecycle](#the-pages-lifecycle). |
 | `serverEventPrefix` | `'server'` | Prefix for server events (`order.updated` → `server.order.updated`). With `''`, events are published under their own names. |
 | `parseData` | `'json'` | How to read each event's data: `'json'`, `'text'`, or `(data, eventType) => unknown`. Failures are published as `sse.parse.error`. |
 | `unwrapEnvelope` | `true` | Publish unnamed `{ event, data }` messages as `<prefix>.<event>`. With `false`, all unnamed messages go to `sse.message`. |
@@ -403,6 +404,32 @@ const sse = new SseHandler('/api/events', evem, {
 ```
 
 An empty `data:` needs nothing: it's published with `null`.
+
+### The page's lifecycle
+
+In a browser, a stream meets three situations a server-side client never does:
+
+- **The back/forward cache.** When the user goes back to a page, the browser can restore it as it was, connection objects included. A stream restored this way can look open while nothing arrives on it any more.
+- **Leaving the page.** The browser aborts the stream as it navigates away, which looks like a dropped connection. An app that shows "connection lost" when `sse.error` arrives flashes it on every link click.
+- **Open connections keep a page out of the back/forward cache** in some browsers. Closing them when the page is hidden makes the page eligible.
+
+`pageLifecycle: true` deals with all three:
+
+```typescript
+import { EvEm } from '@jcfigueiredo/evem';
+import { SseHandler } from '@jcfigueiredo/evem/sse';
+
+const evem = new EvEm();
+const sse = new SseHandler('/api/events', evem, { pageLifecycle: true, readyEvent: 'keepalive' });
+```
+
+- **On `pagehide`,** the handler disconnects, as `disconnect()` would: the state goes to `disconnected`, without `sse.error`.
+- **On `pageshow` from the back/forward cache** (`event.persisted`), it reconnects if it was running when the page was hidden, sending the last event id so the server can replay what the page missed. With `readyEvent`, `sse.ready` follows once the server is live again: a good moment to refresh what the page shows. A handler you disconnected yourself stays disconnected.
+- **Connection errors are reported 3 seconds late,** as `sse.error` and to `onError`, and dropped if the page is hidden meanwhile, so a navigation that aborts the stream reports nothing. Reconnecting doesn't wait for the report. A real drop is still reported, 3 seconds later.
+
+There's no `beforeunload` listener: Firefox keeps pages that have one out of the back/forward cache. The option needs a browser page; elsewhere the constructor throws a `TypeError`. `whenReady()` calls still waiting when the page is hidden resolve `false`, as with `disconnect()`.
+
+To resume after a full reload rather than a restore from the cache, save the last event id; see [Resuming with Last-Event-ID](#resuming-with-last-event-id).
 
 ## Resuming with Last-Event-ID
 
