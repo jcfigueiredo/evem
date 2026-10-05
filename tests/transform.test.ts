@@ -379,3 +379,41 @@ describe('Transforms - only for subscribers that handled the event', () => {
     expect(await lastValueAfter({ once: true }, [1, 5])).toBe(5);
   });
 });
+
+describe('Transforms - errors and cancelable events', () => {
+  it('with errorPolicy SILENT, a transform that throws leaves the data as it was, and nothing is logged', async () => {
+    const evem = new EvEm();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const later = vi.fn();
+    evem.subscribe('message', () => {}, {
+      priority: 'high',
+      transform: () => {
+        throw new Error('bad transform');
+      }
+    });
+    evem.subscribe('message', later);
+
+    expect(await evem.publish('message', { text: 'hi' }, { errorPolicy: ErrorPolicy.SILENT })).toBe(true);
+
+    expect(later).toHaveBeenCalledWith({ text: 'hi' });
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it('keeps a cancelable event cancelable after an async transform, so a later subscriber can still cancel it', async () => {
+    const evem = new EvEm();
+    const last = vi.fn();
+    evem.subscribe('payment', () => {}, {
+      priority: 'high',
+      transform: async (payment: { amount: number }) => ({ ...payment, checked: true })
+    });
+    evem.subscribe('payment', (payment: { checked: boolean; cancel: () => void }) => {
+      expect(payment.checked).toBe(true);
+      payment.cancel();
+    });
+    evem.subscribe('payment', last, { priority: 'low' });
+
+    expect(await evem.publish('payment', { amount: 5 }, { cancelable: true })).toBe(false);
+    expect(last).not.toHaveBeenCalled();
+  });
+});

@@ -199,3 +199,21 @@ describe('Event throttling - filters and schema run first', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('Event throttling - a window that expired before its timer fired', () => {
+  test('lets the next event run and starts a new window', async () => {
+    const emitter = new EvEm();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
+    const callback = vi.fn();
+    emitter.subscribe('scroll', callback, { throttleTime: 100 });
+
+    await emitter.publish('scroll', 1);
+    // The clock moves past the window, but its timer hasn't fired yet (it's a real one)
+    now.mockReturnValue(1150);
+    await emitter.publish('scroll', 2);
+    await emitter.publish('scroll', 3);
+
+    expect(callback.mock.calls).toEqual([[1], [2]]);
+    now.mockRestore();
+  });
+});
