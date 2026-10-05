@@ -45,6 +45,7 @@ const isNonEmptyString = (value: unknown): value is string => typeof value === '
 export function routeServerMessage(message: unknown, options: RouteOptions): RoutedMessage {
   const { prefix, channel, handleResponses } = options;
 
+  // Stryker disable next-line ConditionalExpression: a primitive falls through to the same channel.message below (null, which wouldn't, is tested)
   if (message === null || typeof message !== 'object') {
     return { event: `${channel}.message`, data: message };
   }

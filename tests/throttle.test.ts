@@ -219,3 +219,59 @@ describe('Event throttling - a window that expired before its timer fired', () =
     emitter.unsubscribeById(id);
   });
 });
+
+describe('Event throttling - windows', () => {
+  test('gives each throttled subscriber its own window', async () => {
+    const emitter = new EvEm();
+    const a = vi.fn();
+    const b = vi.fn();
+    emitter.subscribe('scroll', a, { throttleTime: 100 });
+    emitter.subscribe('resize', b, { throttleTime: 100 });
+    emitter.subscribe('scroll', b, { throttleTime: 100 });
+
+    await emitter.publish('scroll', 1);
+    await emitter.publish('resize', 2);
+
+    expect(a.mock.calls).toEqual([[1]]);
+    expect(b.mock.calls).toEqual([[1], [2]]);
+  });
+
+  test('ends a window at throttleTime: an event exactly then runs', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
+    const emitter = new EvEm();
+    const callback = vi.fn();
+    const id = emitter.subscribe('scroll', callback, { throttleTime: 100 });
+
+    await emitter.publish('scroll', 1);
+    now.mockReturnValue(1099);
+    await emitter.publish('scroll', 2);
+    now.mockReturnValue(1100);
+    await emitter.publish('scroll', 3);
+
+    expect(callback.mock.calls).toEqual([[1], [3]]);
+    emitter.unsubscribeById(id);
+    now.mockRestore();
+  });
+
+  test('a window replaced after it expired is not ended early by the old one’s timer', async () => {
+    // The clock and the timers apart: the window's end is read from Date.now, its timer is a setTimeout
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
+    const emitter = new EvEm();
+    const callback = vi.fn();
+    const id = emitter.subscribe('scroll', callback, { throttleTime: 100 });
+
+    await emitter.publish('scroll', 1); // a window until 1100; its timer fires at 100
+    await vi.advanceTimersByTimeAsync(60);
+    now.mockReturnValue(1150);
+    await emitter.publish('scroll', 2); // the window expired, though its timer hasn't fired: a new one, until 1250
+    await vi.advanceTimersByTimeAsync(60); // the old timer's time has passed; the new one fires at 160
+    now.mockReturnValue(1160);
+    await emitter.publish('scroll', 3); // inside the new window
+
+    expect(callback.mock.calls).toEqual([[1], [2]]);
+    emitter.unsubscribeById(id);
+    now.mockRestore();
+    vi.useRealTimers();
+  });
+});

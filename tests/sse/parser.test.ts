@@ -123,3 +123,32 @@ describe('SseParser - id-only messages', () => {
     expect(ids).toEqual(['7', '']);
   });
 });
+
+describe('SseParser - what mutation testing showed the tests missed', () => {
+  const collect = () => {
+    const events: SseParsedEvent[] = [];
+    const parser = new SseParser({ onEvent: event => events.push(event) });
+    return { parser, events };
+  };
+
+  it('skips a BOM only at the very start of the stream', () => {
+    const { parser, events } = collect();
+    parser.feed('﻿data: a\n\n');
+    parser.feed('﻿data: b\n\n');
+    expect(events.map(event => event.data)).toEqual(['a']);
+  });
+
+  it('discards an unterminated event at end(), and starts clean after it', () => {
+    const { parser, events } = collect();
+    parser.feed('event: old\ndata: partial');
+    parser.end();
+    parser.feed('data: new\n\n');
+    expect(events).toEqual([{ type: 'message', data: 'new', lastEventId: '' }]);
+  });
+
+  it('takes a retry field without an onRetry callback', () => {
+    const { parser, events } = collect();
+    expect(() => parser.feed('retry: 5\ndata: x\n\n')).not.toThrow();
+    expect(events).toHaveLength(1);
+  });
+});

@@ -94,8 +94,10 @@ const BUILT_IN_TRANSPORT_OPTIONS = [
  * never connect, throw here instead of being ignored or retried forever.
  */
 function createTransport(url: string, options: SseHandlerOptions): SseTransport {
+  // Stryker disable next-line StringLiteral: any string other than 'eventsource' means the fetch transport
   const { transport = 'fetch' } = options;
   const given = (names: readonly (keyof SseHandlerOptions)[]) =>
+    // Stryker disable next-line ConditionalExpression: heartbeatTimeout is the only option in these lists that can be 0
     names.filter(name => options[name] !== undefined && !(name === 'heartbeatTimeout' && options[name] === 0));
 
   if (typeof transport === 'object') {
@@ -168,10 +170,12 @@ export function defaultShouldReconnect(info: SseCloseInfo): boolean {
       return true;
     case 'http-error':
       return info.status === 408 || info.status === 429 || info.status >= 500;
+    // Stryker disable StringLiteral: falling past the switch returns undefined, as falsy as false
     case 'no-content':
     case 'bad-content-type':
     case 'aborted':
       return false;
+    // Stryker restore StringLiteral
   }
 }
 
@@ -190,10 +194,12 @@ function errorFor(info: SseCloseInfo, heartbeatTimeout: number): Error | undefin
       return new Error('EventSource connection failed');
     case 'heartbeat-timeout':
       return new Error(`No data received for ${heartbeatTimeout}ms`);
+    // Stryker disable StringLiteral,ConditionalExpression: falling past the switch returns undefined too
     case 'ended':
     case 'no-content':
     case 'aborted':
       return undefined;
+    // Stryker restore StringLiteral,ConditionalExpression
   }
 }
 
@@ -311,9 +317,11 @@ export class SseHandler {
   }
 
   private startConnection(generation: number): void {
+    // Stryker disable all: defensive, in case the connection loop itself fails
     this.openConnection(generation).catch(error => {
       console.error('SseHandler connection loop failed:', error);
     });
+    // Stryker restore all
   }
 
   private async openConnection(generation: number): Promise<void> {
@@ -401,6 +409,7 @@ export class SseHandler {
     // Scheduled before the state change is announced, so a disconnect() from a state handler cancels it
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined;
+      // Stryker disable next-line ConditionalExpression: disconnect() clears this timer; the check is a second guard
       if (generation === this.generation) {
         this.startConnection(generation);
       }
@@ -461,6 +470,7 @@ export class SseHandler {
     clearTimeout(this.heartbeatTimer);
     this.heartbeatTimer = setTimeout(
       () => {
+        // Stryker disable next-line ConditionalExpression: a new connection replaces this timer and disconnect() clears it; the check is a second guard
         if (generation !== this.generation) return;
         this.heartbeatExpired = true;
         this.transport.abort();

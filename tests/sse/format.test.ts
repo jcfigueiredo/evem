@@ -130,3 +130,15 @@ describe('SSE_HEADERS', () => {
     expect(Object.isFrozen(SSE_HEADERS)).toBe(true);
   });
 });
+
+describe('formatSseMessage - what it refuses, in words', () => {
+  it.each([
+    [{ event: 'a\nb', data: 1 }, {}, 'SSE event must not contain line breaks: "a\\nb"'],
+    [{ id: 'a\rb', data: 1 }, {}, 'SSE id must not contain line breaks: "a\\rb"'],
+    [{ id: 'a\0b', data: 1 }, {}, 'SSE id must not contain NULL characters'],
+    [{ data: 1 }, { envelope: true }, 'SSE envelope messages need an event name'],
+    [{ data: 1, retry: -1 }, {}, 'SSE retry must be a non-negative integer, got -1']
+  ] as const)('refuses %j with a message saying why', (message, options, expected) => {
+    expect(() => formatSseMessage(message, options)).toThrow(expected);
+  });
+});

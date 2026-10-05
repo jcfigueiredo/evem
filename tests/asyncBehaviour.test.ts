@@ -71,3 +71,14 @@ describe('EvEm - Asynchronous Behavior Tests', () => {
     expect(callOrder).toEqual(['sync1', 'before async', 'after async', 'sync2']);
   });
 });
+
+describe('Async callbacks - the timeout timer', () => {
+  test('is cleared once the callback settles, so nothing is left pending', async () => {
+    vi.useFakeTimers();
+    const emitter = new EvEm();
+    emitter.subscribe('job', async () => {});
+    await emitter.publish('job');
+    expect(vi.getTimerCount()).toBe(0);
+    vi.useRealTimers();
+  });
+});

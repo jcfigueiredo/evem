@@ -560,3 +560,28 @@ describe('Schema validation - what LOG_AND_CONTINUE logs', () => {
     error.mockRestore();
   });
 });
+
+describe('Schema validation - what failures carry', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('with THROW, a validator that throws rejects with its message in validationErrors', async () => {
+    const evem = new EvEm();
+    evem.subscribe('user', () => {}, {
+      schema: () => {
+        throw new Error('no name');
+      },
+      schemaErrorPolicy: ErrorPolicy.THROW
+    });
+    await expect(evem.publish('user', {})).rejects.toMatchObject({ validationErrors: [{ message: 'no name' }] });
+  });
+
+  it("by default, logs a simple validator's failure with no errors", async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const evem = new EvEm();
+    evem.subscribe('user', () => {}, { schema: () => false });
+    await evem.publish('user', {});
+    expect(error).toHaveBeenCalledWith("Schema validation failed for event 'user'", '');
+  });
+});

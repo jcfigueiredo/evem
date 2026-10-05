@@ -57,6 +57,7 @@ export class RequestResponseManager {
       // Setup timeout
       const timeoutId = setTimeout(() => {
         // Remove from pending requests (only if the entry is still this request's)
+        // Stryker disable next-line ConditionalExpression,OptionalChaining: the timer is cleared whenever its entry goes, so it only fires while its own entry is there
         if (this.pendingRequests.get(id)?.timeoutId === timeoutId) {
           this.pendingRequests.delete(id);
         }
@@ -77,6 +78,7 @@ export class RequestResponseManager {
       // the reason, instead of leaving it to time out
       this.evem.publish('ws.send.request', requestMessage).catch((error: unknown) => {
         clearTimeout(timeoutId);
+        // Stryker disable next-line ConditionalExpression,OptionalChaining: the entry is there, and its own: only its response or cleanup would have removed it
         if (this.pendingRequests.get(id)?.timeoutId === timeoutId) {
           this.pendingRequests.delete(id);
         }
@@ -126,11 +128,13 @@ export class RequestResponseManager {
    * Clean up subscriptions
    */
   cleanup(): void {
+    // Stryker disable next-line ConditionalExpression: unsubscribeById(undefined) does nothing
     if (this.responseSubscriptionId) {
       this.evem.unsubscribeById(this.responseSubscriptionId);
       this.responseSubscriptionId = undefined;
     }
 
+    // Stryker disable next-line ConditionalExpression: unsubscribeById(undefined) does nothing
     if (this.errorSubscriptionId) {
       this.evem.unsubscribeById(this.errorSubscriptionId);
       this.errorSubscriptionId = undefined;

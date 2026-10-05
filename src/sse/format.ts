@@ -64,6 +64,7 @@ export function formatSseMessage(message: SseMessage, options: FormatSseMessageO
   const { event, data, id, retry } = message;
   const lines: string[] = [];
 
+  // Stryker disable next-line ConditionalExpression: an undefined event has no line break either
   if (event !== undefined) {
     assertSingleLine('event', event);
   }

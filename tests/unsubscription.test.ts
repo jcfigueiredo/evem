@@ -179,3 +179,19 @@ describe('EvEm - unsubscribing releases event entries', () => {
     expect(events.size).toBe(0);
   });
 });
+
+describe('Unsubscribing by callback', () => {
+  test('removes the subscription of that callback, not the first one', async () => {
+    const emitter = new EvEm();
+    const first = vi.fn();
+    const second = vi.fn();
+    emitter.subscribe('event', first);
+    emitter.subscribe('event', second);
+
+    emitter.unsubscribe('event', second);
+    await emitter.publish('event', 1);
+
+    expect(first).toHaveBeenCalledWith(1);
+    expect(second).not.toHaveBeenCalled();
+  });
+});

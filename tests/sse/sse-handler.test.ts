@@ -698,3 +698,292 @@ describe('SseHandler - setup and connection edge cases', () => {
     expect(handler.getConnectionState()).toBe('disconnected');
   });
 });
+
+describe('SseHandler - option errors, stale connections and timers', () => {
+  const url = 'https://api.test/events';
+  const tick = async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+  const collect = (evem: EvEm, event: string) => {
+    const values: unknown[] = [];
+    evem.subscribe(event, (value: unknown) => {
+      values.push(value);
+    });
+    return values;
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('names every option the chosen transport would ignore or not support', () => {
+    const evem = new EvEm();
+    const eventSource = MockEventSource as unknown as NonNullable<SseHandlerOptions['EventSourceConstructor']>;
+    expect(
+      () =>
+        new SseHandler(url, evem, {
+          transport: new FakeTransport(),
+          headers: { a: 'b' },
+          method: 'POST',
+          autoConnect: false
+        })
+    ).toThrow('headers, method would be ignored with a custom transport; configure the transport instead.');
+    expect(
+      () =>
+        new SseHandler(url, evem, {
+          transport: 'eventsource',
+          EventSourceConstructor: eventSource,
+          headers: { a: 'b' },
+          heartbeatTimeout: 1000,
+          autoConnect: false
+        })
+    ).toThrow("The EventSource transport doesn't support: headers, heartbeatTimeout. Use the fetch transport.");
+    expect(() => new SseHandler(url, evem, { eventTypes: ['x'], lastEventIdParam: 'id', autoConnect: false })).toThrow(
+      'eventTypes, lastEventIdParam only apply to the EventSource transport.'
+    );
+  });
+
+  it('takes heartbeatTimeout: 0 (off) with the EventSource transport, and a global EventSource', () => {
+    const evem = new EvEm();
+    const eventSource = MockEventSource as unknown as NonNullable<SseHandlerOptions['EventSourceConstructor']>;
+    expect(
+      () =>
+        new SseHandler(url, evem, {
+          transport: 'eventsource',
+          EventSourceConstructor: eventSource,
+          heartbeatTimeout: 0,
+          autoConnect: false
+        })
+    ).not.toThrow();
+    vi.stubGlobal('EventSource', MockEventSource);
+    expect(() => new SseHandler(url, evem, { transport: 'eventsource', autoConnect: false })).not.toThrow();
+  });
+
+  it.each([
+    [{ reason: 'http-error', status: 503 }, 'SSE request failed with HTTP 503', { status: 503 }],
+    [
+      { reason: 'bad-content-type', contentType: 'text/html' },
+      'Expected a text/event-stream response, got text/html',
+      { contentType: 'text/html' }
+    ],
+    [
+      { reason: 'bad-content-type', contentType: null },
+      'Expected a text/event-stream response, got no content type',
+      { contentType: null }
+    ],
+    [{ reason: 'network-error', error: new Error('down') }, 'down', {}]
+  ] as const)('reports %j as sse.error with exactly its details', async (end, message, details) => {
+    const evem = new EvEm();
+    const transport = new FakeTransport();
+    const errors = collect(evem, 'sse.error') as Array<Record<string, unknown> & { error: Error }>;
+    const handler = new SseHandler(url, evem, { transport, reconnect: false });
+    await tick();
+    transport.end(end);
+    await tick();
+
+    expect(errors).toHaveLength(1);
+    const { error, ...rest } = errors[0]!;
+    expect(error.message).toBe(message);
+    expect(rest).toStrictEqual({ reason: end.reason, ...details });
+    await handler.disconnect();
+  });
+
+  it('reports a heartbeat timeout with how long it waited', async () => {
+    vi.useFakeTimers();
+    const evem = new EvEm();
+    const transport = new FakeTransport();
+    const errors = collect(evem, 'sse.error') as Array<{ error: Error; reason: string }>;
+    const handler = new SseHandler(url, evem, { transport, heartbeatTimeout: 1000, reconnect: false });
+    await vi.advanceTimersByTimeAsync(0);
+    transport.open();
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(errors.map(error => [error.reason, error.error.message])).toEqual([
+      ['heartbeat-timeout', 'No data received for 1000ms']
+    ]);
+    await handler.disconnect();
+  });
+
+  it('reconnects by default after an EventSource connection failed for good', async () => {
+    vi.useFakeTimers();
+    const transport = new FakeTransport();
+    const handler = new SseHandler(url, new EvEm(), { transport, reconnectDelay: 100, backoff: false });
+    await vi.advanceTimersByTimeAsync(0);
+    transport.end({ reason: 'failed' });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(transport.connections).toHaveLength(2);
+    await handler.disconnect();
+  });
+
+  it('treats a custom transport ending as aborted on its own, every time, as the stream ending', async () => {
+    vi.useFakeTimers();
+    const evem = new EvEm();
+    const transport = new FakeTransport();
+    const errors = collect(evem, 'sse.error');
+    const handler = new SseHandler(url, evem, { transport, reconnectDelay: 100, backoff: false });
+    await vi.advanceTimersByTimeAsync(0);
+    transport.end({ reason: 'aborted' });
+    await vi.advanceTimersByTimeAsync(100);
+    transport.end({ reason: 'aborted' });
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(errors).toEqual([]);
+    expect(transport.connections).toHaveLength(3);
+    await handler.disconnect();
+    // And after a disconnect, too
+    handler.connect();
+    await vi.advanceTimersByTimeAsync(0);
+    transport.end({ reason: 'aborted' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(errors).toEqual([]);
+    await handler.disconnect();
+  });
+
+  it("ignores what an old connection reports once it's been replaced", async () => {
+    vi.useFakeTimers();
+    const evem = new EvEm();
+    const transport = new FakeTransport();
+    const messages = collect(evem, 'sse.message');
+    const handler = new SseHandler(url, evem, { transport, reconnectDelay: 100, backoff: false });
+    await vi.advanceTimersByTimeAsync(0);
+    const old = transport.current.listener;
+    transport.open();
+    await handler.disconnect();
+    handler.connect();
+    await vi.advanceTimersByTimeAsync(0);
+    const states = collect(evem, 'sse.connection.state');
+
+    old.open();
+    old.retry(99_999);
+    old.lastEventId?.('stale');
+    old.reconnecting?.();
+    void old.event({ type: 'message', data: '"late"', lastEventId: '' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(messages).toEqual([]);
+    expect(states).toEqual([]);
+    expect(handler.getLastEventId()).toBeUndefined();
+    // The current connection's reconnect delay isn't the old one's retry
+    transport.end({ reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(transport.connections).toHaveLength(3);
+    await handler.disconnect();
+  });
+
+  it("keeps the current connection's heartbeat when an old connection reports activity", async () => {
+    vi.useFakeTimers();
+    const transport = new FakeTransport();
+    const handler = new SseHandler(url, new EvEm(), { transport, heartbeatTimeout: 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    const old = transport.current.listener;
+    await handler.disconnect();
+    handler.connect();
+    await vi.advanceTimersByTimeAsync(0);
+    transport.open();
+
+    old.activity();
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(transport.aborts).toBe(2); // the disconnect's, and the current connection's heartbeat
+    await handler.disconnect();
+  });
+
+  it('restarts the heartbeat when the connection opens, and pauses it while an EventSource retries', async () => {
+    vi.useFakeTimers();
+    const transport = new FakeTransport();
+    const handler = new SseHandler(url, new EvEm(), { transport, heartbeatTimeout: 1000 });
+    await vi.advanceTimersByTimeAsync(800);
+    transport.open();
+    await vi.advanceTimersByTimeAsync(700);
+    expect(transport.aborts).toBe(0);
+    transport.current.listener.reconnecting?.();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(transport.aborts).toBe(0);
+    await handler.disconnect();
+  });
+
+  it('leaves no timer pending once disconnected, or once the stream has stopped', async () => {
+    vi.useFakeTimers();
+    const transport = new FakeTransport();
+    const handler = new SseHandler(url, new EvEm(), { transport, heartbeatTimeout: 1000, reconnectDelay: 500 });
+    await vi.advanceTimersByTimeAsync(0);
+    transport.open();
+    transport.end({ reason: 'network-error', error: new Error('down') }); // waits to reconnect
+    await vi.advanceTimersByTimeAsync(0);
+    await handler.disconnect();
+    expect(vi.getTimerCount()).toBe(0);
+
+    const stopping = new FakeTransport();
+    const once = new SseHandler(url, new EvEm(), { transport: stopping, heartbeatTimeout: 1000, reconnect: false });
+    await vi.advanceTimersByTimeAsync(0);
+    stopping.open();
+    stopping.end({ reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(0);
+    await once.disconnect();
+  });
+
+  it('announces disconnecting and disconnected once, however often disconnect() is called', async () => {
+    const evem = new EvEm();
+    const transport = new FakeTransport();
+    const states = collect(evem, 'sse.connection.state') as Array<{ to: string }>;
+    const handler = new SseHandler(url, evem, { transport });
+    await tick();
+    await handler.disconnect();
+    await handler.disconnect();
+    expect(states.map(state => state.to)).toEqual(['connecting', 'disconnecting', 'disconnected']);
+  });
+
+  it('logs nothing on a reconnect it decides by itself, without an onError', async () => {
+    vi.useFakeTimers();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const transport = new FakeTransport();
+    const handler = new SseHandler(url, new EvEm(), { transport, reconnectDelay: 100 });
+    await vi.advanceTimersByTimeAsync(0);
+    transport.end({ reason: 'network-error', error: new Error('down') });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(error).not.toHaveBeenCalled();
+    await handler.disconnect();
+  });
+
+  it('waits reconnectDelay after an error that has no Retry-After', async () => {
+    vi.useFakeTimers();
+    const transport = new FakeTransport();
+    const handler = new SseHandler(url, new EvEm(), { transport, reconnectDelay: 500, backoff: false });
+    await vi.advanceTimersByTimeAsync(0);
+    transport.end({ reason: 'network-error', error: new Error('down') });
+    await vi.advanceTimersByTimeAsync(499);
+    expect(transport.connections).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(transport.connections).toHaveLength(2);
+    await handler.disconnect();
+  });
+
+  it('publishes an unnamed { type: "response" } message as sse.message (requests are a WebSocket thing)', async () => {
+    const evem = new EvEm();
+    const transport = new FakeTransport();
+    const messages = collect(evem, 'sse.message');
+    const handler = new SseHandler(url, evem, { transport });
+    await tick();
+    transport.open();
+    await transport.send('{"type":"response","id":"1","result":2}');
+    expect(messages).toEqual([{ type: 'response', id: '1', result: 2 }]);
+    await handler.disconnect();
+  });
+
+  it('logs a publish that rejects as coming from the SSE stream', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const evem = new EvEm();
+    evem.subscribe('server.tick', () => {}, { schema: () => false, schemaErrorPolicy: ErrorPolicy.THROW });
+    const transport = new FakeTransport();
+    const handler = new SseHandler(url, evem, { transport });
+    await tick();
+    transport.open();
+    await transport.send('1', 'tick');
+    await tick();
+    expect(error).toHaveBeenCalledWith('Error publishing "server.tick" from the SSE stream:', expect.any(Error));
+    await handler.disconnect();
+  });
+});

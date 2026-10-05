@@ -37,3 +37,15 @@ describe('Subscription and request ids', () => {
     await pending;
   });
 });
+
+describe('Ids - which generator', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('uses crypto.randomUUID() when there is one', () => {
+    const randomUUID = vi.spyOn(globalThis.crypto, 'randomUUID');
+    new EvEm().subscribe('user.login', () => {});
+    expect(randomUUID).toHaveBeenCalledTimes(1);
+  });
+});

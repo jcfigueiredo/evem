@@ -1635,3 +1635,139 @@ describe('WebSocketHandler - errors from its options, and closing', () => {
     expect(handler.getConnectionState()).toBe('disconnected');
   });
 });
+
+describe('WebSocketHandler - what mutation testing showed the tests missed', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+  const openSocket = () => {
+    const socket = new MockWebSocket('wss://test.example.com');
+    socket.simulateOpen();
+    return socket;
+  };
+  const failingFormatter = () => {
+    throw new Error('cannot format');
+  };
+
+  it.each([
+    ['ws.send', 'Failed to send message:'],
+    ['ws.send.chat', 'Failed to send message:'],
+    ['ws.send.request', 'Failed to send request:']
+  ])('says what it failed to send when the formatter throws on %s', async (event, label) => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const evem = new EvEm();
+    const handler = new WebSocketHandler(openSocket(), evem, { messageFormatter: failingFormatter });
+    if (event === 'ws.send.request') void handler.request('users.get').catch(() => {});
+    else await evem.publish(event, { n: 1 });
+    // The handler's middleware makes its publishes async
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(error).toHaveBeenCalledWith(label, expect.objectContaining({ message: 'cannot format' }));
+    await handler.disconnect();
+  });
+
+  it('says what it failed to send when the formatter throws on a flushed message', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const evem = new EvEm();
+    const socket = new MockWebSocket('wss://test.example.com');
+    const handler = new WebSocketHandler(socket, evem, { messageFormatter: failingFormatter, autoFlush: false });
+    await evem.publish('ws.send', { n: 1 }); // queued: not open yet
+    socket.simulateOpen();
+    await handler.flush();
+    expect(error).toHaveBeenCalledWith(
+      'Failed to send message:',
+      expect.objectContaining({ message: 'cannot format' })
+    );
+    await handler.disconnect();
+  });
+
+  it("reports a socket error event that carries no error as Error('WebSocket error')", async () => {
+    const evem = new EvEm();
+    const errors: Array<{ error: Error }> = [];
+    evem.subscribe('ws.error', (error: { error: Error }) => {
+      errors.push(error);
+    });
+    const socket = openSocket();
+    const handler = new WebSocketHandler(socket, evem);
+    socket.onerror?.({ type: 'error' } as never);
+    // The handler's middleware makes its publishes async
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(errors[0]!.error.message).toBe('WebSocket error');
+    await handler.disconnect();
+  });
+
+  it('takes its handlers off a socket it lets go of, leaving a no-op onerror', async () => {
+    vi.useFakeTimers();
+    const { constructor: Socket, instances } = createMockWebSocketConstructor({ autoConnect: false });
+    const handler = new WebSocketHandler('wss://test.example.com', new EvEm(), {
+      reconnect: true,
+      reconnectDelay: 10,
+      WebSocketConstructor: Socket
+    });
+    instances[0]!.simulateOpen();
+    instances[0]!.simulateClose(1006);
+    await vi.advanceTimersByTimeAsync(10); // a new socket
+    await handler.disconnect();
+    for (const socket of instances) {
+      expect([socket.onopen, socket.onclose, socket.onmessage]).toEqual([null, null, null]);
+      expect(socket.onerror?.({} as never)).toBeUndefined();
+    }
+  });
+
+  it('sends a message that is not an object, published while offline, once the connection is back', async () => {
+    vi.useFakeTimers();
+    const { constructor: Socket, instances } = createMockWebSocketConstructor({ autoConnect: false });
+    const evem = new EvEm();
+    const handler = new WebSocketHandler('wss://test.example.com', evem, {
+      reconnect: true,
+      reconnectDelay: 10,
+      WebSocketConstructor: Socket
+    });
+    instances[0]!.simulateOpen();
+    instances[0]!.simulateClose(1006);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await evem.publish('ws.send', 'hello')).toBe(true);
+    await vi.advanceTimersByTimeAsync(10);
+    instances[1]!.simulateOpen();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(instances[1]!.sentMessages).toEqual(['"hello"']);
+    await handler.disconnect();
+  });
+
+  it('flush() does nothing when the queue is off', async () => {
+    const handler = new WebSocketHandler(openSocket(), new EvEm(), { enableQueue: false });
+    await expect(handler.flush()).resolves.toBeUndefined();
+    await handler.disconnect();
+  });
+
+  it('announces disconnecting and disconnected once when disconnect() is called twice at once', async () => {
+    const evem = new EvEm();
+    const states: string[] = [];
+    evem.subscribe('ws.connection.state', ({ to }: { to: string }) => {
+      states.push(to);
+    });
+    const handler = new WebSocketHandler(openSocket(), evem);
+    await Promise.all([handler.disconnect(), handler.disconnect()]);
+    expect(states.filter(state => state.startsWith('disconnect'))).toEqual(['disconnecting', 'disconnected']);
+  });
+
+  it('leaves no reconnect timer pending once disconnected, and closes with 1000 and a reason', async () => {
+    vi.useFakeTimers();
+    const { constructor: Socket, instances } = createMockWebSocketConstructor({ autoConnect: false });
+    const handler = new WebSocketHandler('wss://test.example.com', new EvEm(), {
+      reconnect: true,
+      reconnectDelay: 1000,
+      WebSocketConstructor: Socket
+    });
+    instances[0]!.simulateOpen();
+    instances[0]!.simulateClose(1006);
+    await vi.advanceTimersByTimeAsync(0); // waiting to reconnect
+    await handler.disconnect();
+    expect(vi.getTimerCount()).toBe(0);
+
+    const socket = openSocket();
+    const close = vi.spyOn(socket, 'close');
+    await new WebSocketHandler(socket, new EvEm()).disconnect();
+    expect(close).toHaveBeenCalledWith(1000, 'Client disconnect');
+  });
+});

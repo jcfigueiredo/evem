@@ -123,3 +123,38 @@ describe('EventSourceSseTransport - an EventSource that cannot be created', () =
     expect(listener.open).not.toHaveBeenCalled();
   });
 });
+
+describe('EventSourceSseTransport - what mutation testing showed the tests missed', () => {
+  beforeEach(() => {
+    MockEventSource.instances = [];
+  });
+
+  it('ends as a network error when there is no EventSource at all', async () => {
+    vi.stubGlobal('EventSource', undefined);
+    const { listener } = recordingListener();
+    const closed = await new EventSourceSseTransport({}).connect({ url: '/events' }, listener);
+    expect(closed).toEqual({
+      reason: 'network-error',
+      error: new Error('No EventSource implementation: pass EventSourceConstructor or use the fetch transport')
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('creates its EventSource without credentials, and listens to no named event by default', () => {
+    const { listener } = recordingListener();
+    void new EventSourceSseTransport({ EventSourceConstructor: MockEventSource }).connect({ url: '/events' }, listener);
+    const source = MockEventSource.instances[0]!;
+    expect(source.init).toEqual({ withCredentials: false });
+    expect((source as unknown as { listeners: Map<string, unknown> }).listeners.size).toBe(0);
+  });
+
+  it('works with a listener that has no reconnecting callback, and can be aborted before it connects', async () => {
+    const transport = new EventSourceSseTransport({ EventSourceConstructor: MockEventSource });
+    expect(() => transport.abort()).not.toThrow();
+    const listener = { open() {}, event() {}, retry() {}, activity() {} };
+    const closed = transport.connect({ url: '/events' }, listener);
+    expect(() => MockEventSource.instances[0]!.simulateError(MockEventSource.CONNECTING)).not.toThrow();
+    transport.abort();
+    await expect(closed).resolves.toEqual({ reason: 'aborted' });
+  });
+});

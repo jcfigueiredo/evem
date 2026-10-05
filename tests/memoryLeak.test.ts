@@ -217,3 +217,74 @@ describe('Memory leak detection - turning it off', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('Memory leak detection - when it warns again', () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('warns again about an event once it is turned on again, even without turning it off first', () => {
+    const evem = new EvEm();
+    evem.enableMemoryLeakDetection({ threshold: 1 });
+    evem.subscribe('click', () => {});
+    evem.subscribe('click', () => {});
+    evem.enableMemoryLeakDetection({ threshold: 1 });
+    evem.subscribe('click', () => {});
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('turned off, does not warn about an event it never warned about', () => {
+    const evem = new EvEm();
+    evem.enableMemoryLeakDetection({ threshold: 1 });
+    evem.disableMemoryLeakDetection();
+    evem.subscribe('scroll', () => {});
+    evem.subscribe('scroll', () => {});
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('warns again once the subscriptions came down to the threshold, not only below it', () => {
+    const evem = new EvEm();
+    evem.enableMemoryLeakDetection({ threshold: 2 });
+    const ids = [evem.subscribe('key', () => {}), evem.subscribe('key', () => {}), evem.subscribe('key', () => {})];
+    expect(warn).toHaveBeenCalledTimes(1);
+    evem.unsubscribeById(ids[2]!); // 2 left: the threshold itself
+    evem.subscribe('key', () => {});
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it("doesn't warn again while the subscriptions stay above the threshold", () => {
+    const evem = new EvEm();
+    evem.enableMemoryLeakDetection({ threshold: 2 });
+    const ids = [1, 2, 3, 4].map(() => evem.subscribe('key', () => {}));
+    expect(warn).toHaveBeenCalledTimes(1);
+    evem.unsubscribeById(ids[3]!); // 3 left: still above
+    evem.subscribe('key', () => {});
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('says how far over the threshold an event went, and what it may mean', () => {
+    const evem = new EvEm();
+    evem.enableMemoryLeakDetection({ threshold: 1 });
+    evem.subscribe('drag', () => {});
+    evem.subscribe('drag', () => {});
+    expect(warn).toHaveBeenCalledWith(
+      'Possible memory leak detected: 2 handlers added for event "drag". This exceeds the threshold of 1. ' +
+        'This could indicate event handlers are not being properly unsubscribed.'
+    );
+  });
+
+  it('closes the console group it opens for the details', () => {
+    const groupEnd = vi.spyOn(console, 'groupEnd').mockImplementation(() => {});
+    vi.spyOn(console, 'group').mockImplementation(() => {});
+    const evem = new EvEm();
+    evem.enableMemoryLeakDetection({ threshold: 1, showSubscriptionDetails: true });
+    evem.subscribe('drop', () => {});
+    evem.subscribe('drop', () => {});
+    expect(groupEnd).toHaveBeenCalledTimes(1);
+  });
+});

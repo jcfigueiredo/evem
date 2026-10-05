@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Run single test file**: `pnpm test:nowatch tests/priority.test.ts`
 - **Run specific test by name**: `pnpm test:nowatch -t "callbacks should be executed in priority order"`
 - **Coverage report**: `pnpm test:coverage` (runs once: the library's coverage, `src/`, as a text summary and as HTML in `coverage/`; `vitest.config.ts` excludes `demo/**`, since Vitest 4 matches `src/**` anywhere in a path)
-- **Mutation testing**: `pnpm mutation` (StrykerJS, `stryker.config.json`: mutates `src/` and runs the tests that reach each change; about 10 minutes, so it isn't in `pnpm check`; a report in `reports/mutation/`, git-ignored). A surviving mutant is a change no test noticed. Vitest stays on 4.x until StrykerJS's Vitest runner supports Vitest 5: on 5 its per-test name filter matches nothing, so mutants run no tests and all "survive" (stryker-js#6210); a run whose score collapses to near 0 is that, not the tests
+- **Mutation testing**: `pnpm mutation` (StrykerJS, `stryker.config.json`: mutates `src/` and runs the tests that reach each change; about 10 minutes, so it isn't in `pnpm check`; a report in `reports/mutation/`, git-ignored). A surviving mutant is a change no test noticed: a missing test, or code no test could tell apart (remove it). The score is about 99.8%; a change no test can observe (cleanup of timer map entries, shortcuts a general rule covers, defensive catches) carries `// Stryker disable next-line <Mutator>: <why>`, or a `// Stryker disable <Mutator>: <why>` … `// Stryker restore <Mutator>` range; Stryker doesn't honour one on a `catch` or `finally` block's own braces. Vitest stays on 4.x until StrykerJS's Vitest runner supports Vitest 5: on 5 its per-test name filter matches nothing, so mutants run no tests and all "survive" (stryker-js#6210); a run whose score collapses to near 0 is that, not the tests
 - **Watch mode tests**: `pnpm test`
 - **TypeScript check**: `pnpm typecheck` (same as `pnpm tsc --noEmit`)
 - **Build**: `pnpm build` (compiles `src/` to `dist/` as ES modules with `.d.ts` files, via `tsconfig.build.json`)
@@ -99,7 +99,7 @@ Real-time communication patterns built on top of EvEm, in `src/websocket/` and p
 
 3. **MessageQueue** (`MessageQueue.ts`)
    - `enable(maxSize = 100, { autoFlush = true })` registers one handler as middleware twice, `{ pattern: 'ws.send' }` and `{ pattern: 'ws.send.*' }`, because `ws.send.*` doesn't match `ws.send`
-   - The middleware queues as a side effect and returns the data unchanged; it queues only when enabled, not connected, not re-entrant (`isEnqueuing`), and the event name doesn't contain `queued`
+   - The middleware queues as a side effect and returns the data unchanged; it queues while not connected (it's registered only while the queue is enabled), unless the event name contains `queued`
    - FIFO with a size limit: when full, the oldest message is dropped and `ws.queue.overflow` (`{ maxSize, droppedMessage }`) published
    - `autoFlush` subscribes to `ws.connection.state` and flushes on any transition to `connected`; `flush()` publishes each payload, in order, to `ws.send.queued` (the original event name is not kept). `enqueue()` queues explicitly. `wasQueued(data)` tells whether the middleware queued a payload object on its latest publish
    - `removeMiddleware` removes a single registration (the first match), so `disable()` removes each one by `{ pattern, handler }`, plus the autoFlush subscription
