@@ -15,7 +15,8 @@ export default defineConfig({
       { find: /^@jcfigueiredo\/evem\/websocket$/, replacement: source('websocket/index.ts') },
       { find: /^@jcfigueiredo\/evem\/sse$/, replacement: source('sse/index.ts') },
       { find: /^@jcfigueiredo\/evem\/sse\/server$/, replacement: source('sse/server.ts') },
-      { find: /^@jcfigueiredo\/evem\/dom$/, replacement: source('dom/index.ts') }
+      { find: /^@jcfigueiredo\/evem\/dom$/, replacement: source('dom/index.ts') },
+      { find: /^@jcfigueiredo\/evem\/alpine$/, replacement: source('alpine/index.ts') }
     ]
   },
   test: {

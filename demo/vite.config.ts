@@ -23,7 +23,8 @@ export default defineConfig({
       { find: /^@jcfigueiredo\/evem\/websocket$/, replacement: here('../src/websocket/index.ts') },
       { find: /^@jcfigueiredo\/evem\/sse$/, replacement: here('../src/sse/index.ts') },
       { find: /^@jcfigueiredo\/evem\/sse\/server$/, replacement: here('../src/sse/server.ts') },
-      { find: /^@jcfigueiredo\/evem\/dom$/, replacement: here('../src/dom/index.ts') }
+      { find: /^@jcfigueiredo\/evem\/dom$/, replacement: here('../src/dom/index.ts') },
+      { find: /^@jcfigueiredo\/evem\/alpine$/, replacement: here('../src/alpine/index.ts') }
     ]
   },
   server: {

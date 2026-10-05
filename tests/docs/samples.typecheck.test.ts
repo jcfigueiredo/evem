@@ -26,7 +26,8 @@ const PRELUDES: Record<TypeScriptDoc, string[]> = {
   'docs/websocket-server-events.md': [prelude('websocket-server-events.d.ts'), prelude('react.d.ts')],
   'docs/sse-adapter.md': [],
   'docs/sse-python.md': [prelude('sse-python.d.ts')],
-  'docs/dom.md': []
+  'docs/dom.md': [],
+  'docs/alpine.md': []
 };
 
 describe.each(TYPESCRIPT_DOCS)('TypeScript samples in %s', file => {

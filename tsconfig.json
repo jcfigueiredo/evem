@@ -29,7 +29,8 @@
       "@jcfigueiredo/evem/websocket": ["./src/websocket/index.ts"],
       "@jcfigueiredo/evem/sse": ["./src/sse/index.ts"],
       "@jcfigueiredo/evem/sse/server": ["./src/sse/server.ts"],
-      "@jcfigueiredo/evem/dom": ["./src/dom/index.ts"]
+      "@jcfigueiredo/evem/dom": ["./src/dom/index.ts"],
+      "@jcfigueiredo/evem/alpine": ["./src/alpine/index.ts"]
     }
   },
   "include": ["**/*.ts"],

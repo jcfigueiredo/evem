@@ -46,6 +46,10 @@
       "types": "./dist/dom/index.d.ts",
       "default": "./dist/dom/index.js"
     },
+    "./alpine": {
+      "types": "./dist/alpine/index.d.ts",
+      "default": "./dist/alpine/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -88,13 +92,16 @@
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/alpinejs": "3.17.0",
     "@types/node": "^22.20.5",
     "@types/ws": "^8.18.0",
     "@vitest/coverage-v8": "^4.1.11",
+    "alpinejs": "3.17.4",
     "daisyui": "^5.7.47",
     "eslint": "^10.12.0",
     "eslint-plugin-sonarjs": "^4.2.2",
     "fast-check": "^4.10.2",
+    "happy-dom": "20.14.5",
     "jscpd": "^5.4.0",
     "prettier": "3.9.9",
     "tailwindcss": "^4.3.3",
