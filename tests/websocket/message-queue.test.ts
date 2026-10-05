@@ -603,3 +603,45 @@ describe('MessageQueue - enqueue()', () => {
     expect(messageQueue.getQueueSize()).toBe(0);
   });
 });
+
+describe('MessageQueue - flushing and disabling', () => {
+  it("flushes only when the connection's state becomes connected", async () => {
+    const evem = new EvEm();
+    const manager = new ConnectionManager(evem);
+    const queue = new MessageQueue(evem, manager);
+    queue.enable(10);
+    const flushed = vi.fn();
+    evem.subscribe('ws.send.queued', flushed);
+    await evem.publish('ws.send', { n: 1 });
+
+    await manager.transitionTo('reconnecting');
+    expect(flushed).not.toHaveBeenCalled();
+    await manager.transitionTo('connected');
+    expect(flushed).toHaveBeenCalledWith({ n: 1 });
+  });
+
+  it('queues nothing once disabled, even when asked to', () => {
+    const evem = new EvEm();
+    const queue = new MessageQueue(evem, new ConnectionManager(evem));
+    queue.enable(10);
+    queue.disable();
+    queue.enqueue({ n: 1 });
+    expect(queue.getQueueSize()).toBe(0);
+  });
+});
+
+describe('MessageQueue - a null message', () => {
+  it('queues null published while offline, without an error', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const evem = new EvEm();
+    const queue = new MessageQueue(evem, new ConnectionManager(evem));
+    queue.enable(10);
+    // The middleware returns the data unchanged, and a middleware returning null cancels the event: so this
+    // publish resolves false, though the message is queued
+    await evem.publish('ws.send', null);
+    expect(queue.getQueueSize()).toBe(1);
+    expect(queue.wasQueued(null)).toBe(false);
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+});

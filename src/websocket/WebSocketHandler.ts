@@ -34,6 +34,7 @@ export class WebSocketHandler {
   private requestResponse?: RequestResponseManager;
   private options: Required<Omit<WebSocketHandlerOptions, 'onError' | 'WebSocketConstructor'>> &
     Pick<WebSocketHandlerOptions, 'onError' | 'WebSocketConstructor'>;
+  // Stryker disable next-line ArrayDeclaration: an id nothing has is unsubscribed as nothing
   private subscriptionIds: string[] = [];
   private isDisconnecting = false;
 
@@ -84,6 +85,7 @@ export class WebSocketHandler {
     this.options = {
       enableQueue: options.enableQueue ?? true,
       queueSize: options.queueSize ?? 100,
+      // Stryker disable next-line LogicalOperator: MessageQueue.enable defaults autoFlush to true as well
       autoFlush: options.autoFlush ?? true,
       enableRequestResponse: options.enableRequestResponse ?? true,
       serverEventPrefix: options.serverEventPrefix ?? 'server',
@@ -173,6 +175,7 @@ export class WebSocketHandler {
     };
 
     this.ws.onclose = () => {
+      // Stryker disable next-line BooleanLiteral: an error after a close finds the end already handled either way
       opened = false;
       void handleEnd();
     };
@@ -246,9 +249,11 @@ export class WebSocketHandler {
    */
   private reconnect(): void {
     this.reconnectTimer = undefined;
+    // Stryker disable all: a second guard: disconnect() clears this timer, and it's only set with a url
     if (this.isDisconnecting || !this.url) {
       return;
     }
+    // Stryker restore all
 
     this.reconnectAttempts++;
     this.detachWebSocketEvents();
@@ -420,10 +425,8 @@ export class WebSocketHandler {
     this.isDisconnecting = true;
 
     // Cancel a pending reconnection attempt
-    if (this.reconnectTimer !== undefined) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = undefined;
-    }
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = undefined;
 
     // Unsubscribe from all EvEm events
     for (const subId of this.subscriptionIds) {
@@ -433,6 +436,7 @@ export class WebSocketHandler {
         // Ignore unsubscribe errors during cleanup
       }
     }
+    // Stryker disable next-line ArrayDeclaration: a disconnected handler isn't used again
     this.subscriptionIds = [];
     this.evem.removeMiddleware(this.requestFormatMiddleware);
     this.evem.removeMiddleware(this.subEventSendMiddleware);
@@ -449,7 +453,8 @@ export class WebSocketHandler {
     }
 
     // Close WebSocket
-    if (this.ws && this.ws.readyState !== this.ws.CLOSED) {
+    // Stryker disable next-line ConditionalExpression: closing a socket that's already closed does nothing
+    if (this.ws.readyState !== this.ws.CLOSED) {
       try {
         this.ws.close(1000, 'Client disconnect');
       } catch (error) {

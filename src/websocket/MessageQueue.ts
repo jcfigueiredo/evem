@@ -22,10 +22,10 @@ export class MessageQueue {
   private enabled = false;
   private maxSize = 100;
   private queue: QueuedMessage[] = [];
+  // Stryker disable next-line ObjectLiteral,BooleanLiteral: enable() sets the options before anything reads them
   private options: MessageQueueOptions = { autoFlush: true };
   private middlewareHandler?: (event: string, data: any) => any;
   private stateSubscriptionId?: string;
-  private isEnqueuing = false;
   /** Payload objects whose most recent publish the middleware queued (see wasQueued) */
   private queuedPayloads = new WeakSet<object>();
 
@@ -53,8 +53,8 @@ export class MessageQueue {
         return data;
       }
 
-      // Only queue if enabled, not already enqueuing and not connected
-      const shouldQueue = this.enabled && !this.isEnqueuing && !this.connectionManager.isConnected();
+      // Queue while not connected (the middleware is only registered while the queue is enabled)
+      const shouldQueue = !this.connectionManager.isConnected();
       if (shouldQueue) {
         // Queue the message synchronously as a side effect
         this.enqueueSynchronous(data);
@@ -88,7 +88,7 @@ export class MessageQueue {
     // Subscribe to connection state changes for auto-flush (only if enabled)
     if (this.options.autoFlush === true) {
       this.stateSubscriptionId = this.evem.subscribe('ws.connection.state', async (event: any) => {
-        if (event.to === 'connected' && this.queue.length > 0) {
+        if (event.to === 'connected') {
           await this.flush();
         }
       });
@@ -109,6 +109,7 @@ export class MessageQueue {
   private cleanup(): void {
     // Remove both middleware registrations (ws.send and ws.send.*)
     // removeMiddleware removes a single registration, so remove each one by its pattern
+    // Stryker disable next-line ConditionalExpression: removing a middleware that isn't registered does nothing
     if (this.middlewareHandler) {
       this.evem.removeMiddleware({ pattern: 'ws.send', handler: this.middlewareHandler });
       this.evem.removeMiddleware({ pattern: 'ws.send.*', handler: this.middlewareHandler });
@@ -159,7 +160,8 @@ export class MessageQueue {
    * Always false for primitive payloads, which can't be tracked.
    */
   wasQueued(data: unknown): boolean {
-    return typeof data === 'object' && data !== null && this.queuedPayloads.has(data);
+    // A WeakSet holds only objects: for anything else, has() is false
+    return this.queuedPayloads.has(data as object);
   }
 
   /**
@@ -170,44 +172,36 @@ export class MessageQueue {
       return;
     }
 
-    this.isEnqueuing = true;
+    const message: QueuedMessage = {
+      // Stryker disable next-line StringLiteral: the original event name isn't kept: a flush publishes ws.send.queued
+      event: 'ws.send',
+      data,
+      timestamp: Date.now()
+    };
 
-    try {
-      const message: QueuedMessage = {
-        event: 'ws.send',
-        data,
-        timestamp: Date.now()
-      };
+    // Check if queue is full
+    if (this.queue.length >= this.maxSize) {
+      // Drop the oldest message
+      const droppedMessage = this.queue.shift();
 
-      // Check if queue is full
-      if (this.queue.length >= this.maxSize) {
-        // Drop the oldest message
-        const droppedMessage = this.queue.shift();
-
-        // Emit overflow event with just the data part
-        // This is safe to do synchronously because 'ws.queue.overflow' won't match our middleware pattern
-        void publishSafely(
-          this.evem,
-          'ws.queue.overflow',
-          { maxSize: this.maxSize, droppedMessage: droppedMessage?.data },
-          'the WebSocket connection'
-        );
-      }
-
-      this.queue.push(message);
-    } finally {
-      this.isEnqueuing = false;
+      // Emit overflow event with just the data part
+      // This is safe to do synchronously because 'ws.queue.overflow' won't match our middleware pattern
+      void publishSafely(
+        this.evem,
+        'ws.queue.overflow',
+        // Stryker disable next-line OptionalChaining: a full queue (maxSize at least 1) always has a message to drop
+        { maxSize: this.maxSize, droppedMessage: droppedMessage?.data },
+        'the WebSocket connection'
+      );
     }
+
+    this.queue.push(message);
   }
 
   /**
    * Flush all queued messages
    */
   async flush(): Promise<void> {
-    if (this.queue.length === 0) {
-      return;
-    }
-
     // Get all messages to flush (create a copy to avoid modification during iteration)
     const messagesToFlush = [...this.queue];
 

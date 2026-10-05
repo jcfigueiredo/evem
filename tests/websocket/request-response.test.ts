@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { EvEm } from '../../src/eventEmitter';
+import { ErrorPolicy, EvEm } from '../../src/eventEmitter';
 import { RequestResponseManager } from '../../src/websocket/RequestResponseManager';
 import { RequestTimeoutError } from '../../src/websocket/types';
 
@@ -499,5 +499,46 @@ describe('RequestResponseManager - cleanup', () => {
 
     await expect(first).rejects.toThrow('RequestResponseManager cleanup');
     await expect(second).rejects.toThrow('RequestResponseManager cleanup');
+  });
+});
+
+describe('RequestResponseManager - timers and unknown responses', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('leaves no timer and no pending request once a request is answered, rejected by its publish, or cleaned up', async () => {
+    vi.useFakeTimers();
+    const evem = new EvEm();
+    const manager = new RequestResponseManager(evem);
+    const answered = manager.request('a', undefined, { id: 'r1' });
+    await evem.publish('ws.response', { id: 'r1', result: 1 });
+    await expect(answered).resolves.toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+
+    const blocking = evem.subscribe('ws.send.request', () => {}, {
+      schema: () => false,
+      schemaErrorPolicy: ErrorPolicy.THROW
+    });
+    await expect(manager.request('b')).rejects.toThrow();
+    evem.unsubscribeById(blocking);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(manager.getPendingRequestCount()).toBe(0);
+
+    const pending = manager.request('c');
+    manager.cleanup();
+    await expect(pending).rejects.toThrow('RequestResponseManager cleanup');
+    expect(vi.getTimerCount()).toBe(0);
+    expect(manager.getPendingRequestCount()).toBe(0);
+  });
+
+  it('ignores a response to a request it does not know, without an error', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const evem = new EvEm();
+    new RequestResponseManager(evem);
+    await evem.publish('ws.response', { id: 'nobody', result: 1 });
+    await evem.publish('ws.response.error', { id: 'nobody', error: { code: 1, message: 'x' } });
+    expect(error).not.toHaveBeenCalled();
   });
 });

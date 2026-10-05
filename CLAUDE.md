@@ -99,7 +99,7 @@ Real-time communication patterns built on top of EvEm, in `src/websocket/` and p
 
 3. **MessageQueue** (`MessageQueue.ts`)
    - `enable(maxSize = 100, { autoFlush = true })` registers one handler as middleware twice, `{ pattern: 'ws.send' }` and `{ pattern: 'ws.send.*' }`, because `ws.send.*` doesn't match `ws.send`
-   - The middleware queues as a side effect and returns the data unchanged; it queues only when enabled, not connected, not re-entrant (`isEnqueuing`), and the event name doesn't contain `queued`
+   - The middleware queues as a side effect and returns the data unchanged; it queues while not connected (it's registered only while the queue is enabled), unless the event name contains `queued`
    - FIFO with a size limit: when full, the oldest message is dropped and `ws.queue.overflow` (`{ maxSize, droppedMessage }`) published
    - `autoFlush` subscribes to `ws.connection.state` and flushes on any transition to `connected`; `flush()` publishes each payload, in order, to `ws.send.queued` (the original event name is not kept). `enqueue()` queues explicitly. `wasQueued(data)` tells whether the middleware queued a payload object on its latest publish
    - `removeMiddleware` removes a single registration (the first match), so `disable()` removes each one by `{ pattern, handler }`, plus the autoFlush subscription
