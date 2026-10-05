@@ -1771,3 +1771,17 @@ describe('WebSocketHandler - what mutation testing showed the tests missed', () 
     expect(close).toHaveBeenCalledWith(1000, 'Client disconnect');
   });
 });
+
+describe('WebSocketHandler - a null message', () => {
+  it('sends null as JSON, and publishes it as delivered', async () => {
+    const socket = new MockWebSocket('wss://test.example.com');
+    socket.simulateOpen();
+    const evem = new EvEm();
+    const handler = new WebSocketHandler(socket, evem);
+
+    expect(await evem.publish('ws.send', null)).toBe(true);
+    expect(await evem.publish('ws.send.chat', null)).toBe(true);
+    expect(socket.sentMessages).toEqual(['null', 'null']);
+    await handler.disconnect();
+  });
+});

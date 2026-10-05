@@ -138,7 +138,7 @@ A redirect is a **new** object with **exactly two** properties, `event` (a strin
 
 ## Event Filtering with Middleware
 
-Middleware can be used to filter or cancel events based on global conditions. Returning `null` cancels the event: no subscriber receives it and `publish` resolves to `false`. A middleware that throws also cancels the event (the error is logged).
+Middleware can be used to filter or cancel events based on global conditions. Returning `null` cancels the event: no subscriber receives it and `publish` resolves to `false`. A middleware that throws also cancels the event (the error is logged). Returning the data unchanged never cancels, so a middleware that passes events through doesn't cancel the ones whose data is `null`; the flip side is that a middleware can't cancel an event whose data is `null` by returning `null`.
 
 ```typescript
 import type { MiddlewareFunction } from "@jcfigueiredo/evem";

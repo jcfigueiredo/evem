@@ -36,7 +36,7 @@ The event emitter is a single class, `EvEm`, in `src/eventEmitter.ts`, together 
 - **`publish` pipeline**:
   1. Empty event name → rejected promise (`publish` never throws synchronously)
   2. Recursion check (`enterPublishChain`, see below)
-  3. Middleware, in registration order, each filtered by its pattern against the current event name. `null` cancels (`publish` resolves `false`); a *new* object with exactly `event` (string) and `data` reroutes; any other result replaces the data. A middleware error is logged and cancels the event
+  3. Middleware, in registration order, each filtered by its pattern against the current event name. `null` cancels (`publish` resolves `false`), unless the data was `null` already (data returned unchanged never cancels); a *new* object with exactly `event` (string) and `data` reroutes; any other result replaces the data. A middleware error is logged and cancels the event
   4. History record (data after middleware, before cancel support is added)
   5. Cancelable events: `addCancelSupport` adds `cancel()` and a `canceled` getter (plain objects and arrays are copied, other objects proxied, primitives left as they are)
   6. Collect subscriptions from every matching pattern; sort by priority (highest first), then subscription order (`sequence`)

@@ -472,3 +472,38 @@ describe('Middleware - results that are not a reroute', () => {
     expect(rerouted).not.toHaveBeenCalled();
   });
 });
+
+describe('Middleware - events whose data is null', () => {
+  it('lets a pass-through middleware return null data unchanged, without canceling the event', async () => {
+    const evem = new EvEm();
+    const logged: string[] = [];
+    evem.use((event, data) => {
+      logged.push(event);
+      return data;
+    });
+    evem.use(async (_event, data) => data);
+    const received = vi.fn();
+    evem.subscribe('ping', received);
+
+    expect(await evem.publish('ping', null)).toBe(true);
+    expect(logged).toEqual(['ping']);
+    expect(received).toHaveBeenCalledWith(null);
+  });
+
+  it('still cancels an event whose data was not null when a middleware returns null', async () => {
+    const evem = new EvEm();
+    evem.use(() => null);
+    const received = vi.fn();
+    evem.subscribe('ping', received);
+
+    expect(await evem.publish('ping', { n: 1 })).toBe(false);
+    expect(received).not.toHaveBeenCalled();
+  });
+
+  it('cancels when a middleware returns null for data an earlier middleware set', async () => {
+    const evem = new EvEm();
+    evem.use(() => ({ n: 2 }));
+    evem.use(() => null);
+    expect(await evem.publish('ping', null)).toBe(false);
+  });
+});

@@ -2,18 +2,19 @@
 
 ## Unreleased
 
-### Internal
-
-- Mutation testing (StrykerJS) found tests that ran code without checking it; the library's tests now catch 99.8% of its changes, up from 86.9%. Code no test could tell apart is gone (a re-entrancy guard in the WebSocket queue that nothing could trigger, redundant checks, cleanup with no effect); no behavior changed.
-
 ### Changed
 
 - **Requires Node.js 22+**, up from 20: Node.js 20 reached end of life in April 2026. Browsers are unaffected. Node.js 22.4+ has a global `WebSocket`, so the WebSocket adapter takes a URL without `WebSocketConstructor`; the `ws` package is still the way to give sockets options such as headers.
 
 ### Fixed
 
+- **Middleware and `null` data**: a middleware that returned the data unchanged canceled every event whose data was `null`, because returning `null` cancels. So a logging or pass-through middleware dropped `publish('x', null)` events (`publish` resolved `false`, subscribers never ran), and the WebSocket adapter's own middleware did the same to `ws.send` of `null`. Data returned unchanged no longer cancels. Behavior change: a middleware can't cancel an event whose data is `null` by returning `null` any more.
 - **WebSocket adapter**: what it publishes from the socket (incoming messages, `ws.error`, `ws.parse.error`, `ws.queue.overflow`, `ws.reconnect.failed`) left a rejected publish unhandled, which ends a Node.js process; a publish rejects when one of your subscribers makes it (`schemaErrorPolicy: THROW`, the recursion limit). Those rejections are now logged with `console.error`, as the SSE adapter already did.
 - **`request()`** rejects at once, with the reason, when publishing `ws.send.request` rejects, instead of leaving the rejection unhandled and the request waiting for its timeout.
+
+### Internal
+
+- Mutation testing (StrykerJS) found tests that ran code without checking it; the library's tests now catch 99.8% of its changes, up from 86.9%. Code no test could tell apart is gone (a re-entrancy guard in the WebSocket queue that nothing could trigger, redundant checks, cleanup with no effect); no behavior changed.
 
 ## 0.3.2 (2026-10-04)
 

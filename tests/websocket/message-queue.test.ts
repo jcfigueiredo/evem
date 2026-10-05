@@ -636,9 +636,7 @@ describe('MessageQueue - a null message', () => {
     const evem = new EvEm();
     const queue = new MessageQueue(evem, new ConnectionManager(evem));
     queue.enable(10);
-    // The middleware returns the data unchanged, and a middleware returning null cancels the event: so this
-    // publish resolves false, though the message is queued
-    await evem.publish('ws.send', null);
+    expect(await evem.publish('ws.send', null)).toBe(true);
     expect(queue.getQueueSize()).toBe(1);
     expect(queue.wasQueued(null)).toBe(false);
     expect(error).not.toHaveBeenCalled();
