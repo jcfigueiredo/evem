@@ -6,15 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Run all tests**: `pnpm test:nowatch`
 - **Run single test file**: `pnpm test:nowatch tests/priority.test.ts`
 - **Run specific test by name**: `pnpm test:nowatch -t "callbacks should be executed in priority order"`
-- **Coverage report**: `pnpm test:coverage`
+- **Coverage report**: `pnpm test:coverage` (runs once: the library's coverage, `src/`, as a text summary and as HTML in `coverage/`)
 - **Watch mode tests**: `pnpm test`
 - **TypeScript check**: `pnpm typecheck` (same as `pnpm tsc --noEmit`)
 - **Build**: `pnpm build` (compiles `src/` to `dist/` as ES modules with `.d.ts` files, via `tsconfig.build.json`)
-- **Node.js for development**: 20.19+ or 22.12+ (Vite 8's floor; the whole suite needs it, since `tests/site/build.test.ts` builds the demo site). The package itself supports Node.js 20+ (`engines`): Vite and the rest of the demo's dependencies are dev-only
+- **Node.js for development**: 20.19+ or 22.13+ (Vite 8's floor, and ESLint 10's on Node 22; the whole suite needs it, since `tests/site/build.test.ts` builds the demo site). The package itself supports Node.js 20+ (`engines`): Vite and the rest of the demo's dependencies are dev-only
 - **Demo site**: `pnpm demo` (Vite dev server for `demo/`: the showcase at `/`, the playground at `/playground/`; `/events` is proxied to a local SSE server on port 8000, e.g. `examples/python/server.py`, for the SSE scenarios' local server switch) and `pnpm demo:build` (static site into `demo/dist/`, git-ignored; `DEMO_BASE=/evem/` builds it for GitHub Pages)
-- **Format**: `pnpm format` (Prettier on `src/`, `tests/`, `scripts/`, `vitest.config.ts` and the demo site: `demo/src`, `demo/index.html`, `demo/playground`, `demo/vite.config.ts`); `pnpm format:check` only checks
-- **Everything CI runs**: `pnpm check` (format check, typecheck, tests and package check; also the `prepublishOnly` hook). CI runs these steps on Node 20 and 22 (Node 20 has no global `WebSocket`)
-- **No linter**: the format check and `pnpm typecheck` are the only static checks
+- **Format**: `pnpm format` (Prettier on `src/`, `tests/`, `scripts/`, `vitest.config.ts`, `eslint.config.js` and the demo site: `demo/src`, `demo/index.html`, `demo/playground`, `demo/vite.config.ts`); `pnpm format:check` only checks
+- **Everything CI runs**: `pnpm check` (format check, lint, duplication, typecheck, tests and package check; also the `prepublishOnly` hook). CI runs these steps on Node 20 and 22 (Node 20 has no global `WebSocket`)
+- **Static checks**: `pnpm lint` (ESLint, `eslint.config.js`, on `src/`, `demo/src/` and `scripts/`; no style rules, Prettier formats: cognitive complexity at most 15 (`sonarjs/cognitive-complexity`), cyclomatic at most 20, blocks nested at most 4 deep, and sonarjs's rules against repeated code within a file: identical functions, conditions, expressions and branches) and `pnpm duplication` (jscpd, `.jscpd.json`: code repeated between files in the same folders, at most 1%; tests aren't checked). A function over a limit today carries an `eslint-disable-next-line <rule> -- <why>` comment; ESLint fails on one that's no longer needed (`reportUnusedDisableDirectives`), so remove it when the function is simplified, and don't add one for new code: simplify it instead
 - **Package check**: `pnpm test:package` (builds, packs, installs the tarball into a temp project, imports every entry point from Node and type-checks a strict TypeScript consumer, with and without Node.js types)
 
 ## Packaging and Releases

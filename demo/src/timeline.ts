@@ -48,6 +48,7 @@ export function preview(value: unknown, max = 72): string {
 }
 
 /** What a trace entry says, in words */
+// eslint-disable-next-line complexity, sonarjs/cognitive-complexity -- one case per kind of trace entry, read as a table
 export function describeEntry(entry: TraceEntry): Omit<TimelineRow, 'depth' | 'at' | 'since' | 'kind'> {
   switch (entry.kind) {
     case 'subscribe':

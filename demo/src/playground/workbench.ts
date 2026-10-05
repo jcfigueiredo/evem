@@ -188,6 +188,7 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
   // Clear empties the log the tab shows (the timeline, the wire), so it's there only on those tabs
   clearButton.classList.toggle('invisible', tabs.selected() !== 'timeline' && tabs.selected() !== 'server');
 
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- renders the runs, the setup and the history together; to split into three
   const renderTimeline = () => {
     const entries = session.trace.entries;
     const setupEnd = session.setupEnd;

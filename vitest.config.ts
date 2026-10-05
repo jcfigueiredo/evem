@@ -22,7 +22,10 @@ export default defineConfig({
     include: ['**/*.test.ts'],
     coverage: {
       provider: 'v8',
-      reporter: ['html']
+      // The library's code, which the package ships (the demo's DOM code is checked in a browser, not by tests)
+      include: ['src/**'],
+      // The HTML report goes to coverage/; the summary prints when the run ends
+      reporter: ['html', 'text-summary']
     }
   }
 });

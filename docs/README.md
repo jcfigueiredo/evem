@@ -26,15 +26,17 @@
 ```bash
 pnpm test            # Watch mode
 pnpm test:nowatch    # Run once
-pnpm test:coverage   # With a coverage report
+pnpm test:coverage   # Run once with a coverage report (a summary, and HTML in coverage/)
 pnpm typecheck       # TypeScript check
+pnpm lint            # Complexity and repeated code (ESLint)
+pnpm duplication     # Code duplicated between files (jscpd)
 pnpm format          # Format the code with Prettier (pnpm format:check only checks)
-pnpm check           # Everything CI runs: format check, type check, tests and package check
+pnpm check           # Everything CI runs: format check, lint, duplication, type check, tests and package check
 pnpm demo            # The demo site (showcase and playground) on a local dev server
 pnpm demo:build      # Build the demo site into demo/dist/
 ```
 
-Developing needs Node.js 20.19+ or 22.12+ (the demo site is built with Vite 8, and the tests build it); the package itself runs on Node.js 20+.
+Developing needs Node.js 20.19+ or 22.13+ (the demo site is built with Vite 8, and the tests build it; ESLint 10 needs 22.13 on Node 22); the package itself runs on Node.js 20+.
 
 Maintainers release new versions with `pnpm release <version>`; see [Releasing](releasing.md).
 

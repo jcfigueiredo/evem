@@ -59,6 +59,7 @@ function assertSingleLine(field: string, value: string): void {
  *   set without an `event`
  * @throws {RangeError} If `retry` isn't a non-negative safe integer
  */
+// eslint-disable-next-line sonarjs/cognitive-complexity -- one check per field it refuses to write, each flat
 export function formatSseMessage(message: SseMessage, options: FormatSseMessageOptions = {}): string {
   const { event, data, id, retry } = message;
   const lines: string[] = [];
