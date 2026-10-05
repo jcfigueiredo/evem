@@ -90,6 +90,7 @@
     "daisyui": "^5.7.47",
     "eslint": "^10.12.0",
     "eslint-plugin-sonarjs": "^4.2.2",
+    "fast-check": "^4.10.2",
     "jscpd": "^5.4.0",
     "prettier": "3.9.9",
     "tailwindcss": "^4.3.3",
