@@ -32,7 +32,8 @@ The event emitter is a single class, `EvEm`, in `src/eventEmitter.ts`, together 
 
 - **Subscription storage**: `Map<pattern, Map<subscriptionId, CallbackInfo>>`, keyed by the event name or pattern exactly as subscribed. Lookups are not O(1): `publish` runs `isEventMatch` against every registered pattern, `unsubscribeById` scans every event, and `unsubscribe(event, callback)` scans that event's subscriptions. An event's entry is deleted when its last subscription goes.
 - **IDs**: subscription (and request) ids come from `generateId()` in `src/id.ts`: `crypto.randomUUID()`, or `crypto.getRandomValues()` where browsers don't expose it outside secure contexts.
-- **Wildcards** (`isEventMatch`): `*` alone matches everything; a trailing `*` matches one or more segments; a `*` elsewhere matches exactly one; `user.*` does not match `user`.
+- **Separator**: `new EvEm({ separator, maxRecursionDepth })` (or the older `new EvEm(maxRecursionDepth)`); `separator` (default `'.'`, any non-empty string without `*`, else a `TypeError`) is what `isEventMatch` splits on, read as `evem.separator`. The adapters write their own names with dots in the source and pass them through `localName(evem, name)` (`src/shared/names.ts`), and `toServerEventName` / `routeServerMessage` take the separator, so a `':'` emitter gets `ws:send:*`, `sse:ready` and `server:task-changed`. `WebSocketHandler`'s two middleware configs are built in the constructor for that reason
+- **Wildcards** (`isEventMatch`, segments split on the separator): `*` alone matches everything; a trailing `*` matches one or more segments; a `*` elsewhere matches exactly one; `user.*` does not match `user`.
 - **`publish` pipeline**:
   1. Empty event name → rejected promise (`publish` never throws synchronously)
   2. Recursion check (`enterPublishChain`, see below)

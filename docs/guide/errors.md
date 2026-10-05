@@ -128,7 +128,7 @@ A transform that times out is handled the same way (`Transform timed out after 5
 
 ## Recursion Protection
 
-A handler that publishes the event it's handling can loop forever. EvEm limits how deeply that can nest: 3 levels by default, or the depth you pass to the constructor (`new EvEm(5)`).
+A handler that publishes the event it's handling can loop forever. EvEm limits how deeply that can nest: 3 levels by default, or the depth you pass to the constructor (`new EvEm({ maxRecursionDepth: 5 })`, or `new EvEm(5)`).
 
 ```typescript
 import { EvEm } from "@jcfigueiredo/evem";

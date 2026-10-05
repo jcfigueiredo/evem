@@ -1,6 +1,7 @@
 # API
 
-- `new EvEm(maxRecursionDepth = 3)`: Create an emitter; `maxRecursionDepth` limits how deeply an event can re-publish itself from its own handlers
+- `new EvEm(options?)`: Create an emitter. `options.maxRecursionDepth` (default `3`) limits how deeply an event can re-publish itself from its own handlers; `options.separator` (default `'.'`) separates the segments of event names and patterns ([another separator](guide/events.md#another-separator)), and throws a `TypeError` if it's empty or contains `*`. `new EvEm(5)`, the older form, sets the recursion depth
+- `separator: string`: The emitter's separator (read-only)
 - `subscribe<T = unknown, R = any>(event: string, callback: EventCallback<T>, options?: SubscriptionOptions<T, R>): string`
   - Returns the subscription id. `event` can be a [wildcard pattern](guide/events.md#using-wildcards-in-event-subscription)
   - `options.schema`: A validator, `(data) => boolean` or `(data) => { valid, errors? }` (sync or async), checked before the filters and callback

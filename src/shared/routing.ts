@@ -18,6 +18,8 @@ export interface RouteOptions {
   channel: string;
   /** Route `{ type: 'response' }` messages to `<channel>.response` / `<channel>.response.error` */
   handleResponses: boolean;
+  /** What separates the segments of event names (the emitter's separator) @default '.' */
+  separator?: string;
 }
 
 /**
@@ -25,11 +27,11 @@ export interface RouteOptions {
  * already starts with it ("notification" → "server.notification", while "server.notification"
  * stays as it is). With an empty prefix, the name is used as-is.
  */
-export function toServerEventName(name: string, prefix: string): string {
-  if (!prefix || name.startsWith(`${prefix}.`)) {
+export function toServerEventName(name: string, prefix: string, separator = '.'): string {
+  if (!prefix || name.startsWith(`${prefix}${separator}`)) {
     return name;
   }
-  return `${prefix}.${name}`;
+  return `${prefix}${separator}${name}`;
 }
 
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value !== '';
@@ -43,28 +45,29 @@ const isNonEmptyString = (value: unknown): value is string => typeof value === '
  * - anything else, including values that aren't objects → `<channel>.message` with the whole message
  */
 export function routeServerMessage(message: unknown, options: RouteOptions): RoutedMessage {
-  const { prefix, channel, handleResponses } = options;
+  const { prefix, channel, handleResponses, separator = '.' } = options;
+  const own = (...parts: string[]) => [channel, ...parts].join(separator);
 
   // Stryker disable next-line ConditionalExpression: a primitive falls through to the same channel.message below (null, which wouldn't, is tested)
   if (message === null || typeof message !== 'object') {
-    return { event: `${channel}.message`, data: message };
+    return { event: own('message'), data: message };
   }
 
   const { type, event, data, id, result, error, timestamp } = message as Record<string, unknown>;
 
   if (handleResponses && type === 'response') {
     return error
-      ? { event: `${channel}.response.error`, data: { id, error, timestamp: timestamp ?? Date.now() } }
-      : { event: `${channel}.response`, data: { id, result, timestamp: timestamp ?? Date.now() } };
+      ? { event: own('response', 'error'), data: { id, error, timestamp: timestamp ?? Date.now() } }
+      : { event: own('response'), data: { id, result, timestamp: timestamp ?? Date.now() } };
   }
 
   if (isNonEmptyString(event)) {
-    return { event: toServerEventName(event, prefix), data };
+    return { event: toServerEventName(event, prefix, separator), data };
   }
 
   if (isNonEmptyString(type) && type !== 'response') {
-    return { event: toServerEventName(type, prefix), data };
+    return { event: toServerEventName(type, prefix, separator), data };
   }
 
-  return { event: `${channel}.message`, data: message };
+  return { event: own('message'), data: message };
 }

@@ -97,7 +97,7 @@ Use **one `WebSocketHandler` per `EvEm` instance**. Two handlers on the same emi
 | `queueSize` | `100` | Maximum number of queued messages. When the queue is full, the oldest message is dropped and `ws.queue.overflow` is published. |
 | `autoFlush` | `true` | Send queued messages whenever the state becomes `connected`, including the first connection. With `false`, call `handler.flush()` to send them. They're discarded by `disconnect()`. |
 | `enableRequestResponse` | `true` | Enables `request()`, the request format for `ws.send.request`, and routing of `{"type":"response"}` messages. With `false`, `ws.send.request` is sent like any other `ws.send.*` event. |
-| `serverEventPrefix` | `'server'` | Prefix for incoming server events (`chat.message` → `server.chat.message`). With `''`, events are published under their own names. |
+| `serverEventPrefix` | `'server'` | Prefix for incoming server events (`chat.message` → `server.chat.message`). With `''`, events are published under their own names. On an emitter with [another separator](guide/events.md#another-separator), the prefix is joined with it, and the adapter's own events use it too (`ws:send`, `ws:connection:state`). |
 | `reconnect` | `false` | Reconnect after an unexpected close. Never happens after `disconnect()`. |
 | `reconnectDelay` | `1000` | Milliseconds to wait before each reconnection attempt. The delay is fixed; there is no backoff. |
 | `maxReconnectAttempts` | `5` | How many consecutive failed attempts are allowed before giving up. The count resets when a socket opens. |

@@ -10,17 +10,20 @@ fc.configureGlobal({ numRuns: Number(process.env['FC_NUM_RUNS'] ?? 100) });
  * event; a `*` at the end of a longer pattern matches one or more segments; any other `*` matches exactly one
  * segment (empty ones too); everything else, `x*` included, matches only itself
  */
-function reference(event: string, pattern: string): boolean {
+function reference(event: string, pattern: string, separator = '.'): boolean {
   if (pattern === '*') return true;
-  const parts = pattern.split('.');
   const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const sep = literal(separator);
+  // A segment: anything that doesn't contain the separator
+  const segment = `(?:(?!${sep}).)*`;
+  const parts = pattern.split(separator);
   const source = parts
     .map((part, index) => {
       if (part !== '*') return literal(part);
-      return index === parts.length - 1 ? '[^.]*(?:\\.[^.]*)*' : '[^.]*';
+      return index === parts.length - 1 ? `${segment}(?:${sep}${segment})*` : segment;
     })
-    .join('\\.');
-  return new RegExp(`^${source}$`).test(event);
+    .join(sep);
+  return new RegExp(`^${source}$`, 's').test(event);
 }
 
 // Segments: names, an empty one (a..b), and a literal star inside a name
@@ -47,6 +50,45 @@ describe('Wildcard matching - properties', () => {
         await evem.publish(published);
         expect([...called].sort()).toEqual(patterns.filter(each => reference(published, each)).sort());
       })
+    );
+  });
+
+  it('follows the same rules with another separator, where dots are ordinary characters', async () => {
+    const separator = fc.constantFrom(':', '::', '/');
+    // Segments with dots in them, and with the separators' characters, so a ':' inside '::' shows up
+    const part = fc.constantFrom('a', 'user', '', 'x*', 'a.b', 'c:d');
+    const join = (parts: fc.Arbitrary<string[]>, sep: string) =>
+      parts.map(each => each.join(sep)).filter(text => text !== '');
+    await fc.assert(
+      fc.asyncProperty(
+        separator.chain(sep =>
+          fc.tuple(
+            fc.constant(sep),
+            join(fc.array(part, { minLength: 1, maxLength: 5 }), sep),
+            fc.uniqueArray(
+              join(
+                fc.array(fc.oneof({ arbitrary: part, weight: 3 }, { arbitrary: fc.constant('*'), weight: 2 }), {
+                  minLength: 1,
+                  maxLength: 5
+                }),
+                sep
+              ),
+              { minLength: 1, maxLength: 6 }
+            )
+          )
+        ),
+        async ([sep, published, patterns]) => {
+          const evem = new EvEm({ separator: sep });
+          const called = new Set<string>();
+          for (const each of patterns) {
+            evem.subscribe(each, () => {
+              called.add(each);
+            });
+          }
+          await evem.publish(published);
+          expect([...called].sort()).toEqual(patterns.filter(each => reference(published, each, sep)).sort());
+        }
+      )
     );
   });
 

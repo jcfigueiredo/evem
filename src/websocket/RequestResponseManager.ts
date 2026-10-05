@@ -1,4 +1,5 @@
 import type { EvEm } from '../eventEmitter.js';
+import { localName } from '../shared/names.js';
 import { generateId } from '../id.js';
 import type { RequestMessage, ResponseMessage, PendingRequest, RequestOptions } from './types.js';
 import { RequestTimeoutError } from './types.js';
@@ -21,14 +22,20 @@ export class RequestResponseManager {
    */
   private setupResponseHandlers(): void {
     // Handle successful responses
-    this.responseSubscriptionId = this.evem.subscribe('ws.response', (response: ResponseMessage) => {
-      this.handleResponse(response, false);
-    });
+    this.responseSubscriptionId = this.evem.subscribe(
+      localName(this.evem, 'ws.response'),
+      (response: ResponseMessage) => {
+        this.handleResponse(response, false);
+      }
+    );
 
     // Handle error responses
-    this.errorSubscriptionId = this.evem.subscribe('ws.response.error', (response: ResponseMessage) => {
-      this.handleResponse(response, true);
-    });
+    this.errorSubscriptionId = this.evem.subscribe(
+      localName(this.evem, 'ws.response.error'),
+      (response: ResponseMessage) => {
+        this.handleResponse(response, true);
+      }
+    );
   }
 
   /**
@@ -76,7 +83,7 @@ export class RequestResponseManager {
 
       // Publish the request. A publish that rejects (an app's subscriber made it) rejects the request at once, with
       // the reason, instead of leaving it to time out
-      this.evem.publish('ws.send.request', requestMessage).catch((error: unknown) => {
+      this.evem.publish(localName(this.evem, 'ws.send.request'), requestMessage).catch((error: unknown) => {
         clearTimeout(timeoutId);
         // Stryker disable next-line ConditionalExpression,OptionalChaining: the entry is there, and its own: only its response or cleanup would have removed it
         if (this.pendingRequests.get(id)?.timeoutId === timeoutId) {
