@@ -73,6 +73,14 @@ export interface SseHandlerOptions {
   autoConnect?: boolean;
   /** Called with errors that are also published as `sse.error` / `sse.parse.error` */
   onError?: (error: Error) => void;
+  /**
+   * The event that shows the stream is live, for servers that subscribe to their source (a broker, a database
+   * channel) after answering: its name as the server sends it (`event: keepalive` → 'keepalive'; unnamed
+   * messages are 'message'), or a predicate on the raw event, before its data is parsed. After every
+   * (re)connection, the handler is ready once this event arrives; without it, as soon as the stream opens.
+   * See isReady(), whenReady() and `sse.ready`.
+   */
+  readyEvent?: string | ((event: SseParsedEvent) => boolean);
 }
 
 /** The longest delay setTimeout supports (2^31 - 1 ms, about 24.8 days) */
@@ -244,6 +252,10 @@ export class SseHandler {
   private heartbeatExpired = false;
   /** Publishes of the previous events, awaited in order with `sequential` */
   private publishChain: Promise<void> = Promise.resolve();
+  /** Whether the current connection is live: open, and its readyEvent arrived (see readyEvent) */
+  private ready = false;
+  /** whenReady() calls still waiting, settled when the handler gets ready or stops */
+  private readonly readyWaiters = new Set<(ready: boolean) => void>();
 
   /**
    * @param url - URL of the SSE endpoint
@@ -291,6 +303,7 @@ export class SseHandler {
    */
   async disconnect(): Promise<void> {
     this.active = false;
+    this.notReady(false);
     this.generation++;
     this.clearTimers();
     this.transport.abort();
@@ -309,6 +322,40 @@ export class SseHandler {
   /** The current connection state */
   getConnectionState(): ConnectionState {
     return this.connectionManager.getState();
+  }
+
+  /**
+   * Whether the stream is live: open, and, with the readyEvent option, that event has arrived since it opened.
+   * False again while reconnecting.
+   */
+  isReady(): boolean {
+    return this.ready;
+  }
+
+  /**
+   * Wait until the stream is live (see isReady()). Resolves true once it is (at once if it already is), and
+   * false if the handler stops first (disconnect(), or no more reconnecting), if it isn't running at all, or
+   * after timeoutMs. Without a timeout it waits through reconnections for as long as the handler runs.
+   */
+  whenReady(timeoutMs?: number): Promise<boolean> {
+    if (this.ready) {
+      return Promise.resolve(true);
+    }
+    if (!this.active) {
+      return Promise.resolve(false);
+    }
+    return new Promise(resolve => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const settle = (ready: boolean) => {
+        clearTimeout(timer);
+        this.readyWaiters.delete(settle);
+        resolve(ready);
+      };
+      this.readyWaiters.add(settle);
+      if (timeoutMs !== undefined) {
+        timer = setTimeout(() => settle(false), Math.min(MAX_TIMEOUT, timeoutMs));
+      }
+    });
   }
 
   /** The last event id received (sent as Last-Event-ID when reconnecting), if any */
@@ -350,7 +397,12 @@ export class SseHandler {
         if (!isCurrent()) return;
         this.attempts = 0;
         this.resetHeartbeat(generation);
-        void this.connectionManager.transitionTo('connected');
+        const connected = this.connectionManager.transitionTo('connected');
+        if (this.options.readyEvent === undefined) {
+          // Ready at once; announced once the connected state change has been handled
+          const ready = this.becomeReady();
+          void connected.then(() => (isCurrent() ? this.publishSafely(...ready) : undefined));
+        }
       },
       event: event => (isCurrent() ? this.handleEvent(event) : undefined),
       retry: milliseconds => {
@@ -365,6 +417,7 @@ export class SseHandler {
       reconnecting: () => {
         if (!isCurrent()) return;
         clearTimeout(this.heartbeatTimer);
+        this.notReady();
         void this.connectionManager.transitionTo('reconnecting');
       }
     };
@@ -374,6 +427,7 @@ export class SseHandler {
    * A connection ended: report it, then reconnect or stop
    */
   private async handleEnd(info: SseCloseInfo, generation: number): Promise<void> {
+    this.notReady();
     let end = info;
     if (end.reason === 'aborted') {
       // disconnect() aborts too, but it also changes the generation, so it never gets here. What's left
@@ -441,6 +495,7 @@ export class SseHandler {
 
   private async stop(): Promise<void> {
     this.active = false;
+    this.notReady(false);
     await this.connectionManager.transitionTo('disconnected');
   }
 
@@ -488,12 +543,47 @@ export class SseHandler {
   }
 
   /**
+   * The stream is live: settle the waiting whenReady() calls, and return the `sse.ready` publish to make
+   */
+  private becomeReady(): [string, unknown] {
+    this.ready = true;
+    for (const settle of [...this.readyWaiters]) settle(true);
+    return ['sse.ready', { timestamp: Date.now() }];
+  }
+
+  /** The stream isn't live any more; when the handler stops (`settle` false), whenReady() calls stop waiting */
+  private notReady(settle?: false): void {
+    this.ready = false;
+    if (settle === false) {
+      for (const waiter of [...this.readyWaiters]) waiter(false);
+    }
+  }
+
+  /** Whether this event is the readyEvent (a predicate that throws is logged, and says no) */
+  private isReadyEvent(event: SseParsedEvent): boolean {
+    const { readyEvent } = this.options;
+    if (typeof readyEvent === 'string') {
+      return event.type === readyEvent;
+    }
+    try {
+      return readyEvent?.(event) === true;
+    } catch (error) {
+      console.error('SseHandler readyEvent threw:', error);
+      return false;
+    }
+  }
+
+  /**
    * Parse and route one event. With `sequential`, returns a promise that settles once its
    * subscribers are done (the fetch transport waits for it before reading on).
    */
   private handleEvent(event: SseParsedEvent): void | Promise<void> {
     this.lastEventId = event.lastEventId || undefined;
     const publishes: Array<[string, unknown]> = [];
+    // Decided on the raw event, so a ready event whose data doesn't parse still counts
+    if (!this.ready && this.options.readyEvent !== undefined && this.isReadyEvent(event)) {
+      publishes.push(this.becomeReady());
+    }
 
     try {
       const data = this.parse(event);
@@ -532,7 +622,8 @@ export class SseHandler {
   private parse(event: SseParsedEvent): unknown {
     const { parseData = 'json' } = this.options;
     if (parseData === 'json') {
-      return JSON.parse(event.data);
+      // An empty `data:` is a common heartbeat; it has no value rather than invalid JSON
+      return event.data === '' ? null : JSON.parse(event.data);
     }
     if (parseData === 'text') {
       return event.data;

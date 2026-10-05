@@ -89,4 +89,6 @@ export interface SseEvents {
   'sse.parse.error': { error: Error; rawData: string; eventType: string; lastEventId: string };
   'sse.error': { error: Error; reason: SseCloseInfo['reason']; status?: number; contentType?: string | null };
   'sse.reconnect.failed': { attempts: number };
+  /** The stream is live: open, and with the readyEvent option, that event arrived */
+  'sse.ready': { timestamp: number };
 }

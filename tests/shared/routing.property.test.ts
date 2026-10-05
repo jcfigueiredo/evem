@@ -99,8 +99,8 @@ describe('Server routing - properties', () => {
         const record = (into: unknown[], channel: string) => {
           const evem = new EvEm();
           evem.use((event, data) => {
-            // The adapters' own state events aside; ws.message and sse.message are the same event
-            if (!event.includes('connection.state'))
+            // The adapters' own state events (and SSE's readiness) aside; ws.message and sse.message are the same event
+            if (!event.includes('connection.state') && event !== 'sse.ready')
               into.push({ event: event.replace(`${channel}.`, 'channel.'), data });
             return data;
           });

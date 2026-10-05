@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **SSE readiness**: `SseHandler`'s `readyEvent` option names the event that shows the stream is live (or takes a predicate on the raw event), for servers that subscribe to a broker or database channel after answering, when events published in between are lost. `isReady()`, `whenReady(timeoutMs?)` (resolves `false` at once when the handler has stopped, so it never hangs) and the `sse.ready` event, after every (re)connection. Without `readyEvent`, the stream is ready as soon as it opens.
+
+### Changed
+
+- **SSE: an event whose data is empty** (`data:` with nothing after it, a common heartbeat) is published with `null` under the default `parseData: 'json'`, instead of as `sse.parse.error`.
+
 ## 0.4.0 (2026-10-05)
 
 ### Changed

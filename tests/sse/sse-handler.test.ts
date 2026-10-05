@@ -987,3 +987,246 @@ describe('SseHandler - option errors, stale connections and timers', () => {
     await handler.disconnect();
   });
 });
+
+describe('SseHandler - readiness', () => {
+  let evem: EvEm;
+  let transport: FakeTransport;
+  let handler: SseHandler;
+  let log: string[];
+
+  const tick = async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+  const create = (options: SseHandlerOptions = {}) => {
+    handler = new SseHandler('https://api.test/events', evem, { transport, ...options });
+    return handler;
+  };
+
+  beforeEach(() => {
+    evem = new EvEm();
+    transport = new FakeTransport();
+    log = [];
+    evem.subscribe('sse.ready', () => {
+      log.push('ready');
+    });
+    evem.subscribe('server.*', (data: unknown) => {
+      log.push(`server: ${JSON.stringify(data)}`);
+    });
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+  });
+
+  afterEach(async () => {
+    await handler?.disconnect();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('is ready once the stream opens, without a readyEvent', async () => {
+    let timestamp: unknown;
+    evem.subscribe('sse.ready', (ready: { timestamp: number }) => {
+      timestamp = ready.timestamp;
+    });
+    create();
+    await tick();
+    expect(handler.isReady()).toBe(false);
+    const ready = handler.whenReady();
+
+    transport.open();
+    await tick();
+
+    expect(handler.isReady()).toBe(true);
+    await expect(ready).resolves.toBe(true);
+    expect(log).toEqual(['ready']);
+    expect(timestamp).toEqual(expect.any(Number));
+  });
+
+  it('announces sse.ready after the connected state change, without a readyEvent', async () => {
+    evem.subscribe('sse.connection.state', async (change: { to: string }) => {
+      await Promise.resolve(); // a state subscriber that takes a moment
+      log.push(`state ${change.to}`);
+    });
+    create();
+    await tick();
+    transport.open();
+    expect(handler.isReady()).toBe(true); // ready at once, announced after
+    await tick();
+
+    expect(log).toEqual(['state connecting', 'state connected', 'ready']);
+  });
+
+  it("with a readyEvent, waits for that event after the open, even when its data isn't JSON", async () => {
+    create({ readyEvent: 'keepalive' });
+    await tick();
+    transport.open();
+    transport.send('{"id":1}', 'order.updated');
+    await tick();
+    expect(handler.isReady()).toBe(false);
+
+    transport.send('connected', 'keepalive');
+    await tick();
+
+    expect(handler.isReady()).toBe(true);
+    await expect(handler.whenReady()).resolves.toBe(true);
+    expect(log).toEqual(['server: {"id":1}', 'ready']);
+  });
+
+  it('announces sse.ready before the ready event itself is published', async () => {
+    create({ readyEvent: 'hello' });
+    await tick();
+    transport.open();
+    transport.send('{"user":"ana"}', 'hello');
+    transport.send('{"user":"bo"}', 'hello');
+    await tick();
+
+    expect(log).toEqual(['ready', 'server: {"user":"ana"}', 'server: {"user":"bo"}']);
+  });
+
+  it('takes a predicate on the raw event', async () => {
+    create({ readyEvent: event => event.type === 'status' && event.data === '"live"' });
+    await tick();
+    transport.open();
+    transport.send('"warming"', 'status');
+    await tick();
+    expect(handler.isReady()).toBe(false);
+
+    transport.send('"live"', 'status');
+    await tick();
+    expect(handler.isReady()).toBe(true);
+  });
+
+  it('logs a predicate that throws and stays not ready', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    create({
+      readyEvent: () => {
+        throw new Error('bad predicate');
+      }
+    });
+    await tick();
+    transport.open();
+    transport.send('{}', 'keepalive');
+    await tick();
+
+    expect(handler.isReady()).toBe(false);
+    expect(error).toHaveBeenCalledWith('SseHandler readyEvent threw:', expect.any(Error));
+    expect(log).toEqual(['server: {}']);
+  });
+
+  it('is ready again only after the ready event on each new connection', async () => {
+    vi.useFakeTimers();
+    create({ readyEvent: 'keepalive', reconnectDelay: 100, backoff: false });
+    await tick();
+    transport.open();
+    transport.send('""', 'keepalive');
+    await tick();
+    expect(handler.isReady()).toBe(true);
+
+    transport.end({ reason: 'network-error', error: new Error('gone') });
+    await tick();
+    expect(handler.isReady()).toBe(false);
+    const ready = handler.whenReady();
+
+    await vi.advanceTimersByTimeAsync(100);
+    transport.open();
+    await tick();
+    expect(handler.isReady()).toBe(false);
+    transport.send('""', 'keepalive');
+    await tick();
+
+    await expect(ready).resolves.toBe(true);
+    expect(log.filter(entry => entry === 'ready')).toHaveLength(2);
+  });
+
+  it("isn't ready while the native EventSource retries on its own", async () => {
+    create();
+    await tick();
+    transport.open();
+    await tick();
+    expect(handler.isReady()).toBe(true);
+
+    transport.current.listener.reconnecting?.();
+    expect(handler.isReady()).toBe(false);
+
+    transport.open();
+    expect(handler.isReady()).toBe(true);
+  });
+
+  it('resolves whenReady(timeout) with false when the time runs out', async () => {
+    vi.useFakeTimers();
+    create({ readyEvent: 'keepalive' });
+    await tick();
+    transport.open();
+    const ready = handler.whenReady(500);
+
+    await vi.advanceTimersByTimeAsync(499);
+    let settled = false;
+    void ready.then(() => {
+      settled = true;
+    });
+    await tick();
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(ready).resolves.toBe(false);
+  });
+
+  it('resolves whenReady with false at once when the handler is not running', async () => {
+    create({ autoConnect: false });
+    await expect(handler.whenReady()).resolves.toBe(false);
+
+    handler.connect();
+    await tick();
+    transport.open();
+    await tick();
+    await handler.disconnect();
+    await expect(handler.whenReady()).resolves.toBe(false);
+    expect(handler.isReady()).toBe(false);
+  });
+
+  it('resolves a waiting whenReady with false on disconnect()', async () => {
+    create({ readyEvent: 'keepalive' });
+    await tick();
+    const ready = handler.whenReady();
+
+    await handler.disconnect();
+
+    await expect(ready).resolves.toBe(false);
+  });
+
+  it('resolves a waiting whenReady with false when the handler stops reconnecting', async () => {
+    create({ readyEvent: 'keepalive', reconnect: false });
+    await tick();
+    transport.open();
+    const ready = handler.whenReady();
+
+    transport.end();
+    await tick();
+
+    await expect(ready).resolves.toBe(false);
+    await expect(handler.whenReady()).resolves.toBe(false);
+  });
+});
+
+describe('SseHandler - empty data', () => {
+  it('publishes an event whose data is empty as null with JSON parsing, instead of a parse error', async () => {
+    const evem = new EvEm();
+    const transport = new FakeTransport();
+    const pings: unknown[] = [];
+    const parseErrors: unknown[] = [];
+    evem.subscribe('server.ping', (data: unknown) => {
+      pings.push(data);
+    });
+    evem.subscribe('sse.parse.error', (error: unknown) => {
+      parseErrors.push(error);
+    });
+    const handler = new SseHandler('https://api.test/events', evem, { transport });
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    transport.open();
+
+    transport.send('', 'ping');
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(pings).toEqual([null]);
+    expect(parseErrors).toEqual([]);
+    await handler.disconnect();
+  });
+});
