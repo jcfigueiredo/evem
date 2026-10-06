@@ -116,3 +116,8 @@
     transition: none !important;
   }
 }
+
+/* Alpine markup stays hidden until Alpine has started (the showcase's Alpine card) */
+[x-cloak] {
+  display: none !important;
+}

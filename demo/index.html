@@ -279,6 +279,41 @@
             data-scenario="schema-validation"
           ></div>
         </article>
+        <article
+          class="grid grid-cols-1 gap-6 border-t border-base-300 py-12 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
+        >
+          <div>
+            <h3 class="font-mono text-2xl font-bold">Typed events</h3>
+            <p class="mt-2 text-base-content/70">
+              Give EvEm an event map and the compiler checks every name and payload. A wildcard subscriber gets the
+              union of what its pattern matches, and a pattern that matches nothing doesn't compile: the listener that
+              would never fire is caught before it ships.
+            </p>
+            <a
+              class="link mt-3 inline-block text-sm"
+              href="https://github.com/jcfigueiredo/evem/blob/main/docs/guide/typed-events.md"
+              >Typed events guide ↗</a
+            >
+          </div>
+          <figure class="card border border-base-300 bg-neutral text-neutral-content">
+            <pre
+              class="overflow-x-auto p-5 font-mono text-sm leading-relaxed"
+              aria-label="TypeScript code with a typed event map, and the compiler's error"
+            ><code><span class="opacity-70">interface AppEvents {</span>
+  'task.opened': { id: string };
+  'task.closed': { id: string; reason: string };
+<span class="opacity-70">}</span>
+const evem = new EvEm&lt;AppEvents&gt;();
+
+evem.subscribe('task.*', (task) =&gt; {
+  <span class="opacity-70">// task: { id: string } | { id: string; reason: string }</span>
+});
+
+evem.subscribe(<span class="underline decoration-(--code-number) decoration-wavy underline-offset-4">'tasks.*'</span>, () =&gt; {});
+<span class="text-(--code-number)">error: Argument of type '"tasks.*"' is not assignable to
+parameter of type '"No event matches \"tasks.*\""'.</span></code></pre>
+          </figure>
+        </article>
       </section>
 
       <section id="adapters" class="mx-auto max-w-6xl scroll-mt-16 px-4 pb-24" aria-labelledby="adapters-title">
@@ -313,6 +348,79 @@
             ></div>
           </article>
         </div>
+        <article
+          class="mt-12 grid grid-cols-1 gap-6 border-t border-base-300 pt-12 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
+        >
+          <div>
+            <h3 class="font-mono text-2xl font-bold">Alpine.js</h3>
+            <p class="mt-2 text-base-content/70">
+              The Alpine plugin gives templates <code>$evem</code>. This board is an Alpine component on a server
+              stream: <code>$evem.on('server:task:*', …)</code> moves the cards, and <code>$store.evem</code> follows
+              the connection. Hide the board and its subscription goes with it; show it again and it replays the
+              history.
+            </p>
+            <a
+              class="link mt-3 inline-block text-sm"
+              href="https://github.com/jcfigueiredo/evem/blob/main/docs/alpine.md"
+              >Alpine plugin docs ↗</a
+            >
+          </div>
+          <div class="card h-[26rem] border border-base-300 bg-base-100" data-alpine-card>
+            <p class="m-auto text-sm text-base-content/70" data-alpine-loading>Loading the board…</p>
+            <div class="card-body gap-4 p-5" x-data="{ shown: true }" x-cloak>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="flex items-center gap-2 text-sm" role="status">
+                  <span
+                    class="status"
+                    :class="$store.evem.ready ? 'status-success' : 'status-warning'"
+                    aria-hidden="true"
+                  ></span>
+                  <span x-text="$store.evem.ready ? 'live' : $store.evem.state"></span>
+                </span>
+                <span
+                  class="text-sm text-base-content/70"
+                  x-text="`${$store.board.subscriptions} task subscription${$store.board.subscriptions === 1 ? '' : 's'}`"
+                ></span>
+              </div>
+              <template x-if="shown">
+                <div
+                  class="grid min-h-0 flex-1 grid-cols-3 gap-3"
+                  x-data="{ tasks: {} }"
+                  x-init="$evem.on('server:task:*', task => { tasks[task.id] = task }, { replayHistory: true })"
+                >
+                  <template x-for="lane in ['todo', 'doing', 'done']" :key="lane">
+                    <div class="flex min-w-0 flex-col gap-2 rounded-box bg-base-200 p-3">
+                      <h4
+                        class="font-mono text-xs font-bold tracking-wide text-base-content/70 uppercase"
+                        x-text="lane"
+                      ></h4>
+                      <template x-for="task in Object.values(tasks).filter(task => task.lane === lane)" :key="task.id">
+                        <div
+                          class="rounded-box border border-base-300 bg-base-100 px-3 py-2 text-sm"
+                          x-text="task.title"
+                        ></div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <p x-show="!shown" class="m-auto text-sm text-base-content/70">
+                The board is gone, and so is its subscription.
+              </p>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="btn btn-soft btn-sm"
+                  @click="shown = !shown"
+                  x-text="shown ? 'Hide the board' : 'Show the board'"
+                ></button>
+                <button type="button" class="btn btn-soft btn-sm" @click="$store.board.drop()">
+                  Drop the connection
+                </button>
+              </div>
+            </div>
+          </div>
+        </article>
       </section>
 
       <section id="why" class="mx-auto max-w-6xl scroll-mt-16 px-4 pb-24" aria-labelledby="why-title">
