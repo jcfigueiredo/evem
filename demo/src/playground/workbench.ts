@@ -116,7 +116,12 @@ export async function mountWorkbench(root: HTMLElement, scenario: Scenario, bus:
     ])
   ]);
   const controls = el('fieldset', { class: 'grid gap-x-3 sm:grid-cols-2' });
-  const actions = el('div', { class: 'flex flex-wrap gap-2' });
+  // On wide screens the card scrolls when its controls don't fit: the actions stay in view at its bottom, with the
+  // card's background behind them, and what scrolls passes under them
+  const actions = el('div', {
+    class:
+      'flex flex-wrap gap-2 lg:sticky lg:bottom-0 lg:-mx-4 lg:-mb-4 lg:border-t lg:border-base-300 lg:bg-base-100 lg:px-4 lg:pb-4 lg:pt-3'
+  });
   const editedBadge = el('span', { class: 'badge badge-warning badge-sm hidden' }, ['edited']);
   const codeHost = el('div', { class: 'min-h-0 flex-1' });
   const editButton = el('button', { type: 'button', class: BUTTON.other }, ['Edit']);

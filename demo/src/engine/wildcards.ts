@@ -8,18 +8,19 @@ const segments = (count: number) => `${count} segment${count === 1 ? '' : 's'}`;
 
 /**
  * Explain EvEm's wildcard rules for one event and pattern: `*` alone matches everything, a `*` at the end matches
- * one or more segments, and any other `*` matches exactly one. A test pins the verdict to EvEm's own matching.
+ * one or more segments, and any other `*` matches exactly one. Segments are split on the emitter's separator. A test
+ * pins the verdict to EvEm's own matching.
  */
-export function explainMatch(event: string, pattern: string): MatchExplanation {
+export function explainMatch(event: string, pattern: string, separator = '.'): MatchExplanation {
   if (pattern === '*') return { matched: true, reason: '* on its own matches every event' };
-  const events = event.split('.');
-  const patterns = pattern.split('.');
+  const events = event.split(separator);
+  const patterns = pattern.split(separator);
   const trailing = patterns.length > 1 && patterns[patterns.length - 1] === '*';
   const fixed = trailing ? patterns.slice(0, -1) : patterns;
   if (trailing && events.length <= fixed.length) {
     return {
       matched: false,
-      reason: `the event has ${segments(events.length)}; a * at the end needs at least one more after "${fixed.join('.')}"`
+      reason: `the event has ${segments(events.length)}; a * at the end needs at least one more after "${fixed.join(separator)}"`
     };
   }
   if (!trailing && events.length !== patterns.length) {
@@ -35,6 +36,6 @@ export function explainMatch(event: string, pattern: string): MatchExplanation {
     }
   }
   const reasons = fixed.flatMap((segment, index) => (segment === '*' ? [`* matched "${events[index]}"`] : []));
-  if (trailing) reasons.push(`the * at the end matched "${events.slice(fixed.length).join('.')}"`);
+  if (trailing) reasons.push(`the * at the end matched "${events.slice(fixed.length).join(separator)}"`);
   return { matched: true, reason: reasons.length > 0 ? reasons.join(', ') : 'the same name' };
 }

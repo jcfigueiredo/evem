@@ -3,6 +3,8 @@ import { cancelableEvents } from './cancelableEvents';
 import { chat } from './chat';
 import { connectionQueue } from './connectionQueue';
 import { debounce } from './debounce';
+import { devWarnings } from './devWarnings';
+import { domBridge } from './domBridge';
 import { errorPolicies } from './errorPolicies';
 import { filters } from './filters';
 import { historyReplay } from './historyReplay';
@@ -15,6 +17,7 @@ import { recursionProtection } from './recursionProtection';
 import { requests } from './requests';
 import { serverEvents } from './serverEvents';
 import { sseFailures } from './sseFailures';
+import { sseReadiness } from './sseReadiness';
 import { sseReconnect } from './sseReconnect';
 import { sseStream } from './sseStream';
 import { schemaValidation } from './schemaValidation';
@@ -41,11 +44,14 @@ export const scenarios: readonly Scenario[] = [
   recursionProtection,
   historyReplay,
   memoryLeaks,
+  devWarnings,
+  domBridge,
   connectionQueue,
   requests,
   serverEvents,
   sseStream,
   sseReconnect,
+  sseReadiness,
   sseFailures,
   chat
 ];
