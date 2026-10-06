@@ -1,4 +1,4 @@
-import type { EvEm } from '../eventEmitter.js';
+import type { AnyEvEm } from '../eventEmitter.js';
 import { localName } from '../shared/names.js';
 import { publishSafely } from '../shared/publishSafely.js';
 import type { ConnectionManager } from './ConnectionManager.js';
@@ -31,7 +31,7 @@ export class MessageQueue {
   private queuedPayloads = new WeakSet<object>();
 
   constructor(
-    private evem: EvEm,
+    private evem: AnyEvEm,
     private connectionManager: ConnectionManager
   ) {}
 

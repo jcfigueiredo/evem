@@ -1,7 +1,15 @@
 # API
 
-- `new EvEm(options?)`: Create an emitter. `options.maxRecursionDepth` (default `3`) limits how deeply an event can re-publish itself from its own handlers; `options.separator` (default `'.'`) separates the segments of event names and patterns ([another separator](guide/events.md#another-separator)), and throws a `TypeError` if it's empty or contains `*`. `new EvEm(5)`, the older form, sets the recursion depth
+- `new EvEm(options?)`: Create an emitter.
+  - `options.maxRecursionDepth` (default `3`): how deeply an event can re-publish itself from its own handlers. `new EvEm(5)`, the older form, sets it too.
+  - `options.separator` (default `'.'`): what separates the segments of event names and patterns ([another separator](guide/events.md#another-separator)). An empty separator, or one containing `*`, throws a `TypeError`.
+  - `options.events`: the declared events, from `defineEvents()`. The emitter's types are inferred from them, and so is the separator; a different `separator` throws a `TypeError`.
+  - `options.devWarnings` (default `false`): with `events`, report with `console.warn`, once each, published names that aren't declared and patterns that match no declared event. Meant for development builds.
+- `new EvEm<AppEvents>(options?)`: An emitter with a [typed event map](guide/typed-events.md). Names and payloads are checked, and wildcard subscribers get the union of the matching payloads. When the map declares a separator (`[SEPARATOR]: ':'`), `options.separator` is required and must match.
 - `separator: string`: The emitter's separator (read-only)
+- `addKnownEvents(names: readonly string[]): void`: Declare more event names for `devWarnings`. The adapters call it with their own events. It does nothing on an emitter without `events`.
+- `defineEvents(definitions, { separator? })`: Declare events as a value: `defineEvents({ 'task.opened': payload<Task>() })`. Pass the result as `events`; `EventsOf<typeof definitions>` is the map's type. `payload<T>()` marks a payload type, with `payload()` for none.
+- Types for maps: `Cancelable<T>` (a cancelable event), `SEPARATOR` (the key that declares a map's separator), `WithSeparator<Map, ':'>` (an adapter's map with another separator), `EventsOf`, `PayloadOf`, `MatchingNames` and `EventNames`
 - `subscribe<T = unknown, R = any>(event: string, callback: EventCallback<T>, options?: SubscriptionOptions<T, R>): string`
   - Returns the subscription id. `event` can be a [wildcard pattern](guide/events.md#using-wildcards-in-event-subscription)
   - `options.schema`: A validator, `(data) => boolean` or `(data) => { valid, errors? }` (sync or async), checked before the filters and callback
@@ -19,6 +27,7 @@
 - `unsubscribeById(id: string): void`
 - `publish<T = unknown>(event: string, data?: T, options?: PublishOptions | number): Promise<boolean>`
   - Resolves to `true` if the event completed, `false` if it was canceled
+  - Without data, subscribers receive `undefined`. A cancelable publish without data delivers `{}`, which can be canceled
   - A number in place of the options is the timeout
   - `options.timeout`: Milliseconds to wait for each async callback or transform (default: 5000)
   - `options.cancelable`: Whether handlers can cancel the event (default: false)

@@ -71,13 +71,15 @@ try {
 
   check('every entry point imports as an ES module and works', () => {
     const script = `
-      import { EvEm, ErrorPolicy, Priority } from "${pkg.name}";
+      import { EvEm, ErrorPolicy, Priority, defineEvents, payload } from "${pkg.name}";
       import { WebSocketHandler, MessageQueue, RequestTimeoutError } from "${pkg.name}/websocket";
       import { SseHandler, SseParser } from "${pkg.name}/sse";
       import { formatSseMessage, SSE_HEADERS } from "${pkg.name}/sse/server";
       import { bridgeToDom, bridgeFromDom } from "${pkg.name}/dom";
       import { evemAlpine } from "${pkg.name}/alpine";
       const evem = new EvEm();
+      const declared = defineEvents({ "user.login": payload() });
+      if (new EvEm({ events: declared }).separator !== ".") throw new Error("defineEvents did not give the separator");
       let received;
       evem.subscribe("user.*", data => { received = data; });
       await evem.publish("user.login", { id: 1 });
@@ -131,7 +133,17 @@ try {
         writeFileSync(
           join(consumer, 'index.ts'),
           `
-        import { EvEm, ErrorPolicy, type EventRecord, type MemoryLeakOptions } from "${pkg.name}";
+        import {
+          EvEm,
+          ErrorPolicy,
+          SEPARATOR,
+          defineEvents,
+          payload,
+          type Cancelable,
+          type EventRecord,
+          type EventsOf,
+          type MemoryLeakOptions
+        } from "${pkg.name}";
         import { WebSocketHandler, type WebSocketHandlerOptions } from "${pkg.name}/websocket";
         import { SseHandler, type SseEvents, type SseHandlerOptions } from "${pkg.name}/sse";
         import { formatSseMessage, type SseMessage } from "${pkg.name}/sse/server";
@@ -140,6 +152,20 @@ try {
         const evem = new EvEm();
         const bridgeOptions: DomBridgeOptions = { target: new EventTarget(), rename: name => name.replaceAll(".", ":") };
         const stopBridge: () => void = bridgeToDom(evem, ["server.*"], bridgeOptions);
+        interface AppEvents {
+          [SEPARATOR]: ":";
+          "task:opened": { id: string };
+          "order:placing": Cancelable<{ total: number }>;
+        }
+        const typed = new EvEm<AppEvents>({ separator: ":" });
+        typed.subscribe("task:*", task => { task.id.toUpperCase(); });
+        typed.subscribe("order:placing", order => { order.cancel(); order.total.toFixed(); });
+        // @ts-expect-error -- matches no event
+        typed.subscribe("billing:*", () => {});
+        const declared = defineEvents({ "lane:expand": payload<{ lane: string }>() }, { separator: ":" });
+        const inferred = new EvEm({ events: declared, devWarnings: true });
+        inferred.subscribe("lane:*", lane => { lane.lane.toUpperCase(); });
+        const fromType: EventsOf<typeof declared>["lane:expand"] = { lane: "doing" };
         const plugin: (Alpine: AlpineLike) => void = evemAlpine(evem, { sse: new SseHandler("/live", evem, { autoConnect: false }) });
         const storeShape: EvemStore = { state: "connected", ready: true };
         evem.subscribe<{ id: number }>("user.login", user => { user.id.toFixed(); });
@@ -156,7 +182,7 @@ try {
           { fetch: async (input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init) },
           { fetch: async (url: string) => new Response(url) },
         ];
-        export { history, leakOptions, options, sse, wire, failure, fetches, ErrorPolicy, WebSocketHandler, stopBridge, plugin, storeShape };
+        export { history, leakOptions, options, sse, wire, failure, fetches, ErrorPolicy, WebSocketHandler, stopBridge, plugin, storeShape, fromType };
       `
         );
         writeFileSync(

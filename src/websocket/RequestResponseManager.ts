@@ -1,4 +1,4 @@
-import type { EvEm } from '../eventEmitter.js';
+import type { AnyEvEm } from '../eventEmitter.js';
 import { localName } from '../shared/names.js';
 import { generateId } from '../id.js';
 import type { RequestMessage, ResponseMessage, PendingRequest, RequestOptions } from './types.js';
@@ -13,7 +13,7 @@ export class RequestResponseManager {
   private responseSubscriptionId?: string;
   private errorSubscriptionId?: string;
 
-  constructor(private evem: EvEm) {
+  constructor(private evem: AnyEvEm) {
     this.setupResponseHandlers();
   }
 

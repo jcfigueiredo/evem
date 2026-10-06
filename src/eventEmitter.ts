@@ -1,3 +1,18 @@
+import type {
+  Cancelable,
+  CheckedName,
+  CheckedPattern,
+  EventDefinitions,
+  EventNames,
+  EventPairs,
+  IsUntyped,
+  PayloadOf,
+  PublishedOf,
+  SeparatorOf,
+  TypedEventRecords,
+  TypedMiddlewareResult,
+  UntypedEvents
+} from './eventTypes.js';
 import { generateId } from './id.js';
 
 /**
@@ -225,7 +240,42 @@ export interface EvEmOptions {
    * too (`sse:error`). Any non-empty string without `*` @default '.'
    */
   separator?: string;
+  /**
+   * The declared events, from defineEvents(): with it, the emitter's type is inferred, and with `devWarnings`,
+   * names and patterns that match no declared event are reported
+   */
+  events?: EventDefinitions<object, string>;
+  /**
+   * Report, with console.warn, publishes of undeclared events and patterns that match no declared event (once
+   * each). Needs `events`. Meant for development, e.g. `devWarnings: import.meta.env.DEV` @default false
+   */
+  devWarnings?: boolean;
 }
+
+/** In a typed emitter's signatures: available only without a map, or only with one */
+type Untyped<E, T> = IsUntyped<E> extends true ? T : never;
+type Typed<E, T> = IsUntyped<E> extends true ? never : T;
+
+/** A typed publish's data and options: required data unless the payload accepts undefined; cancelable events need it said */
+type PublishArgs<E, N extends string> =
+  N extends EventNames<E>
+    ? E[N] extends Cancelable<infer U>
+      ? [data: U, options: PublishOptions & { cancelable: true }]
+      : undefined extends E[N]
+        ? [data?: E[N], options?: PublishOptions | number]
+        : [data: E[N], options?: PublishOptions | number]
+    : [data?: unknown, options?: PublishOptions | number];
+
+/** The constructor's arguments: with a map that declares a separator, the separator option is required, and the same */
+type ConstructorArgs<E, S extends string> =
+  IsUntyped<E> extends true
+    ? [options?: EvEmOptions | number]
+    : S extends '.'
+      ? [options?: EvEmOptions & { separator?: '.' }]
+      : [options: EvEmOptions & { separator: S }];
+
+/** Any function or middleware config, for removeMiddleware: typed handlers have narrower parameters */
+type AnyMiddleware = ((...args: never[]) => unknown) | { pattern?: string; handler: (...args: never[]) => unknown };
 
 interface IEventEmitter {
   subscribe<T = unknown, R = any>(
@@ -273,7 +323,11 @@ export interface MemoryLeakOptions {
   showSubscriptionDetails: boolean;
 }
 
-class EvEm implements IEventEmitter {
+/**
+ * The event emitter. `new EvEm()` takes any event name; with an event map, `new EvEm<AppEvents>()` or
+ * `new EvEm({ events: defineEvents({ … }) })`, names and payloads are checked (see the typed events guide).
+ */
+class EvEm<E extends object = UntypedEvents, S extends string = SeparatorOf<E>> {
   private events = new Map<string, Map<string, CallbackInfo>>();
   // Per-event depths of the publish chain whose handler is currently running.
   // A publish started from inside a handler inherits it; unrelated (concurrent) publishes start fresh.
@@ -295,21 +349,68 @@ class EvEm implements IEventEmitter {
   private showLeakSubscriptionDetails: boolean = true; // Default to showing details
   private warnedEvents = new Set<string>(); // Track events we've already warned about
 
-  /** What separates the segments of event names and patterns (see EvEmOptions.separator) */
+  /**
+   * What separates the segments of event names and patterns (see EvEmOptions.separator). A string, not S, so
+   * every untyped emitter fits a plain `EvEm` annotation, whatever its separator
+   */
   readonly separator: string;
+  /** Declared event names (the events option, and what adapters add), if any were declared */
+  private knownEvents?: Set<string>;
+  private readonly devWarnings: boolean;
+  /** Names and patterns already reported by devWarnings */
+  private warnedUnknown = new Set<string>();
 
   /**
    * @param options - EvEmOptions, or the maximum recursion depth as a number (the older form)
-   * @throws {TypeError} If the separator is empty, contains `*` or isn't a string
+   * @throws {TypeError} If the separator is empty, contains `*`, isn't a string, or differs from the events'
    */
+  constructor(options: EvEmOptions & { events: EventDefinitions<E, S> });
+  constructor(...args: ConstructorArgs<E, S>);
   constructor(options: EvEmOptions | number = {}) {
-    const { maxRecursionDepth = 3, separator = '.' } =
-      typeof options === 'number' ? { maxRecursionDepth: options } : options;
+    const settings: EvEmOptions = typeof options === 'number' ? { maxRecursionDepth: options } : options;
+    const { maxRecursionDepth = 3, events, devWarnings = false } = settings;
+    const separator = settings.separator ?? events?.separator ?? '.';
     if (typeof separator !== 'string' || separator === '' || separator.includes('*')) {
       throw new TypeError(`The separator can't be empty or contain '*', and must be a string.`);
     }
+    if (events && events.separator !== separator) {
+      throw new TypeError(`The separator "${separator}" differs from the events' separator, "${events.separator}".`);
+    }
     this.maxRecursionDepth = maxRecursionDepth;
     this.separator = separator;
+    this.devWarnings = devWarnings;
+    if (events) {
+      this.knownEvents = new Set(events.names);
+    }
+  }
+
+  /**
+   * Declare more event names for devWarnings, e.g. an adapter's own events (the adapters do it themselves).
+   * Does nothing on an emitter without declared events.
+   */
+  addKnownEvents(names: readonly string[]): void {
+    for (const name of names) this.knownEvents?.add(name);
+  }
+
+  /** With devWarnings, report (once) a published name that isn't declared */
+  private warnIfUndeclaredName(event: string): void {
+    if (!this.devWarnings || !this.knownEvents || this.knownEvents.has(event) || this.warnedUnknown.has(event)) {
+      return;
+    }
+    this.warnedUnknown.add(event);
+    console.warn(`EvEm: "${event}" is not a declared event.`);
+  }
+
+  /** With devWarnings, report (once) a pattern that matches no declared event */
+  private warnIfMatchesNothing(pattern: string): void {
+    if (!this.devWarnings || !this.knownEvents || this.warnedUnknown.has(pattern)) {
+      return;
+    }
+    for (const name of this.knownEvents) {
+      if (this.isEventMatch(name, pattern)) return;
+    }
+    this.warnedUnknown.add(pattern);
+    console.warn(`EvEm: no declared event matches "${pattern}".`);
   }
 
   /**
@@ -368,6 +469,10 @@ class EvEm implements IEventEmitter {
    * @param pattern - Optional event pattern to filter history by
    * @returns Array of event records
    */
+  getEventHistory<T = any>(...args: Untyped<E, [pattern?: string]>): EventRecord<T>[];
+  getEventHistory<const P extends string = '*'>(
+    ...args: Typed<E, [pattern?: CheckedPattern<E, P, S>]>
+  ): TypedEventRecords<E, P, S>[];
   getEventHistory<T = any>(pattern?: string): EventRecord<T>[] {
     if (!pattern) {
       return this.eventHistory as EventRecord<T>[];
@@ -411,7 +516,26 @@ class EvEm implements IEventEmitter {
    * Register a middleware function to process events before they reach subscribers
    * @param middleware - The middleware function or config to add
    */
-  use<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void {
+  // Unlike the other methods, the typed overload comes first, and covers both forms: a handler without parameters
+  // isn't checked again per overload, so its result would keep an earlier overload's context (none) and lose a
+  // reroute's literal event name
+  use<const P extends string = '*'>(
+    middleware: Typed<
+      E,
+      | ((...pair: EventPairs<E, '*', S>) => TypedMiddlewareResult<E> | Promise<TypedMiddlewareResult<E>>)
+      | {
+          pattern: CheckedPattern<E, P, S>;
+          handler: (...pair: EventPairs<E, P, S>) => TypedMiddlewareResult<E> | Promise<TypedMiddlewareResult<E>>;
+        }
+    >
+  ): void;
+  use<T = unknown>(middleware: Untyped<E, MiddlewareFunction<T> | MiddlewareConfig<T>>): void;
+  use<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T> | AnyMiddleware): void {
+    // A function middleware has no pattern, like a config without one: both see every event
+    const { pattern } = middleware as { pattern?: string };
+    if (pattern !== undefined) {
+      this.warnIfMatchesNothing(pattern);
+    }
     if (typeof middleware === 'function') {
       // If just a function is provided, apply it to all events (no pattern)
       this.middleware.push({ handler: middleware as MiddlewareFunction });
@@ -428,7 +552,8 @@ class EvEm implements IEventEmitter {
    * Remove a previously registered middleware function
    * @param middleware - The middleware function or config to remove
    */
-  removeMiddleware<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T>): void {
+  removeMiddleware<T = unknown>(middleware: MiddlewareFunction<T> | MiddlewareConfig<T> | AnyMiddleware): void;
+  removeMiddleware(middleware: AnyMiddleware): void {
     if (typeof middleware === 'function') {
       // Find and remove by handler function
       const index = this.middleware.findIndex(m => m.handler === middleware);
@@ -508,11 +633,24 @@ class EvEm implements IEventEmitter {
    * @returns A subscription ID that can be used to unsubscribe
    */
   subscribe<T = unknown, R = any>(
+    event: Untyped<E, string>,
+    callback: EventCallback<T>,
+    options?: SubscriptionOptions<T, R>
+  ): string;
+  // Each typed parameter is Typed<E, …> as a whole, so it's never on untyped emitters, which subclasses' untyped
+  // overrides satisfy (a callback of never data wouldn't be: any isn't assignable to never)
+  subscribe<const P extends string>(
+    pattern: Typed<E, CheckedPattern<E, P, S>>,
+    callback: Typed<E, EventCallback<PayloadOf<E, P, S>>>,
+    options?: Typed<E, SubscriptionOptions<PayloadOf<E, P, S>, PublishedOf<E, P, S>>>
+  ): string;
+  subscribe<T = unknown, R = any>(
     event: string,
     callback: EventCallback<T>,
     options?: SubscriptionOptions<T, R>
   ): string {
     if (!event) throw new Error('Event name cannot be empty.');
+    this.warnIfMatchesNothing(event);
 
     // The once, throttle and debounce wrappers use the subscription's id
     const subscriptionId = generateId();
@@ -826,7 +964,7 @@ class EvEm implements IEventEmitter {
 
   /** History replay for a new subscriber: its event's latest record (`onlyLast`), or all of them, in order */
   private replayHistoryTo<T>(callback: WrappedCallback<T>, event: string, onlyLast: boolean): void {
-    const relevantHistory = this.getEventHistory().filter(record => this.isEventMatch(record.event, event));
+    const relevantHistory = this.eventHistory.filter(record => this.isEventMatch(record.event, event));
     if (relevantHistory.length === 0) return;
 
     if (onlyLast) {
@@ -847,14 +985,26 @@ class EvEm implements IEventEmitter {
    * @returns A subscription ID that can be used to unsubscribe before the event occurs
    */
   subscribeOnce<T = unknown, R = any>(
+    event: Untyped<E, string>,
+    callback: EventCallback<T>,
+    options?: Omit<SubscriptionOptions<T, R>, 'once'>
+  ): string;
+  subscribeOnce<const P extends string>(
+    pattern: Typed<E, CheckedPattern<E, P, S>>,
+    callback: Typed<E, EventCallback<PayloadOf<E, P, S>>>,
+    options?: Typed<E, Omit<SubscriptionOptions<PayloadOf<E, P, S>, PublishedOf<E, P, S>>, 'once'>>
+  ): string;
+  subscribeOnce<T = unknown, R = any>(
     event: string,
     callback: EventCallback<T>,
     options?: Omit<SubscriptionOptions<T, R>, 'once'>
   ): string {
     // Simply uses the subscribe method with once:true added to the options
-    return this.subscribe(event, callback, { ...options, once: true });
+    return (this as EvEm<any, any>).subscribe(event, callback, { ...options, once: true });
   }
 
+  unsubscribe<T = unknown>(event: Untyped<E, string>, callback: EventCallback<T>): void;
+  unsubscribe<const P extends string>(pattern: Typed<E, CheckedPattern<E, P, S>>, callback: EventCallback<any>): void;
   unsubscribe<T = unknown>(event: string, callback: EventCallback<T>): void {
     if (!event) throw new Error("You can't unsubscribe to an event with an empty name.");
 
@@ -1031,18 +1181,21 @@ class EvEm implements IEventEmitter {
     return keys.length === 2 && 'event' in result && 'data' in result && typeof result.event === 'string';
   }
 
+  publish<T = unknown>(event: Untyped<E, string>, args?: T, options?: PublishOptions | number): Promise<boolean>;
+  publish<const N extends string>(event: Typed<E, CheckedName<E, N>>, ...args: PublishArgs<E, N>): Promise<boolean>;
   // eslint-disable-next-line sonarjs/cognitive-complexity -- the subscriber loop stays here so only promises are awaited (see the comment in it)
   async publish<T = unknown>(event: string, args?: T, options?: PublishOptions | number): Promise<boolean> {
     if (!event) {
       return Promise.reject(new Error('Event name cannot be empty.'));
     }
+    this.warnIfUndeclaredName(event);
     const { timeout, cancelable, errorPolicy } = readPublishOptions(options);
 
     // Track nesting for recursion detection (throws if this event is nested too deeply)
     const chain = this.enterPublishChain(event);
 
-    // Only a missing payload defaults to {}
-    let data: any = args === undefined ? ({} as T) : args;
+    // A missing payload stays undefined, except for cancelable events, which need an object to cancel
+    let data: any = args === undefined && cancelable ? ({} as T) : args;
 
     // Middleware can cancel the event (null), change its data, or reroute it
     if (this.middleware.length > 0) {
@@ -1351,9 +1504,16 @@ class EvEm implements IEventEmitter {
   }
 }
 
+/**
+ * An emitter of any event map and separator: what adapters and helpers that take "an emitter" accept (any is what
+ * lets every EvEm<E, S> fit, and resolves to the untyped overloads)
+ */
+type AnyEvEm = EvEm<any, any>;
+
 // Types declared with `export` above are already exported; only list the rest here
 export {
   EvEm,
+  type AnyEvEm,
   type IEventEmitter,
   type EventCallback,
   type FilterPredicate,

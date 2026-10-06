@@ -3,6 +3,7 @@ export {
   EvEm,
   Priority,
   ErrorPolicy,
+  type AnyEvEm,
   type IEventEmitter,
   type EvEmOptions,
   type EventCallback,
@@ -22,3 +23,19 @@ export {
   type AdvancedSchemaValidator,
   type SchemaValidationError
 } from './eventEmitter.js';
+export {
+  SEPARATOR,
+  defineEvents,
+  payload,
+  type Cancelable,
+  type EventDefinitions,
+  type EventNames,
+  type EventsOf,
+  type MatchingNames,
+  type NoEventMatches,
+  type NotAnEvent,
+  type PayloadMarker,
+  type PayloadOf,
+  type UntypedEvents,
+  type WithSeparator
+} from './eventTypes.js';

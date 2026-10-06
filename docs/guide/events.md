@@ -278,7 +278,7 @@ console.log(deleted);
 
 How the data is delivered depends on its type:
 
-- **Plain objects** are shallow-copied, and the copy gets `cancel()` and `canceled`. A missing payload becomes `{}`, so it can be canceled too.
+- **Plain objects** are shallow-copied, and the copy gets `cancel()` and `canceled`. A cancelable publish without data delivers `{}`, so it can be canceled too (other publishes without data deliver `undefined`).
 - **Arrays** are copied and stay arrays.
 - **Other objects** (`Date`, `Map`, class instances) are wrapped in a proxy that keeps their type and methods. Use the object through its own methods: a proxy has none of the original's internal slots, so `structuredClone`, calling a built-in's method from outside (`Map.prototype.get.call(data, 'key')`) and `Object.prototype.toString` see the proxy, not a `Map` or a `Date`.
 - **Primitives** (strings, numbers, booleans, `null`) are delivered unchanged, without `cancel()`. Wrap them in an object if a subscriber needs to cancel.

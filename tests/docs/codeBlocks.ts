@@ -13,6 +13,7 @@ export const TYPESCRIPT_DOCS = [
   'docs/guide/middleware.md',
   'docs/guide/errors.md',
   'docs/guide/history-and-debugging.md',
+  'docs/guide/typed-events.md',
   'docs/examples.md',
   'docs/websocket-adapter.md',
   'docs/websocket-server-events.md',
