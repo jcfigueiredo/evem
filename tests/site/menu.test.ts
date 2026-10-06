@@ -9,7 +9,10 @@ describe('menuSections', () => {
   it('puts the groups that talk to a server under Adapters, the others under Features, in their order', () => {
     const sections = menuSections(scenarios);
     expect(sections.map(section => [section.label, section.groups.map(group => group.name)])).toEqual([
-      ['Features', ['Core', 'Flow control', 'Data', 'Middleware', 'Control & errors', 'State & diagnostics']],
+      [
+        'Features',
+        ['Core', 'Flow control', 'Data', 'Middleware', 'Control & errors', 'State & diagnostics', 'Browser']
+      ],
       ['Adapters', ['WebSocket', 'SSE', 'Recipes']]
     ]);
   });

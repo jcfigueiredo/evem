@@ -25,6 +25,21 @@ describe('explainMatch', () => {
   ])('%s against %s: %s, with the verdict EvEm gives', (event, pattern, reason) => {
     expect(explainMatch(event, pattern)).toEqual({ matched: matchesPattern(new EvEm(), event, pattern), reason });
   });
+
+  it.each([
+    ['task:opened', 'task:*', 'the * at the end matched "opened"'],
+    ['task:comment:added', 'task:*', 'the * at the end matched "comment:added"'],
+    ['user:created', '*:created', '* matched "user"'],
+    ['user.created', '*:created', 'the event has 1 segment, the pattern 2 segments ' + NOT_AT_THE_END],
+    [
+      'server.task-changed',
+      'server:*',
+      'the event has 1 segment; a * at the end needs at least one more after "server"'
+    ]
+  ])('with the ":" separator, %s against %s: %s, as EvEm says', (event, pattern, reason) => {
+    const evem = new EvEm({ separator: ':' });
+    expect(explainMatch(event, pattern, ':')).toEqual({ matched: matchesPattern(evem, event, pattern), reason });
+  });
 });
 
 describe('explainMatch - against EvEm, on generated events and patterns', () => {
@@ -41,6 +56,22 @@ describe('explainMatch - against EvEm, on generated events and patterns', () => 
         const explanation = explainMatch(event, pattern);
         expect(explanation.matched).toBe(matchesPattern(new EvEm(), event, pattern));
         expect(explanation.reason).not.toBe('');
+      })
+    );
+  });
+
+  it('gives the verdict EvEm gives with another separator, where dots are ordinary characters', () => {
+    const part = fc.constantFrom('a', 'user', '', 'x*', 'a.b');
+    const joined = (each: fc.Arbitrary<string>) =>
+      fc
+        .array(each, { minLength: 1, maxLength: 5 })
+        .map(parts => parts.join(':'))
+        .filter(text => text !== '');
+    fc.assert(
+      fc.property(joined(part), joined(fc.oneof(part, fc.constant('*'))), (event, pattern) => {
+        expect(explainMatch(event, pattern, ':').matched).toBe(
+          matchesPattern(new EvEm({ separator: ':' }), event, pattern)
+        );
       })
     );
   });

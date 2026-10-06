@@ -49,3 +49,17 @@ const widgets = new IntersectionObserver(
   { rootMargin: '200px' }
 );
 for (const host of document.querySelectorAll<HTMLElement>('[data-scenario]')) widgets.observe(host);
+
+// The Alpine card loads Alpine and starts its board when it comes near the screen, like the widgets
+const alpineCard = document.querySelector<HTMLElement>('[data-alpine-card]');
+if (alpineCard) {
+  const observer = new IntersectionObserver(
+    entries => {
+      if (!entries.some(entry => entry.isIntersecting)) return;
+      observer.disconnect();
+      void import('./alpineCard').then(({ mountAlpineCard }) => mountAlpineCard(alpineCard));
+    },
+    { rootMargin: '200px' }
+  );
+  observer.observe(alpineCard);
+}

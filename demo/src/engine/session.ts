@@ -1,5 +1,6 @@
 import type { EvEm } from '@jcfigueiredo/evem';
 import * as core from '@jcfigueiredo/evem';
+import * as dom from '@jcfigueiredo/evem/dom';
 import * as sse from '@jcfigueiredo/evem/sse';
 import * as sseServer from '@jcfigueiredo/evem/sse/server';
 import * as websocket from '@jcfigueiredo/evem/websocket';
@@ -256,7 +257,8 @@ export class ScenarioSession {
           WebSocketHandler: this.playgroundWebSocketHandler(trace, socketServer?.socketClass)
         },
         '@jcfigueiredo/evem/sse': { ...sse, SseHandler: this.playgroundSseHandler(streamServer?.fetch) },
-        '@jcfigueiredo/evem/sse/server': sseServer
+        '@jcfigueiredo/evem/sse/server': sseServer,
+        '@jcfigueiredo/evem/dom': dom
       };
       checkImports(imports, modules);
       const helperNames = Object.keys(this.scenario.helpers);

@@ -375,7 +375,7 @@ export function createTracedEvEm(
       const refused = !event;
       if (explainMatches && !refused) {
         for (const subscription of state.live) {
-          const { matched, reason } = explainMatch(event, subscription.pattern);
+          const { matched, reason } = explainMatch(event, subscription.pattern, this.separator);
           const pattern = subscription.pattern;
           trace.record({
             kind: 'match',
